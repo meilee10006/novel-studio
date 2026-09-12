@@ -115,7 +115,7 @@ Google Drive 可能存在同步延迟、重复事件、部分文件先到、人�
 
 ChatGPT 执行当前 READY 指向的任务，在一次回答里完成：
 
-1. 读取协议和 Context Pack；
+1. 读取根协议和当前 Context Pack；
 2. 检查当前卷、Arc 和本章义务；
 3. 对活跃人物做独立视角推演；
 4. 生成 Chapter Contract；
@@ -144,7 +144,7 @@ Core：
 
 ### 4.4 REWRITE
 
-Core 不推进章节，生成同一章新的 rewrite task。
+Core 不推进章节，生成同一逻辑任务的新 attempt。
 
 作者下一次说“继续”时，ChatGPT 必须修改当前章，不得写下一章。
 
@@ -158,6 +158,8 @@ Core 不推进章节，生成同一章新的 rewrite task。
 - 本地状态损坏且没有可靠恢复点。
 
 BLOCKED 才要求作者做剧情级决定。
+
+协议损坏、文件不同步、digest 不一致不属于剧情 BLOCKED；它们属于交换层状态，见第 13 节。
 
 ## 5. 系统架构
 
@@ -233,7 +235,7 @@ NovelStudio/<project-id>/
 
 删除本地权威状态后，Core 不得把 Drive 副本悄悄当成 Canon。
 
-## 7. 控制面与数据面
+## 7. 控制面、数据面与写入权
 
 ### 7.1 控制面
 
@@ -250,7 +252,7 @@ NovelStudio/<project-id>/
 任务、提交和回执一旦生成即不可变：
 
 ```text
-exchange/outbox/<task-id>/
+exchange/outbox/<task-id>/<attempt-id>/
 exchange/inbox/<task-id>/<attempt-id>/
 exchange/result/<task-id>/<attempt-id>.json
 receipts/
@@ -259,7 +261,28 @@ accepted/
 
 重写必须产生新 attempt，不得覆盖旧 attempt。
 
-## 8. Production Task
+### 7.3 唯一写入方
+
+每个区域必须只有一个正式写入方：
+
+| 区域 | 正式写入方 | 另一方权限 |
+|---|---|---|
+| `project.json` | Core | ChatGPT 只读 |
+| `CHATGPT_PROTOCOL.md` | Core | ChatGPT 只读 |
+| `exchange/READY.json` | Core | ChatGPT 只读 |
+| `exchange/STATUS.json` | Core | ChatGPT 只读 |
+| `exchange/outbox/**` | Core | ChatGPT 只读 |
+| `exchange/inbox/**` | ChatGPT | Core 只读并处理 |
+| `exchange/result/**` | Core | ChatGPT 只读 |
+| `published/**` | Core | ChatGPT 只读 |
+| `projection/**` | Core | ChatGPT / Notion 只读消费 |
+| `backup/**` | Core | ChatGPT 不参与写入 |
+
+ChatGPT 不得编辑 READY、STATUS、outbox、result、published 或 backup。
+
+Core 不得替 ChatGPT 修改已经落盘的 inbox submission；只能接受、拒绝或生成新 attempt。
+
+## 8. Production Task 与 Attempt
 
 新系统只保留一个高层任务概念：`Production Task`。
 
@@ -270,24 +293,32 @@ accepted/
 - `revision`
 - `finalize`
 
-不把“人物推演”“伏笔决策”“风格审稿”拆成 Core 流程节点。它们是 ChatGPT 为完成一个章节任务所做的内部智能工作。
+不把“人物推演”“伏笔决策”“风格审稿”拆成 Core 流程节点。它们是 ChatGPT 为完成一个任务所做的内部智能工作。
 
-### 8.1 Task 身份
+### 8.1 Task 与 Attempt 的区别
 
-每个 Task 至少包含：
+- `task_id` 标识一个逻辑工作项，例如“完成第 47 章”。
+- `attempt_id` 标识这个逻辑工作项的一次不可变执行版本。
+- REWRITE 保持同一个 `task_id`，递增或生成新的 `attempt_id`。
+- 每个 attempt 都有自己的 Task Pack 和 `task_digest`。
+- 只有 READY 指向的当前 attempt 有资格推进 Canon。
+
+### 8.2 Task 身份
+
+每个 attempt 至少包含：
 
 - schema version；
 - project id；
 - task id；
 - task kind；
 - chapter；
-- attempt；
+- attempt id；
 - base canon root；
 - task digest；
 - required artifacts；
 - created at。
 
-同一个项目任何时候只允许一个活动写任务。
+同一个项目任何时候只允许一个活动写 attempt。
 
 ## 9. READY
 
@@ -299,28 +330,29 @@ accepted/
 - task id；
 - task kind；
 - chapter；
-- attempt；
+- attempt id；
 - base canon root；
 - task digest；
 - status。
 
-两个 ChatGPT 对话同时写同一个任务时，只能有一个合法提交进入 Canon。另一个提交因为 `base_canon_root` 或活动 attempt 过期而被拒绝。
+两个 ChatGPT 对话同时写同一个 attempt 时，只能有一个合法内容版本被处理。READY 切换后，旧 attempt 即失去提交资格。
 
 ## 10. Task Pack
 
-每个任务输出目录至少包含：
+每个 attempt 输出目录至少包含：
 
 ```text
-exchange/outbox/<task-id>/
+exchange/outbox/<task-id>/<attempt-id>/
 ├── task.json
-├── protocol.md
 ├── context.json
 ├── canon_excerpt.json
 ├── constraints.json
 └── recent_prose.md
 ```
 
-`protocol.md` 必须让一个完全新的 ChatGPT 对话在没有旧聊天历史的情况下理解本轮操作。
+根目录 `CHATGPT_PROTOCOL.md` 是唯一长期协议；Task Pack 通过 `protocol_version` 引用它，不复制第二份完整协议，避免两套协议漂移。
+
+Task Pack 必须让一个完全新的 ChatGPT 对话在读取根协议后理解本轮操作。
 
 ## 11. Submission
 
@@ -353,13 +385,38 @@ manifest 声明：
 Core 规则：
 
 1. 没有 manifest：视为同步尚未完成；
-2. manifest 已出现但文件不齐：等待同步，不立即判坏稿；
+2. manifest 已出现但文件不齐：继续等待同步，不立即判坏稿；
 3. 文件齐全后校验 digest；
 4. 相同 attempt + 相同 digest：幂等重复；
-5. 相同 attempt + 不同 digest：协议冲突，BLOCK；
-6. 已处理过的 attempt 永远不重复 Commit。
+5. 同一 attempt 出现第二套不同 digest：协议冲突，不进入剧情验证；
+6. 已正式结算的 attempt 永远不重复 Commit。
 
-## 13. Canon 模型
+## 13. 交换层状态与剧情结果必须分开
+
+文件交换和剧情裁定不是同一个状态机。
+
+### 13.1 Reconciliation Status
+
+交换层至少区分：
+
+- `PENDING`：文件尚未同步完整；
+- `READY_TO_VALIDATE`：文件齐全且协议校验通过；
+- `INVALID`：协议或 digest 冲突，不能进入剧情验证；
+- `SETTLED`：attempt 已产生正式结果。
+
+`INVALID` 是系统/协议问题，不等于剧情 BLOCKED，也不会推进 Canon。
+
+### 13.2 Production Result
+
+只有进入剧情验证的 Submission 才会得到：
+
+- `ACCEPTED`
+- `REWRITE`
+- `BLOCKED`
+
+这样不会把“Drive 少同步了一个文件”和“作者必须决定主角生死”混成同一种错误。
+
+## 14. Canon 模型
 
 Canon 由四部分组成：
 
@@ -372,7 +429,7 @@ Canon 由四部分组成：
 
 继续复用当前 novel-studio 的 Store 和 Checkpoint 思路。
 
-### 13.1 Commit 顺序
+### 14.1 Commit 顺序
 
 一次合法提交逻辑上完成：
 
@@ -390,7 +447,9 @@ Validated Submission
 
 > 要么整个提交可恢复为已完成，要么重启后仍停留在前一个 Canon；不能出现半章进入 Canon 的状态。
 
-## 14. Receipt
+实现计划必须根据现有 Store 的落盘机制选择明确的 crash-safe 顺序和恢复标记，不能只靠进程内锁。
+
+## 15. Receipt
 
 Receipt 至少保存：
 
@@ -409,7 +468,7 @@ Receipt 至少保存：
 
 `source=chatgpt_app` 只能作为描述性 metadata，不能当作模型调用证明。
 
-## 15. Chapter Contract
+## 16. Chapter Contract
 
 正文生成前，ChatGPT 必须形成 Chapter Contract。
 
@@ -435,13 +494,13 @@ Receipt 至少保存：
 
 Contract 不是 Canon，但它属于本章 Production Contract，Core 可以检查硬边界是否被破坏。
 
-## 16. State Delta 必须证据化
+## 17. State Delta 必须证据化
 
 ChatGPT 不重新提交完整世界状态，只提交本章变化。
 
 所有影响未来写作的重要变化都必须能指回本章发生的事件或证据。
 
-### 16.1 人物状态
+### 17.1 人物状态
 
 包括：
 
@@ -452,7 +511,7 @@ ChatGPT 不重新提交完整世界状态，只提交本章变化。
 - commitment change；
 - status change。
 
-### 16.2 人物知识
+### 17.2 人物知识
 
 每个 `knowledge_add` 必须记录：
 
@@ -461,7 +520,7 @@ ChatGPT 不重新提交完整世界状态，只提交本章变化。
 - source event / source fact；
 - evidence。
 
-### 16.3 关系
+### 17.3 关系
 
 关系变化记录：
 
@@ -482,7 +541,7 @@ ChatGPT 不重新提交完整世界状态，只提交本章变化。
 
 同一关系允许双方有不同 perception。
 
-### 16.4 资源
+### 17.4 资源
 
 记录：
 
@@ -492,11 +551,11 @@ ChatGPT 不重新提交完整世界状态，只提交本章变化。
 - reason；
 - evidence。
 
-### 16.5 伏笔、冲突、读者承诺
+### 17.5 伏笔、冲突、读者承诺
 
 所有生命周期变化必须附 evidence event。
 
-## 17. Story Event 与人物知识边界
+## 18. Story Event 与人物知识边界
 
 关键剧情事实必须结构化为 Story Event。
 
@@ -518,7 +577,7 @@ ChatGPT 不重新提交完整世界状态，只提交本章变化。
 
 没有来源的知识变化必须 REWRITE。
 
-## 18. 人物 Observation
+## 19. 人物 Observation
 
 每个本章重要角色拥有自己的 Observation，不共享作者上帝视角。
 
@@ -537,7 +596,7 @@ ChatGPT 不重新提交完整世界状态，只提交本章变化。
 
 ChatGPT 必须先按人物可见信息推演，再汇总世界结果。
 
-## 19. 时间、地点和资源
+## 20. 时间、地点和资源
 
 Core 确定性检查：
 
@@ -548,9 +607,9 @@ Core 确定性检查：
 - 金钱和消耗品不能无理由透支；
 - 已锁定的权限、伤势和能力限制不能被绕过。
 
-## 20. 伏笔、冲突和 Reader Promise
+## 21. 伏笔、冲突和 Reader Promise
 
-### 20.1 Foreshadow
+### 21.1 Foreshadow
 
 推荐状态：
 
@@ -581,11 +640,11 @@ planned
 - 依赖；
 - 后果。
 
-### 20.2 Conflict
+### 21.2 Conflict
 
 必须有明确状态和关闭条件，避免旧冲突在无证据的情况下“自动消失”。
 
-### 20.3 Reader Promise
+### 21.3 Reader Promise
 
 记录作品向读者作出的跨章承诺，并允许：
 
@@ -594,7 +653,7 @@ planned
 - deferred（需理由）；
 - retired（需作者级理由）。
 
-## 21. Ending Contract
+## 22. Ending Contract
 
 整书必须拥有 Ending Contract。
 
@@ -619,20 +678,20 @@ planned
 
 存在未满足的硬 Ending Contract 时，不允许标记整书 Complete。
 
-## 22. Context Compiler
+## 23. Context Compiler
 
 Core 不把整本小说重新塞给 ChatGPT。
 
 每个任务编译有限 Context Pack，包括：
 
-### 22.1 全局相关约束
+### 23.1 全局相关约束
 
 - Story Bible 相关切片；
 - Ending Contract 相关条款；
 - 用户硬规则；
 - 文风和平台规则。
 
-### 22.2 当前结构
+### 23.2 当前结构
 
 - 当前 Volume；
 - 当前 Arc；
@@ -641,11 +700,11 @@ Core 不把整本小说重新塞给 ChatGPT。
 - 未履行义务；
 - Reader Promises。
 
-### 22.3 活跃人物
+### 23.3 活跃人物
 
 只加载当前任务相关人物的 Observation 和必要历史。
 
-### 22.4 世界状态
+### 23.4 世界状态
 
 - 当前时间；
 - 相关地点；
@@ -653,7 +712,7 @@ Core 不把整本小说重新塞给 ChatGPT。
 - 相关势力；
 - 必要资源。
 
-### 22.5 剧情债务
+### 23.5 剧情债务
 
 - 活跃冲突；
 - 可强化伏笔；
@@ -661,7 +720,7 @@ Core 不把整本小说重新塞给 ChatGPT。
 - 禁止提前回收伏笔；
 - 即将逾期的承诺。
 
-### 22.6 连续正文
+### 23.6 连续正文
 
 - 最近若干章结构化摘要；
 - 上一章必要尾部原文；
@@ -671,7 +730,7 @@ Core 不把整本小说重新塞给 ChatGPT。
 
 第 100 章的 Context Pack 不得随全文长度线性增长。
 
-## 23. 滚动 Arc 规划
+## 24. 滚动 Arc 规划
 
 Arc 规划不额外消耗正常情况下的“继续”。
 
@@ -686,9 +745,9 @@ Arc 规划不额外消耗正常情况下的“继续”。
 
 Core 在接受章节时同时登记合法 Proposal。
 
-只有 Proposal 自己违反硬约束时才生成 rewrite / revision 类任务。
+只有 Proposal 自己违反硬约束时才生成 rewrite / revision 类 task 或 BLOCKED；正常成功路径仍然直接进入下一章节任务。
 
-## 24. CHATGPT_PROTOCOL.md
+## 25. CHATGPT_PROTOCOL.md
 
 项目根目录必须有稳定的 `CHATGPT_PROTOCOL.md`，由 Core 版本控制生成。
 
@@ -701,6 +760,7 @@ Core 在接受章节时同时登记合法 Proposal。
 - Submission 文件要求；
 - manifest-last；
 - ACCEPTED / REWRITE / BLOCKED 行为；
+- 哪些 Drive 路径只读；
 - 禁止直接修改 Canon；
 - 新聊天如何恢复。
 
@@ -710,7 +770,7 @@ Core 在接受章节时同时登记合法 Proposal。
 
 即可从 Drive 中恢复生产状态，不依赖旧聊天记忆。
 
-## 25. 三层验证
+## 26. 三层验证
 
 ### L1 Protocol
 
@@ -718,13 +778,14 @@ Core 在接受章节时同时登记合法 Proposal。
 
 - schema；
 - task id；
-- attempt；
+- attempt id；
 - manifest；
 - artifact digest；
 - task digest；
-- base canon root。
+- base canon root；
+- active attempt。
 
-L1 失败通常表示同步或协议问题。
+L1 失败进入交换层 `INVALID` 或继续保持 `PENDING`，不直接产生剧情 BLOCKED。
 
 ### L2 Canon
 
@@ -756,9 +817,9 @@ L2 可修问题通常产生 REWRITE。
 
 不得把主观文学质量塞进 L3。
 
-## 26. 结果状态机
+## 27. 生产结果状态机
 
-Submission 只能产生三种正式结果：
+只有通过 L1 的 Submission 才能产生以下结果。
 
 ### ACCEPTED
 
@@ -766,7 +827,7 @@ Submission 只能产生三种正式结果：
 
 ### REWRITE
 
-同一章可修复，Core 生成新 attempt。
+同一逻辑任务可修复，Core 生成新 attempt。
 
 REWRITE 必须包含：
 
@@ -783,24 +844,28 @@ REWRITE 必须包含：
 
 只有无法在当前硬规则内安全自动处理时使用。
 
-## 27. 幂等、并发和崩溃恢复
+## 28. 幂等、并发和崩溃恢复
 
-### 27.1 幂等
+### 28.1 幂等
 
 相同 submission 重放任意次数，只允许一次 Commit。
 
-### 27.2 stale submission
+### 28.2 活动 attempt 与 stale submission
 
-两个 attempt 基于相同旧 Canon 时，最多一个能够推进 Canon。
+只有 READY 当前指向的 attempt 有资格进入生产验证。
 
-### 27.3 恢复依据
+旧 attempt 即使基于当前 Canon，也不能在 READY 已经切换后重新抢占提交权。
+
+不同逻辑任务如果基于旧 Canon 提交，则按 stale submission 拒绝。
+
+### 28.3 恢复依据
 
 恢复只依赖：
 
 - Canon root；
 - Checkpoint；
 - Receipt；
-- active task；
+- active task / attempt；
 - accepted artifacts。
 
 不得依赖：
@@ -810,13 +875,13 @@ REWRITE 必须包含：
 - 内存 goroutine；
 - Drive 同步时间顺序。
 
-## 28. 作者主动改稿
+## 29. 作者主动改稿
 
-### 28.1 未提交章节
+### 29.1 未提交章节
 
-废弃当前 attempt，生成新的 revision / rewrite task。
+废弃当前 attempt，生成同一逻辑任务的新 revision / rewrite attempt。
 
-### 28.2 已进入 Canon 的章节
+### 29.2 已进入 Canon 的章节
 
 必须走显式 Revision / Rebase。
 
@@ -829,7 +894,7 @@ REWRITE 必须包含：
 
 直接修改 `published/*.md` 不能改变 Canon。
 
-## 29. Notion
+## 30. Notion
 
 Notion 不属于核心生产路径，也不是 Release Gate。
 
@@ -850,9 +915,9 @@ Core 首发版本只需生成可选投影，例如：
 
 Notion 更新失败不得阻止写作。
 
-## 30. 当前代码迁移方向
+## 31. 当前代码迁移方向
 
-### 30.1 保留并深化
+### 31.1 保留并深化
 
 重点保留：
 
@@ -870,9 +935,11 @@ Notion 更新失败不得阻止写作。
 - 本地检索
 - consistency / commit / recovery 中的确定性逻辑
 
-当前 `Store` 继续作为状态组合根，不重新造一套平行数据库。
+当前 `Store` 作为新 Core 的起点和状态组合根，不重新造一套平行数据库。
 
-### 30.2 从 Tool 外壳中收回业务逻辑
+到 M6 时，应继续清理只服务旧 AI runtime 的 Store 子项；`Usage`、模型 Session、`AIVoice`、模型调用审计等不得因为历史兼容而成为 Novel Core 的必需状态。
+
+### 31.2 从 Tool 外壳中收回业务逻辑
 
 当前 `internal/tools/commit_chapter.go` 等文件把大量确定性业务逻辑包在 `agentcore.Tool` schema 和执行入口里。
 
@@ -896,7 +963,13 @@ Core 公共面要保持很小，优先围绕意图级操作，例如：
 
 不要为只有一个实现的内部能力预先创建大量 interface/adapter。
 
-### 30.3 最终退出生产路径
+### 31.3 不迁移的旧 AI 质量机制
+
+当前代码中如果某些 AIGC、AI voice、模型自评、provider usage 或语义审稿机制依赖模型身份或模型判断，不得为了“兼容”塞入新 Core。
+
+只有能够确定性执行、且确实服务 Canon 或生产合同的规则才迁移。
+
+### 31.4 最终退出生产路径
 
 当新 Core 主干覆盖全部必要行为后，以下内容退出生产运行时：
 
@@ -918,7 +991,7 @@ Core 公共面要保持很小，优先围绕意图级操作，例如：
 
 删除发生在迁移末尾，而不是第一步。
 
-## 31. 新 Core 依赖方向
+## 32. 新 Core 依赖方向
 
 目标依赖：
 
@@ -941,13 +1014,13 @@ internal/retrieval
 - `internal/llmcodex`
 - 任意模型 provider。
 
-## 32. CLI
+## 33. CLI
 
 最终用户需要的核心命令：
 
 ### `novel-core init`
 
-初始化项目、本地权威目录、Drive workspace 和第一个 Production Task。
+初始化项目、本地权威目录、Drive workspace 和第一个正式 Production Task。
 
 ### `novel-core serve`
 
@@ -967,8 +1040,8 @@ internal/retrieval
 - 当前 Canon root；
 - 当前章节；
 - 当前 task / attempt；
-- pending submission；
-- validation result；
+- reconciliation status；
+- production result；
 - blocked reason。
 
 ### `novel-core verify`
@@ -981,24 +1054,35 @@ internal/retrieval
 
 Core CLI 不提供 `--provider`、`--model`、`--api-key`。
 
-## 33. Google Drive 能力预检
+## 34. Google Drive 能力预检
 
 “每章只说一次继续”成立的前提是 ChatGPT App 对项目 Drive 具备足够的读写能力。
 
-项目首次初始化后必须有一个显式能力预检流程，验证 ChatGPT 能够：
+能力预检是正式创作前的一次 setup handshake，不属于 Production Task，也不占用章节 attempt。
 
-1. 读取 project / READY / Task Pack；
-2. 创建 Submission 文件；
-3. 最后创建 manifest；
-4. 重新读取 Core 返回的 result。
+流程：
+
+1. `novel-core init` 生成固定的 `setup/capability-check.json` 和只读测试文件；
+2. 作者在 ChatGPT 中触发一次连接检查；
+3. ChatGPT 读取测试文件，并在约定的 setup inbox 创建一份 ack；
+4. Drive Desktop 将 ack 同步到本地；
+5. Core 校验 ack 内容与 nonce，并记录 capability receipt；
+6. 只有检查通过后才生成第一个正式 READY。
+
+能力预检必须证明 ChatGPT 能够：
+
+- 读取 project / protocol / test payload；
+- 创建新文件；
+- 按约定路径写入；
+- 让 Core 通过 Drive Desktop 收到完整内容。
 
 如果只读能力存在而写能力不存在，系统必须明确报告不满足目标运行模式，不能等到正式第 1 章才暴露。
 
-## 34. 测试策略
+## 35. 测试策略
 
 测试优先从最高公共 seam 进入，不围绕私有 helper 堆 mock。
 
-### 34.1 Core E2E
+### 35.1 Core E2E
 
 使用临时本地 Canon 目录和临时 Drive workspace，覆盖：
 
@@ -1011,11 +1095,12 @@ init
 → next task
 ```
 
-### 34.2 必测故障场景
+### 35.2 必测故障场景
 
 - 只有 chapter，没有 manifest；
 - manifest 到达但其他文件尚未同步；
 - artifact digest 错误；
+- inactive attempt 提交；
 - stale Canon；
 - 重复 submission；
 - 同 attempt 不同内容；
@@ -1028,37 +1113,38 @@ init
 - 未履行 Ending Contract 却请求完本；
 - revision 后旧计划失效。
 
-### 34.3 AI 不进入 CI
+### 35.3 AI 不进入 CI
 
 Core 自动 CI 不调用 ChatGPT。
 
 AI 集成通过单独的真实产品验收完成。
 
-## 35. 实际 ChatGPT 产品验收
+## 36. 实际 ChatGPT 产品验收
 
 正式 Release Gate 必须用普通 ChatGPT App 实测：
 
-1. Core 生成 Chapter 1 Task；
-2. 用户只输入“继续”；
-3. ChatGPT 读取 Drive Task；
-4. 完成推演、正文、自审和 Submission；
-5. Core ACCEPT；
-6. READY 进入 Chapter 2；
-7. 故意构造一次人物知识越界；
-8. Core 返回 REWRITE；
-9. 用户再次只输入“继续”；
-10. ChatGPT 修 Chapter 2，不写 Chapter 3；
-11. Core ACCEPT；
-12. 重启 Core 后继续；
-13. 新建 ChatGPT 对话，通过项目名恢复；
-14. 完成一次滚动 Arc 切换；
-15. 完成一次作者 Revision / Rebase；
-16. 满足 Ending Contract；
-17. 导出完整小说。
+1. setup capability handshake PASS；
+2. Core 生成 Chapter 1 Task；
+3. 用户只输入“继续”；
+4. ChatGPT 读取 Drive Task；
+5. 完成推演、正文、自审和 Submission；
+6. Core ACCEPT；
+7. READY 进入 Chapter 2；
+8. 故意构造一次人物知识越界；
+9. Core 返回 REWRITE，并生成 Chapter 2 的新 attempt；
+10. 用户再次只输入“继续”；
+11. ChatGPT 修 Chapter 2，不写 Chapter 3；
+12. Core ACCEPT；
+13. 重启 Core 后继续；
+14. 新建 ChatGPT 对话，通过项目名恢复；
+15. 完成一次滚动 Arc 切换；
+16. 完成一次作者 Revision / Rebase；
+17. 满足 Ending Contract；
+18. 导出完整小说。
 
 Release Gate 只允许 PASS / FAIL，不使用“基本可用”“主体完成”代替。
 
-## 36. 实施里程碑
+## 37. 实施里程碑
 
 本设计只定义实现边界，不在这里展开文件级施工步骤。后续 implementation plan 必须按测试先行拆解。
 
@@ -1092,8 +1178,9 @@ init
 
 - serve；
 - manifest-last；
+- reconciliation status；
 - 幂等；
-- stale 防护；
+- active attempt / stale 防护；
 - 崩溃恢复；
 - ACCEPTED / REWRITE / BLOCKED。
 
@@ -1126,10 +1213,11 @@ init
 结果：
 
 - 旧 AI runtime 退出生产路径；
+- 模型专属 Store 状态退出 Core 必需路径；
 - 无模型配置即可完整运行；
 - 真实普通 ChatGPT 产品验收 PASS。
 
-## 37. 明确不做
+## 38. 明确不做
 
 首发目标明确不包含：
 
@@ -1150,27 +1238,30 @@ init
 - AIGC 检测规避；
 - 平台审核通过或流量保证。
 
-## 38. 完成定义
+## 39. 完成定义
 
 项目只有在以下条件全部满足时才算完成：
 
 - Novel Core 生产路径不调用任何 AI；
 - 没有任何模型 API Key 也能启动和完整运行；
 - Core 不依赖 `agentcore` / `ModelSet` / provider runtime；
+- 模型专属 Usage / Session / AIVoice 等状态不是 Core 的必需依赖；
 - Canon 是唯一事实源；
 - Drive 不是数据库；
+- Drive 每个区域的唯一写入方明确且被协议验证；
+- setup capability handshake 能提前发现 Drive 无写能力；
 - ChatGPT 可以通过普通 Chat + Drive 完成章节提交；
 - 正常情况下用户每轮只需输入“继续”；
 - 一个章节任务内部的规划、人物推演、正文、自审和状态提议由 ChatGPT 一次完成；
-- Core 自动 ACCEPT / REWRITE / BLOCK；
+- Core 能区分交换层 PENDING / INVALID 与生产层 ACCEPTED / REWRITE / BLOCKED；
 - ACCEPT 后自动准备下一任务；
-- REWRITE 不允许跳章；
+- REWRITE 保持逻辑 task、生成新 attempt，且不允许跳章；
 - 支持人物知识边界；
 - 支持人物状态和关系状态；
 - 支持时间、地点和资源约束；
 - 支持伏笔、冲突和 Reader Promise 生命周期；
 - 支持 Ending Contract；
-- 支持幂等和 stale submission 拒绝；
+- 支持幂等、inactive attempt 和 stale submission 拒绝；
 - 支持崩溃恢复；
 - 支持作者 Revision / Rebase；
 - 支持新 ChatGPT 对话恢复；
@@ -1178,7 +1269,7 @@ init
 - Core E2E 全部通过；
 - 真实普通 ChatGPT 产品验收 PASS。
 
-## 39. 设计决策摘要
+## 40. 设计决策摘要
 
 最终只把四个概念放在系统中心：
 
@@ -1186,5 +1277,7 @@ init
 - **Submission**：ChatGPT 声称完成了什么；
 - **Canon**：Core 已经接受的小说事实；
 - **Receipt**：为什么这次 Canon 变化是合法的。
+
+Attempt 是 Task 的执行版本，不提升为第五个业务中心概念。
 
 任何新模块、协议或抽象，如果不能明显增强这四个概念之一，就不应进入首发范围。
