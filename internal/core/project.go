@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/chenhongyang/novel-studio/internal/domain"
 	"github.com/chenhongyang/novel-studio/internal/protocol"
@@ -13,8 +14,9 @@ import (
 )
 
 type Project struct {
-	root  string
-	store *store.Store
+	root                  string
+	store                 *store.Store
+	submissionQuietPeriod time.Duration
 }
 
 type Status struct {
@@ -58,7 +60,7 @@ func OpenProject(root string) (*Project, error) {
 	if !info.IsDir() {
 		return nil, fmt.Errorf("project root %q is not a directory", abs)
 	}
-	return &Project{root: abs, store: store.NewStore(abs)}, nil
+	return &Project{root: abs, store: store.NewStore(abs), submissionQuietPeriod: 250 * time.Millisecond}, nil
 }
 
 func (p *Project) Status() (Status, error) {
