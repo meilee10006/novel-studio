@@ -14,12 +14,13 @@ import (
 )
 
 type ChapterSettlement struct {
-	Result       string      `json:"result"`
-	NewCanonRoot string      `json:"new_canon_root,omitempty"`
-	IDMappings   []IDMapping `json:"id_mappings,omitempty"`
-	Violations   []string    `json:"violations,omitempty"`
-	ReceiptPath  string      `json:"receipt_path,omitempty"`
-	BlockID      string      `json:"block_id,omitempty"`
+	Result         string      `json:"result"`
+	NewCanonRoot   string      `json:"new_canon_root,omitempty"`
+	IDMappings     []IDMapping `json:"id_mappings,omitempty"`
+	Violations     []string    `json:"violations,omitempty"`
+	ReceiptPath    string      `json:"receipt_path,omitempty"`
+	BlockID        string      `json:"block_id,omitempty"`
+	PlanningStatus string      `json:"planning_status,omitempty"`
 }
 
 func (p *Project) SettleActiveSnapshot() (ChapterSettlement, error) {
@@ -71,7 +72,11 @@ func (p *Project) SettleActiveSnapshot() (ChapterSettlement, error) {
 	if snapshotDigest != record.SnapshotDigest {
 		return ChapterSettlement{}, fmt.Errorf("local snapshot digest mismatch")
 	}
-	canonical, mappings, violations, chapter, err := validateAndCanonicalizeChapter(files, state, task)
+	chapterFiles := make(map[string][]byte, len(chapterArtifactNames))
+	for _, name := range chapterArtifactNames {
+		chapterFiles[name] = files[name]
+	}
+	canonical, mappings, violations, chapter, err := validateAndCanonicalizeChapter(chapterFiles, state, task)
 	if err != nil {
 		return ChapterSettlement{}, err
 	}
@@ -93,6 +98,16 @@ func (p *Project) SettleActiveSnapshot() (ChapterSettlement, error) {
 	if len(longformViolations) > 0 {
 		return p.rejectChapter(project, state, task, attempt, record, files, longformViolations)
 	}
+	planningStatus, nextPlanning, planningCanonical, planningRepair, planningViolations, err := validateChapterPlanning(files, canonState.Planning, chapter, requiresArtifact(attempt, "planning_patch.json"))
+	if err != nil {
+		return ChapterSettlement{}, err
+	}
+	if len(planningViolations) > 0 && requiresArtifact(attempt, "planning_patch.json") {
+		return p.rejectChapter(project, state, task, attempt, record, files, planningViolations, planningStatus)
+	}
+	if planningStatus == "accepted" {
+		canonical["planning_patch.json"] = planningCanonical
+	}
 	block, blockViolations, err := detectAuthorDecision(files, task, attempt)
 	if err != nil {
 		return ChapterSettlement{}, err
@@ -103,18 +118,10 @@ func (p *Project) SettleActiveSnapshot() (ChapterSettlement, error) {
 	if block != nil {
 		return p.blockChapter(project, state, task, attempt, record, files, block)
 	}
-	return p.acceptChapter(project, state, task, attempt, record, files, canonical, mappings, chapter, nextLongform)
+	return p.acceptChapter(project, state, task, attempt, record, files, canonical, mappings, chapter, nextLongform, nextPlanning, planningStatus, planningRepair)
 }
 
 func (p *Project) readSnapshot(attempt *domain.CoreAttempt) (map[string][]byte, protocol.SubmissionManifest, error) {
-	files := make(map[string][]byte, len(attempt.RequiredArtifacts))
-	for _, name := range attempt.RequiredArtifacts {
-		data, err := p.store.ReadCoreSnapshotFile(attempt.AttemptID, name)
-		if err != nil {
-			return nil, protocol.SubmissionManifest{}, err
-		}
-		files[name] = data
-	}
 	manifestRaw, err := p.store.ReadCoreSnapshotFile(attempt.AttemptID, "manifest.json")
 	if err != nil {
 		return nil, protocol.SubmissionManifest{}, err
@@ -122,6 +129,14 @@ func (p *Project) readSnapshot(attempt *domain.CoreAttempt) (map[string][]byte, 
 	var manifest protocol.SubmissionManifest
 	if err := protocol.DecodeJSON(manifestRaw, &manifest); err != nil {
 		return nil, protocol.SubmissionManifest{}, err
+	}
+	files := make(map[string][]byte, len(manifest.Files))
+	for _, name := range manifest.Files {
+		data, err := p.store.ReadCoreSnapshotFile(attempt.AttemptID, name)
+		if err != nil {
+			return nil, protocol.SubmissionManifest{}, err
+		}
+		files[name] = data
 	}
 	return files, manifest, nil
 }
@@ -260,9 +275,13 @@ func chapterNumberFromTarget(target string) (int, error) {
 	}
 	return n, nil
 }
-func (p *Project) rejectChapter(project *domain.CoreProjectState, state *domain.CoreProductionState, task *domain.CoreTask, attempt *domain.CoreAttempt, record *domain.CoreSubmissionRecord, files map[string][]byte, violations []string) (ChapterSettlement, error) {
+func (p *Project) rejectChapter(project *domain.CoreProjectState, state *domain.CoreProductionState, task *domain.CoreTask, attempt *domain.CoreAttempt, record *domain.CoreSubmissionRecord, files map[string][]byte, violations []string, planningStatuses ...string) (ChapterSettlement, error) {
 	sort.Strings(violations)
-	validationDigest, err := digestJSON(map[string]any{"result": "REWRITE", "violations": violations})
+	planningStatus := ""
+	if len(planningStatuses) > 0 {
+		planningStatus = planningStatuses[0]
+	}
+	validationDigest, err := digestJSON(map[string]any{"result": "REWRITE", "violations": violations, "planning_status": planningStatus})
 	if err != nil {
 		return ChapterSettlement{}, err
 	}
@@ -271,14 +290,14 @@ func (p *Project) rejectChapter(project *domain.CoreProjectState, state *domain.
 		TaskID: task.TaskID, AttemptID: attempt.AttemptID,
 		PreviousRoot: state.CanonRoot, TaskDigest: attempt.TaskDigest,
 		SubmissionDigest: record.SnapshotDigest, ArtifactDigests: digestArtifacts(files),
-		ValidationDigest: validationDigest, Result: "REWRITE", NewRoot: state.CanonRoot,
+		ValidationDigest: validationDigest, Result: "REWRITE", PlanningStatus: planningStatus, NewRoot: state.CanonRoot,
 		CommittedAt: time.Now().UTC().Format(time.RFC3339Nano),
 	}
 	rel, err := p.store.SaveCoreReceipt(receipt)
 	if err != nil {
 		return ChapterSettlement{}, err
 	}
-	next, err := newAttempt(state, task, "rewrite", chapterArtifactNames, project.ProtocolVersion)
+	next, err := newAttempt(state, task, "rewrite", attempt.RequiredArtifacts, project.ProtocolVersion)
 	if err != nil {
 		return ChapterSettlement{}, err
 	}
@@ -305,13 +324,13 @@ func (p *Project) rejectChapter(project *domain.CoreProjectState, state *domain.
 		return ChapterSettlement{}, err
 	}
 	return ChapterSettlement{
-		Result: "REWRITE", Violations: violations,
+		Result: "REWRITE", Violations: violations, PlanningStatus: planningStatus,
 		ReceiptPath: filepath.Join(p.root, rel),
 	}, nil
 }
 
-func (p *Project) acceptChapter(project *domain.CoreProjectState, state *domain.CoreProductionState, task *domain.CoreTask, attempt *domain.CoreAttempt, record *domain.CoreSubmissionRecord, received, canonical map[string][]byte, mappings []IDMapping, chapter int, longform domain.CoreLongformState) (ChapterSettlement, error) {
-	journal, err := p.prepareChapterCommit(project, state, task, attempt, record, received, canonical, mappings, chapter, longform)
+func (p *Project) acceptChapter(project *domain.CoreProjectState, state *domain.CoreProductionState, task *domain.CoreTask, attempt *domain.CoreAttempt, record *domain.CoreSubmissionRecord, received, canonical map[string][]byte, mappings []IDMapping, chapter int, longform domain.CoreLongformState, planning domain.CorePlanningState, planningStatus string, planningRepair bool) (ChapterSettlement, error) {
+	journal, err := p.prepareChapterCommit(project, state, task, attempt, record, received, canonical, mappings, chapter, longform, planning, planningStatus, planningRepair)
 	if err != nil {
 		return ChapterSettlement{}, err
 	}

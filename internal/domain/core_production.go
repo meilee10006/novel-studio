@@ -55,6 +55,19 @@ type CoreIDMapping struct {
 	CanonID    string `json:"canon_id"`
 }
 
+type CoreArcPlan struct {
+	ID                   string `json:"id"`
+	StartChapter         int    `json:"start_chapter"`
+	EndChapter           int    `json:"end_chapter"`
+	Goal                 string `json:"goal"`
+	PlanningLeadChapters int    `json:"planning_lead_chapters,omitempty"`
+}
+
+type CorePlanningState struct {
+	CurrentArc CoreArcPlan  `json:"current_arc,omitempty"`
+	NextArc    *CoreArcPlan `json:"next_arc,omitempty"`
+}
+
 type CoreReceipt struct {
 	SchemaVersion    int               `json:"schema_version"`
 	ProjectID        string            `json:"project_id"`
@@ -66,6 +79,7 @@ type CoreReceipt struct {
 	ArtifactDigests  map[string]string `json:"artifact_digests"`
 	ValidationDigest string            `json:"validation_digest"`
 	Result           string            `json:"result"`
+	PlanningStatus   string            `json:"planning_status,omitempty"`
 	NewRoot          string            `json:"new_root"`
 	IDMappings       []CoreIDMapping   `json:"id_mappings,omitempty"`
 	CommittedAt      string            `json:"committed_at"`
@@ -79,6 +93,7 @@ type CoreCanonState struct {
 	LastAttemptID string            `json:"last_attempt_id"`
 	LatestChapter int               `json:"latest_chapter,omitempty"`
 	Longform      CoreLongformState `json:"longform,omitempty"`
+	Planning      CorePlanningState `json:"planning,omitempty"`
 }
 
 type CoreCanonHead struct {

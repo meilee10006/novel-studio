@@ -179,6 +179,14 @@ func (p *Project) compileTaskPackContext(state *domain.CoreProductionState) (con
 	if err != nil {
 		return contextCompilerOutput{}, err
 	}
+	if canon.Planning.CurrentArc.ID != "" {
+		bookPlan["current_arc"] = canon.Planning.CurrentArc
+		if canon.Planning.NextArc != nil {
+			bookPlan["next_arc"] = canon.Planning.NextArc
+		} else {
+			delete(bookPlan, "next_arc")
+		}
+	}
 	ending, err := readMap("ending_contract.json")
 	if err != nil {
 		return contextCompilerOutput{}, err

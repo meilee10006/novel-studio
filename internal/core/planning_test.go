@@ -140,3 +140,33 @@ func readCanonStateWithPlanning(t *testing.T, project *Project) canonPlanningVie
 	}
 	return out
 }
+
+func TestPlanningRepairAcceptsNextArcOnFirstChapterAfterBoundary(t *testing.T) {
+	project, workspace, ready := planningChapterReadyProject(t, 1, 1)
+	first := submitAndSettleChapter(t, project, workspace, ready, validChapterArtifacts(1))
+	if first.Result != "ACCEPTED" || first.PlanningStatus != "not_present" {
+		t.Fatalf("first settlement=%+v", first)
+	}
+	assertNextTaskRequiresPlanningRepair(t, workspace)
+
+	nextReady := readReady(t, workspace)
+	artifacts := longformChapterArtifacts(2, nil)
+	artifacts["planning_patch.json"] = []byte(`{"next_arc":{"id":"arc-2","start_chapter":2,"end_chapter":4,"goal":"边界后修复规划"}}`)
+	second := submitAndSettleChapter(t, project, workspace, nextReady, artifacts)
+	if second.Result != "ACCEPTED" || second.PlanningStatus != "accepted" {
+		t.Fatalf("second settlement=%+v", second)
+	}
+	state := readCanonStateWithPlanning(t, project)
+	if state.Planning.CurrentArc.ID != "arc-2" || state.Planning.NextArc != nil {
+		t.Fatalf("planning=%+v", state.Planning)
+	}
+	following := readReady(t, workspace)
+	base := filepath.Join(workspace, "exchange", "outbox", following.TaskID, following.AttemptID)
+	taskRaw, err := os.ReadFile(filepath.Join(base, "task.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(taskRaw), "planning_patch.json") {
+		t.Fatalf("planning repair leaked into following attempt: %s", taskRaw)
+	}
+}

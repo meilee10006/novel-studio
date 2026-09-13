@@ -44,17 +44,17 @@ func (p *Project) ScanActiveSubmission() (SubmissionStatus, error) {
 	}
 
 	inbox := filepath.Join(project.WorkspaceRoot, "exchange", "inbox", task.TaskID, attempt.AttemptID)
-	if problem := validateInboxEntries(inbox, attempt.RequiredArtifacts); problem != "" {
+	if problem := validateInboxEntries(inbox, manifest.Files); problem != "" {
 		return p.invalidateSubmission(record, problem)
 	}
-	files := make(map[string][]byte, len(attempt.RequiredArtifacts)+1)
+	files := make(map[string][]byte, len(manifest.Files)+1)
 	manifestRaw, err := protocol.ReadUTF8(project.WorkspaceRoot, manifestRel, 64<<10)
 	if err != nil {
 		return p.invalidateSubmission(record, err.Error())
 	}
 	files["manifest.json"] = manifestRaw
 	total := len(manifestRaw)
-	for _, name := range attempt.RequiredArtifacts {
+	for _, name := range manifest.Files {
 		rel := filepath.Join("exchange", "inbox", task.TaskID, attempt.AttemptID, name)
 		data, err := protocol.ReadUTF8(project.WorkspaceRoot, rel, protocol.DefaultMaxTextSize)
 		if err != nil {

@@ -33,7 +33,7 @@ func (p *Project) recoverPendingCommit() error {
 	return err
 }
 
-func (p *Project) prepareChapterCommit(project *domain.CoreProjectState, state *domain.CoreProductionState, task *domain.CoreTask, attempt *domain.CoreAttempt, record *domain.CoreSubmissionRecord, received, canonical map[string][]byte, mappings []IDMapping, chapter int, longform domain.CoreLongformState) (*domain.CoreCommitJournal, error) {
+func (p *Project) prepareChapterCommit(project *domain.CoreProjectState, state *domain.CoreProductionState, task *domain.CoreTask, attempt *domain.CoreAttempt, record *domain.CoreSubmissionRecord, received, canonical map[string][]byte, mappings []IDMapping, chapter int, longform domain.CoreLongformState, planning domain.CorePlanningState, planningStatus string, planningRepair bool) (*domain.CoreCommitJournal, error) {
 	head, err := p.store.LoadCoreCanonHead()
 	if err != nil || head == nil {
 		if err == nil {
@@ -64,7 +64,7 @@ func (p *Project) prepareChapterCommit(project *domain.CoreProjectState, state *
 	canonState := domain.CoreCanonState{
 		SchemaVersion: coreSchemaVersion, Revision: newRevision,
 		ProjectID: project.ProjectID, LastTaskID: task.TaskID,
-		LastAttemptID: attempt.AttemptID, LatestChapter: chapter, Longform: longform,
+		LastAttemptID: attempt.AttemptID, LatestChapter: chapter, Longform: longform, Planning: planning,
 	}
 	stateDigest, err := digestJSON(canonState)
 	if err != nil {
@@ -79,7 +79,7 @@ func (p *Project) prepareChapterCommit(project *domain.CoreProjectState, state *
 		ParentRoot: state.CanonRoot, Root: newRoot,
 		StateDigest: stateDigest, ArtifactDigests: artifactDigests,
 	}
-	validationDigest, err := digestJSON(map[string]any{"result": "ACCEPTED", "violations": []string{}})
+	validationDigest, err := digestJSON(map[string]any{"result": "ACCEPTED", "violations": []string{}, "planning_status": planningStatus})
 	if err != nil {
 		return nil, err
 	}
@@ -88,7 +88,7 @@ func (p *Project) prepareChapterCommit(project *domain.CoreProjectState, state *
 		TaskID: task.TaskID, AttemptID: attempt.AttemptID,
 		PreviousRoot: state.CanonRoot, TaskDigest: attempt.TaskDigest,
 		SubmissionDigest: record.SnapshotDigest, ArtifactDigests: digestArtifacts(received),
-		ValidationDigest: validationDigest, Result: "ACCEPTED", NewRoot: newRoot,
+		ValidationDigest: validationDigest, Result: "ACCEPTED", PlanningStatus: planningStatus, NewRoot: newRoot,
 		IDMappings: mappings, CommittedAt: time.Now().UTC().Format(time.RFC3339Nano),
 	}
 
@@ -97,7 +97,12 @@ func (p *Project) prepareChapterCommit(project *domain.CoreProjectState, state *
 	next.CanonRoot = newRoot
 	next.NextEntitySeq += len(mappings)
 	nextTask := newTask(&next, "chapter", fmt.Sprintf("chapter:%d", chapter+1), newRoot)
-	nextAttempt, err := newAttempt(&next, nextTask, "initial", chapterArtifactNames, project.ProtocolVersion)
+	required := append([]string(nil), chapterArtifactNames...)
+	if planningRepair {
+		required = append(required, "planning_patch.json")
+		nextTask.Constraints = append(nextTask.Constraints, domain.CoreTaskConstraint{Kind: "planning_repair_required", Instruction: "Provide a valid next Arc plan before this chapter can be accepted."})
+	}
+	nextAttempt, err := newAttempt(&next, nextTask, "initial", required, project.ProtocolVersion)
 	if err != nil {
 		return nil, err
 	}
@@ -193,7 +198,7 @@ func (p *Project) applyChapterCommit(project *domain.CoreProjectState, journal *
 		"schema_version": protocol.MachineSchemaVersion,
 		"task_id":        journal.TaskID, "attempt_id": journal.AttemptID,
 		"result": "ACCEPTED", "new_canon_root": journal.NewRoot,
-		"id_mappings": journal.Receipt.IDMappings,
+		"planning_status": journal.Receipt.PlanningStatus, "id_mappings": journal.Receipt.IDMappings,
 	}); err != nil {
 		return ChapterSettlement{}, err
 	}
@@ -212,7 +217,7 @@ func (p *Project) applyChapterCommit(project *domain.CoreProjectState, journal *
 		return ChapterSettlement{}, err
 	}
 	return ChapterSettlement{
-		Result: "ACCEPTED", NewCanonRoot: journal.NewRoot,
+		Result: "ACCEPTED", NewCanonRoot: journal.NewRoot, PlanningStatus: journal.Receipt.PlanningStatus,
 		IDMappings:  journal.Receipt.IDMappings,
 		ReceiptPath: filepath.Join(p.root, rel),
 	}, nil

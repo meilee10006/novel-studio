@@ -257,7 +257,14 @@ func (p *Project) SettleFoundation(sub FoundationSubmission) (FoundationSettleme
 	if len(longformViolations) > 0 {
 		return p.rejectFoundation(projectState, state, task, attempt, longformViolations)
 	}
-	return p.acceptFoundation(projectState, state, task, attempt, sub, canonical, mappings, longform)
+	planning, planningViolations, err := foundationPlanningState(canonical["book_plan.json"])
+	if err != nil {
+		return FoundationSettlement{}, err
+	}
+	if len(planningViolations) > 0 {
+		return p.rejectFoundation(projectState, state, task, attempt, planningViolations)
+	}
+	return p.acceptFoundation(projectState, state, task, attempt, sub, canonical, mappings, longform, planning)
 }
 
 func validateSubmissionIdentity(project *domain.CoreProjectState, task *domain.CoreTask, attempt *domain.CoreAttempt, manifest protocol.SubmissionManifest) error {
@@ -270,12 +277,26 @@ func validateSubmissionIdentity(project *domain.CoreProjectState, task *domain.C
 	if manifest.BaseCanonRoot != task.BaseCanonRoot || manifest.ProtocolVersion != attempt.ProtocolVersion || manifest.TaskDigest != attempt.TaskDigest || manifest.CompletionNonce != attempt.CompletionNonce {
 		return fmt.Errorf("submission binding does not match active attempt")
 	}
-	got := append([]string(nil), manifest.Files...)
-	want := append([]string(nil), attempt.RequiredArtifacts...)
-	sort.Strings(got)
-	sort.Strings(want)
-	if strings.Join(got, "\x00") != strings.Join(want, "\x00") {
-		return fmt.Errorf("submission file list does not match active attempt")
+	required := make(map[string]bool, len(attempt.RequiredArtifacts))
+	allowed := make(map[string]bool, len(attempt.RequiredArtifacts)+1)
+	for _, name := range attempt.RequiredArtifacts {
+		required[name] = true
+		allowed[name] = true
+	}
+	if task.Kind == "chapter" {
+		allowed["planning_patch.json"] = true
+	}
+	seen := make(map[string]bool, len(manifest.Files))
+	for _, name := range manifest.Files {
+		if name == "" || name == "manifest.json" || strings.ContainsAny(name, "/\\") || seen[name] || !allowed[name] {
+			return fmt.Errorf("submission file list does not match active attempt")
+		}
+		seen[name] = true
+	}
+	for name := range required {
+		if !seen[name] {
+			return fmt.Errorf("submission file list does not match active attempt")
+		}
 	}
 	return nil
 }
@@ -513,14 +534,14 @@ func (p *Project) rejectFoundation(project *domain.CoreProjectState, state *doma
 	return FoundationSettlement{Result: "REWRITE", Violations: violations, ReceiptPath: filepath.Join(p.root, rel)}, nil
 }
 
-func (p *Project) acceptFoundation(project *domain.CoreProjectState, state *domain.CoreProductionState, task *domain.CoreTask, attempt *domain.CoreAttempt, sub FoundationSubmission, artifacts map[string][]byte, mappings []IDMapping, longform domain.CoreLongformState) (FoundationSettlement, error) {
+func (p *Project) acceptFoundation(project *domain.CoreProjectState, state *domain.CoreProductionState, task *domain.CoreTask, attempt *domain.CoreAttempt, sub FoundationSubmission, artifacts map[string][]byte, mappings []IDMapping, longform domain.CoreLongformState, planning domain.CorePlanningState) (FoundationSettlement, error) {
 	artifactDigests := digestArtifacts(artifacts)
 	submissionDigest, err := digestArtifactManifest(artifactDigests)
 	if err != nil {
 		return FoundationSettlement{}, err
 	}
 	newRevision := state.Revision + 1
-	canonState := &domain.CoreCanonState{SchemaVersion: coreSchemaVersion, Revision: newRevision, ProjectID: project.ProjectID, LastTaskID: task.TaskID, LastAttemptID: attempt.AttemptID, Longform: longform}
+	canonState := &domain.CoreCanonState{SchemaVersion: coreSchemaVersion, Revision: newRevision, ProjectID: project.ProjectID, LastTaskID: task.TaskID, LastAttemptID: attempt.AttemptID, Longform: longform, Planning: planning}
 	stateDigest, err := digestJSON(canonState)
 	if err != nil {
 		return FoundationSettlement{}, err
