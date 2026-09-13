@@ -75,3 +75,17 @@ func validateJSONShape(v any, depth int) error {
 	}
 	return nil
 }
+
+const MachineSchemaVersion = 1
+
+type SubmissionManifest struct {
+	SchemaVersion   int      `json:"schema_version"`
+	ProjectID       string   `json:"project_id"`
+	TaskID          string   `json:"task_id"`
+	AttemptID       string   `json:"attempt_id"`
+	BaseCanonRoot   string   `json:"base_canon_root"`
+	ProtocolVersion string   `json:"protocol_version"`
+	TaskDigest      string   `json:"task_digest"`
+	CompletionNonce string   `json:"completion_nonce"`
+	Files           []string `json:"files"`
+}

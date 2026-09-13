@@ -30,6 +30,10 @@ type Status struct {
 	ProtocolVersion   string       `json:"protocol_version,omitempty"`
 	Capability        string       `json:"capability,omitempty"`
 	CapabilityProblem string       `json:"capability_problem,omitempty"`
+	CanonRoot         string       `json:"canon_root,omitempty"`
+	ActiveTaskKind    string       `json:"active_task_kind,omitempty"`
+	ActiveTarget      string       `json:"active_target,omitempty"`
+	ActiveAttemptID   string       `json:"active_attempt_id,omitempty"`
 }
 
 type Verification struct {
@@ -72,6 +76,20 @@ func (p *Project) Status() (Status, error) {
 		out.ProjectID = state.ProjectID
 		out.ProtocolVersion = state.ProtocolVersion
 		out.Capability, out.CapabilityProblem = capabilityStatus(state)
+	}
+	production, err := p.store.LoadCoreProductionState()
+	if err != nil {
+		return Status{}, fmt.Errorf("load core production state: %w", err)
+	}
+	if production != nil {
+		out.CanonRoot = production.CanonRoot
+		if production.ActiveTask != nil {
+			out.ActiveTaskKind = production.ActiveTask.Kind
+			out.ActiveTarget = production.ActiveTask.Target
+		}
+		if production.ActiveAttempt != nil {
+			out.ActiveAttemptID = production.ActiveAttempt.AttemptID
+		}
 	}
 	if progress == nil {
 		return out, nil
