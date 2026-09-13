@@ -163,7 +163,7 @@ func validChapterArtifacts(chapter int) map[string][]byte {
 		"chapter_contract.json": []byte(`{"chapter":1,"declared_pov":"character-000001"}`),
 		"events.json":           []byte(`{"events":[{"local_id":"e1","evidence_anchor":"主角来到起点"}]}`),
 		"self_review.json":      []byte(`{"ok":true}`),
-		"state_delta.json":      []byte(`{"changes":[]}`),
+		"state_delta.json":      []byte(`{"changes":[{"event_ref":"e1","kind":"location"}]}`),
 	}
 }
 func writeSubmission(t *testing.T, workspace string, ready readyView, artifacts map[string][]byte, manifestOnly bool) {

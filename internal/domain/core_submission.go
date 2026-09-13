@@ -11,4 +11,7 @@ type CoreSubmissionRecord struct {
 	SnapshotDigest string `json:"snapshot_digest,omitempty"`
 	Conflict       bool   `json:"conflict,omitempty"`
 	Problem        string `json:"problem,omitempty"`
+	Result         string `json:"result,omitempty"`
+	NewCanonRoot   string `json:"new_canon_root,omitempty"`
+	ReceiptPath    string `json:"receipt_path,omitempty"`
 }

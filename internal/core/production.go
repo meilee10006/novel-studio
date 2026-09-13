@@ -60,6 +60,9 @@ type readyDocument struct {
 }
 
 func (p *Project) Reconcile() error {
+	if err := p.recoverPendingCommit(); err != nil {
+		return err
+	}
 	projectState, err := p.store.LoadCoreProjectState()
 	if err != nil {
 		return err
@@ -603,11 +606,11 @@ func (p *Project) RecomputeCanonRoot() (string, error) {
 		if err != nil {
 			return "", err
 		}
-		canonical, err := canonicalJSON(raw)
+		digest, err := digestCanonArtifact(name, raw)
 		if err != nil {
 			return "", err
 		}
-		artifactDigests[name] = sha256Bytes(canonical)
+		artifactDigests[name] = digest
 	}
 	return computeCanonRoot(head.Revision, head.ParentRoot, sha256Bytes(stateCanonical), artifactDigests)
 }

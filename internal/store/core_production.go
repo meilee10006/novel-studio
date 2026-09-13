@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 
 	"github.com/chenhongyang/novel-studio/internal/domain"
 )
@@ -35,7 +36,14 @@ func (s *Store) SaveCoreReceipt(receipt *domain.CoreReceipt) (string, error) {
 	}
 	rel := filepath.Join("meta", "core", "receipts", receipt.AttemptID+".json")
 	if _, err := os.Stat(s.Progress.io.path(rel)); err == nil {
-		return "", fmt.Errorf("receipt already exists for attempt %s", receipt.AttemptID)
+		var existing domain.CoreReceipt
+		if err := s.Progress.io.ReadJSON(rel, &existing); err != nil {
+			return "", err
+		}
+		if reflect.DeepEqual(existing, *receipt) {
+			return rel, nil
+		}
+		return "", fmt.Errorf("conflicting receipt already exists for attempt %s", receipt.AttemptID)
 	} else if !os.IsNotExist(err) {
 		return "", err
 	}

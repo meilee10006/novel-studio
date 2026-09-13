@@ -17,6 +17,7 @@ type Project struct {
 	root                  string
 	store                 *store.Store
 	submissionQuietPeriod time.Duration
+	commitFault           func(string) error
 }
 
 type Status struct {
