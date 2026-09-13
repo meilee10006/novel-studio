@@ -136,3 +136,30 @@ func readJSONL(t *testing.T, path string) []map[string]any {
 	}
 	return out
 }
+
+func TestSessionStore_MessageUsageIdentityOverridesLookup(t *testing.T) {
+	dir := t.TempDir()
+	s := NewSessionStore(newIO(dir))
+	logger := s.SubAgentLogger(func(string) (string, string) { return "fallback", "fallback-model" })
+	logger("writer", "写第 2 章", agentcore.Message{
+		Role:  agentcore.RoleAssistant,
+		Usage: &agentcore.Usage{Provider: "actual", Model: "actual-model", Input: 1, Output: 1},
+	})
+	entries := readJSONL(t, filepath.Join(dir, "meta/sessions/agents/writer-ch02.jsonl"))
+	meta := entries[0]["_meta"].(map[string]any)
+	if meta["provider"] != "actual" || meta["model"] != "actual-model" {
+		t.Fatalf("_meta=%v, want actual usage identity", meta)
+	}
+}
+
+func TestSessionStore_SkipsCustomRoleShapedMessage(t *testing.T) {
+	dir := t.TempDir()
+	s := NewSessionStore(newIO(dir))
+	path := "meta/sessions/custom.jsonl"
+	if err := s.Log(path, map[string]any{"role": "assistant", "notice": "not an LLM message"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, path)); !os.IsNotExist(err) {
+		t.Fatalf("custom status message created session log: err=%v", err)
+	}
+}
