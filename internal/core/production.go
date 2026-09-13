@@ -175,20 +175,29 @@ func (p *Project) writeActiveAttempt(projectState *domain.CoreProjectState, stat
 	if err := writeWorkspaceJSON(projectState.WorkspaceRoot, filepath.Join(base, "task.json"), taskDoc); err != nil {
 		return err
 	}
-	for name, value := range map[string]any{
-		"context.json": map[string]any{},
-		"constraints.json": map[string]any{
-			"required_artifacts":  attempt.RequiredArtifacts,
-			"control_constraints": task.Constraints,
-		},
-		"canon_excerpt.json": map[string]any{"base_canon_root": task.BaseCanonRoot},
-	} {
-		if err := writeWorkspaceJSON(projectState.WorkspaceRoot, filepath.Join(base, name), value); err != nil {
+	if err := writeWorkspaceJSON(projectState.WorkspaceRoot, filepath.Join(base, "constraints.json"), map[string]any{
+		"required_artifacts":  attempt.RequiredArtifacts,
+		"control_constraints": task.Constraints,
+	}); err != nil {
+		return err
+	}
+	contextRaw := []byte("{}")
+	canonRaw, err := json.Marshal(map[string]any{"base_canon_root": task.BaseCanonRoot})
+	if err != nil {
+		return err
+	}
+	var recentProse []byte
+	if task.Kind != "foundation" && task.BaseCanonRoot != "" {
+		compiled, err := p.compileTaskPackContext(state)
+		if err != nil {
 			return err
 		}
+		contextRaw, canonRaw, recentProse = compiled.ContextJSON, compiled.CanonExcerptJSON, compiled.RecentProse
 	}
-	if err := protocol.WriteUTF8Atomic(projectState.WorkspaceRoot, filepath.Join(base, "recent_prose.md"), nil, 0o644); err != nil {
-		return err
+	for name, data := range map[string][]byte{"context.json": contextRaw, "canon_excerpt.json": canonRaw, "recent_prose.md": recentProse} {
+		if err := protocol.WriteUTF8Atomic(projectState.WorkspaceRoot, filepath.Join(base, name), data, 0o644); err != nil {
+			return err
+		}
 	}
 	status := "ready"
 	blockID := ""
