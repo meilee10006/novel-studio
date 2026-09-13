@@ -20,6 +20,8 @@ type readyView struct {
 	ProtocolVersion string `json:"protocol_version"`
 	TaskDigest      string `json:"task_digest"`
 	CompletionNonce string `json:"completion_nonce"`
+	Status          string `json:"status"`
+	BlockID         string `json:"block_id,omitempty"`
 }
 
 func TestFoundationAttemptCreatedOnceAfterCapabilityPassed(t *testing.T) {

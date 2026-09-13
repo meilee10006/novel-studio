@@ -37,6 +37,7 @@ type Status struct {
 	ActiveTaskKind    string       `json:"active_task_kind,omitempty"`
 	ActiveTarget      string       `json:"active_target,omitempty"`
 	ActiveAttemptID   string       `json:"active_attempt_id,omitempty"`
+	BlockID           string       `json:"block_id,omitempty"`
 }
 
 type Verification struct {
@@ -92,6 +93,9 @@ func (p *Project) Status() (Status, error) {
 		}
 		if production.ActiveAttempt != nil {
 			out.ActiveAttemptID = production.ActiveAttempt.AttemptID
+		}
+		if production.ActiveBlock != nil {
+			out.BlockID = production.ActiveBlock.BlockID
 		}
 	}
 	if progress == nil {

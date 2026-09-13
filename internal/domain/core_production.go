@@ -16,12 +16,23 @@ type CoreAttempt struct {
 	RequiredArtifacts []string `json:"required_artifacts"`
 }
 
+type CoreBlock struct {
+	BlockID        string   `json:"block_id"`
+	TaskID         string   `json:"task_id"`
+	AttemptID      string   `json:"attempt_id"`
+	BaseCanonRoot  string   `json:"base_canon_root"`
+	ConstraintRefs []string `json:"constraint_refs"`
+	Conflict       string   `json:"conflict"`
+	Options        []string `json:"options"`
+}
+
 type CoreProductionState struct {
 	SchemaVersion  int          `json:"schema_version"`
 	Revision       int          `json:"revision"`
 	CanonRoot      string       `json:"canon_root,omitempty"`
 	ActiveTask     *CoreTask    `json:"active_task,omitempty"`
 	ActiveAttempt  *CoreAttempt `json:"active_attempt,omitempty"`
+	ActiveBlock    *CoreBlock   `json:"active_block,omitempty"`
 	NextTaskSeq    int          `json:"next_task_seq"`
 	NextAttemptSeq int          `json:"next_attempt_seq"`
 	NextEntitySeq  int          `json:"next_entity_seq"`

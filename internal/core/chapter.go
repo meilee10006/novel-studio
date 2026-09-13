@@ -19,6 +19,7 @@ type ChapterSettlement struct {
 	IDMappings   []IDMapping `json:"id_mappings,omitempty"`
 	Violations   []string    `json:"violations,omitempty"`
 	ReceiptPath  string      `json:"receipt_path,omitempty"`
+	BlockID      string      `json:"block_id,omitempty"`
 }
 
 func (p *Project) SettleActiveSnapshot() (ChapterSettlement, error) {
@@ -27,6 +28,9 @@ func (p *Project) SettleActiveSnapshot() (ChapterSettlement, error) {
 		return ChapterSettlement{}, err
 	}
 	task, attempt := state.ActiveTask, state.ActiveAttempt
+	if state.ActiveBlock != nil && state.ActiveBlock.AttemptID == attempt.AttemptID {
+		return ChapterSettlement{Result: "BLOCKED", BlockID: state.ActiveBlock.BlockID}, nil
+	}
 	if task.Kind != "chapter" {
 		return ChapterSettlement{}, fmt.Errorf("active task is %q, not chapter", task.Kind)
 	}
@@ -73,6 +77,16 @@ func (p *Project) SettleActiveSnapshot() (ChapterSettlement, error) {
 	}
 	if len(violations) > 0 {
 		return p.rejectChapter(project, state, task, attempt, record, files, violations)
+	}
+	block, blockViolations, err := detectAuthorDecision(files, task, attempt)
+	if err != nil {
+		return ChapterSettlement{}, err
+	}
+	if len(blockViolations) > 0 {
+		return p.rejectChapter(project, state, task, attempt, record, files, blockViolations)
+	}
+	if block != nil {
+		return p.blockChapter(project, state, task, attempt, record, files, block)
 	}
 	return p.acceptChapter(project, state, task, attempt, record, files, canonical, mappings, chapter)
 }

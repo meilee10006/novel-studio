@@ -57,6 +57,7 @@ type readyDocument struct {
 	TaskDigest      string `json:"task_digest"`
 	CompletionNonce string `json:"completion_nonce"`
 	Status          string `json:"status"`
+	BlockID         string `json:"block_id,omitempty"`
 }
 
 func (p *Project) Reconcile() error {
@@ -182,6 +183,12 @@ func (p *Project) writeActiveAttempt(projectState *domain.CoreProjectState, stat
 	if err := protocol.WriteUTF8Atomic(projectState.WorkspaceRoot, filepath.Join(base, "recent_prose.md"), nil, 0o644); err != nil {
 		return err
 	}
+	status := "ready"
+	blockID := ""
+	if state.ActiveBlock != nil && state.ActiveBlock.AttemptID == attempt.AttemptID {
+		status = "blocked"
+		blockID = state.ActiveBlock.BlockID
+	}
 	return writeWorkspaceJSON(projectState.WorkspaceRoot, filepath.Join("exchange", "READY.json"), readyDocument{
 		SchemaVersion:   protocol.MachineSchemaVersion,
 		ProjectID:       projectState.ProjectID,
@@ -194,7 +201,8 @@ func (p *Project) writeActiveAttempt(projectState *domain.CoreProjectState, stat
 		ProtocolVersion: attempt.ProtocolVersion,
 		TaskDigest:      attempt.TaskDigest,
 		CompletionNonce: attempt.CompletionNonce,
-		Status:          "ready",
+		Status:          status,
+		BlockID:         blockID,
 	})
 }
 func (p *Project) SettleFoundation(sub FoundationSubmission) (FoundationSettlement, error) {
