@@ -78,6 +78,21 @@ func (p *Project) SettleActiveSnapshot() (ChapterSettlement, error) {
 	if len(violations) > 0 {
 		return p.rejectChapter(project, state, task, attempt, record, files, violations)
 	}
+	canonRaw, err := p.store.ReadCoreCanonStateBytes()
+	if err != nil {
+		return ChapterSettlement{}, err
+	}
+	var canonState domain.CoreCanonState
+	if err := protocol.DecodeJSON(canonRaw, &canonState); err != nil {
+		return ChapterSettlement{}, err
+	}
+	nextLongform, longformViolations, err := validateLongformState(canonState.Longform, canonical, chapter)
+	if err != nil {
+		return ChapterSettlement{}, err
+	}
+	if len(longformViolations) > 0 {
+		return p.rejectChapter(project, state, task, attempt, record, files, longformViolations)
+	}
 	block, blockViolations, err := detectAuthorDecision(files, task, attempt)
 	if err != nil {
 		return ChapterSettlement{}, err
@@ -88,7 +103,7 @@ func (p *Project) SettleActiveSnapshot() (ChapterSettlement, error) {
 	if block != nil {
 		return p.blockChapter(project, state, task, attempt, record, files, block)
 	}
-	return p.acceptChapter(project, state, task, attempt, record, files, canonical, mappings, chapter)
+	return p.acceptChapter(project, state, task, attempt, record, files, canonical, mappings, chapter, nextLongform)
 }
 
 func (p *Project) readSnapshot(attempt *domain.CoreAttempt) (map[string][]byte, protocol.SubmissionManifest, error) {
@@ -295,8 +310,8 @@ func (p *Project) rejectChapter(project *domain.CoreProjectState, state *domain.
 	}, nil
 }
 
-func (p *Project) acceptChapter(project *domain.CoreProjectState, state *domain.CoreProductionState, task *domain.CoreTask, attempt *domain.CoreAttempt, record *domain.CoreSubmissionRecord, received, canonical map[string][]byte, mappings []IDMapping, chapter int) (ChapterSettlement, error) {
-	journal, err := p.prepareChapterCommit(project, state, task, attempt, record, received, canonical, mappings, chapter)
+func (p *Project) acceptChapter(project *domain.CoreProjectState, state *domain.CoreProductionState, task *domain.CoreTask, attempt *domain.CoreAttempt, record *domain.CoreSubmissionRecord, received, canonical map[string][]byte, mappings []IDMapping, chapter int, longform domain.CoreLongformState) (ChapterSettlement, error) {
+	journal, err := p.prepareChapterCommit(project, state, task, attempt, record, received, canonical, mappings, chapter, longform)
 	if err != nil {
 		return ChapterSettlement{}, err
 	}

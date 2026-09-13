@@ -241,7 +241,14 @@ func (p *Project) SettleFoundation(sub FoundationSubmission) (FoundationSettleme
 	if len(violations) > 0 {
 		return p.rejectFoundation(projectState, state, task, attempt, violations)
 	}
-	return p.acceptFoundation(projectState, state, task, attempt, sub, canonical, mappings)
+	longform, longformViolations, err := foundationLongformState(canonical["world.json"])
+	if err != nil {
+		return FoundationSettlement{}, err
+	}
+	if len(longformViolations) > 0 {
+		return p.rejectFoundation(projectState, state, task, attempt, longformViolations)
+	}
+	return p.acceptFoundation(projectState, state, task, attempt, sub, canonical, mappings, longform)
 }
 
 func validateSubmissionIdentity(project *domain.CoreProjectState, task *domain.CoreTask, attempt *domain.CoreAttempt, manifest protocol.SubmissionManifest) error {
@@ -497,14 +504,14 @@ func (p *Project) rejectFoundation(project *domain.CoreProjectState, state *doma
 	return FoundationSettlement{Result: "REWRITE", Violations: violations, ReceiptPath: filepath.Join(p.root, rel)}, nil
 }
 
-func (p *Project) acceptFoundation(project *domain.CoreProjectState, state *domain.CoreProductionState, task *domain.CoreTask, attempt *domain.CoreAttempt, sub FoundationSubmission, artifacts map[string][]byte, mappings []IDMapping) (FoundationSettlement, error) {
+func (p *Project) acceptFoundation(project *domain.CoreProjectState, state *domain.CoreProductionState, task *domain.CoreTask, attempt *domain.CoreAttempt, sub FoundationSubmission, artifacts map[string][]byte, mappings []IDMapping, longform domain.CoreLongformState) (FoundationSettlement, error) {
 	artifactDigests := digestArtifacts(artifacts)
 	submissionDigest, err := digestArtifactManifest(artifactDigests)
 	if err != nil {
 		return FoundationSettlement{}, err
 	}
 	newRevision := state.Revision + 1
-	canonState := &domain.CoreCanonState{SchemaVersion: coreSchemaVersion, Revision: newRevision, ProjectID: project.ProjectID, LastTaskID: task.TaskID, LastAttemptID: attempt.AttemptID}
+	canonState := &domain.CoreCanonState{SchemaVersion: coreSchemaVersion, Revision: newRevision, ProjectID: project.ProjectID, LastTaskID: task.TaskID, LastAttemptID: attempt.AttemptID, Longform: longform}
 	stateDigest, err := digestJSON(canonState)
 	if err != nil {
 		return FoundationSettlement{}, err

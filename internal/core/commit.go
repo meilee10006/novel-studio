@@ -33,7 +33,7 @@ func (p *Project) recoverPendingCommit() error {
 	return err
 }
 
-func (p *Project) prepareChapterCommit(project *domain.CoreProjectState, state *domain.CoreProductionState, task *domain.CoreTask, attempt *domain.CoreAttempt, record *domain.CoreSubmissionRecord, received, canonical map[string][]byte, mappings []IDMapping, chapter int) (*domain.CoreCommitJournal, error) {
+func (p *Project) prepareChapterCommit(project *domain.CoreProjectState, state *domain.CoreProductionState, task *domain.CoreTask, attempt *domain.CoreAttempt, record *domain.CoreSubmissionRecord, received, canonical map[string][]byte, mappings []IDMapping, chapter int, longform domain.CoreLongformState) (*domain.CoreCommitJournal, error) {
 	head, err := p.store.LoadCoreCanonHead()
 	if err != nil || head == nil {
 		if err == nil {
@@ -64,7 +64,7 @@ func (p *Project) prepareChapterCommit(project *domain.CoreProjectState, state *
 	canonState := domain.CoreCanonState{
 		SchemaVersion: coreSchemaVersion, Revision: newRevision,
 		ProjectID: project.ProjectID, LastTaskID: task.TaskID,
-		LastAttemptID: attempt.AttemptID, LatestChapter: chapter,
+		LastAttemptID: attempt.AttemptID, LatestChapter: chapter, Longform: longform,
 	}
 	stateDigest, err := digestJSON(canonState)
 	if err != nil {

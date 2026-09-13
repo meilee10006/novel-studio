@@ -72,12 +72,13 @@ type CoreReceipt struct {
 }
 
 type CoreCanonState struct {
-	SchemaVersion int    `json:"schema_version"`
-	Revision      int    `json:"revision"`
-	ProjectID     string `json:"project_id"`
-	LastTaskID    string `json:"last_task_id"`
-	LastAttemptID string `json:"last_attempt_id"`
-	LatestChapter int    `json:"latest_chapter,omitempty"`
+	SchemaVersion int               `json:"schema_version"`
+	Revision      int               `json:"revision"`
+	ProjectID     string            `json:"project_id"`
+	LastTaskID    string            `json:"last_task_id"`
+	LastAttemptID string            `json:"last_attempt_id"`
+	LatestChapter int               `json:"latest_chapter,omitempty"`
+	Longform      CoreLongformState `json:"longform,omitempty"`
 }
 
 type CoreCanonHead struct {
