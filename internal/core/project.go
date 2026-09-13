@@ -1,12 +1,14 @@
 package core
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/chenhongyang/novel-studio/internal/domain"
+	"github.com/chenhongyang/novel-studio/internal/protocol"
 	"github.com/chenhongyang/novel-studio/internal/store"
 )
 
@@ -24,6 +26,10 @@ type Status struct {
 	TotalChapters     int          `json:"total_chapters,omitempty"`
 	CompletedChapters int          `json:"completed_chapters,omitempty"`
 	Warnings          []string     `json:"warnings,omitempty"`
+	ProjectID         string       `json:"project_id,omitempty"`
+	ProtocolVersion   string       `json:"protocol_version,omitempty"`
+	Capability        string       `json:"capability,omitempty"`
+	CapabilityProblem string       `json:"capability_problem,omitempty"`
 }
 
 type Verification struct {
@@ -57,6 +63,16 @@ func (p *Project) Status() (Status, error) {
 		return Status{}, fmt.Errorf("load progress: %w", err)
 	}
 	out := Status{Root: p.root, Warnings: p.store.CheckConsistency()}
+	state, err := p.store.LoadCoreProjectState()
+	if err != nil {
+		return Status{}, fmt.Errorf("load core project metadata: %w", err)
+	}
+	if state != nil {
+		out.Initialized = true
+		out.ProjectID = state.ProjectID
+		out.ProtocolVersion = state.ProtocolVersion
+		out.Capability, out.CapabilityProblem = capabilityStatus(state)
+	}
 	if progress == nil {
 		return out, nil
 	}
@@ -75,5 +91,47 @@ func (p *Project) Verify() (Verification, error) {
 		return Verification{}, err
 	}
 	problems := append([]string(nil), status.Warnings...)
+	if status.Capability == "invalid" {
+		problems = append(problems, "capability check: "+status.CapabilityProblem)
+	}
 	return Verification{Root: p.root, OK: len(problems) == 0, Problems: problems}, nil
+}
+
+type capabilityAck struct {
+	ProjectID       string `json:"project_id"`
+	ProtocolVersion string `json:"protocol_version"`
+	Nonce           string `json:"nonce"`
+	Capabilities    struct {
+		Read          bool `json:"read"`
+		WriteUTF8JSON bool `json:"write_utf8_json"`
+		WriteUTF8MD   bool `json:"write_utf8_md"`
+	} `json:"capabilities"`
+}
+
+func capabilityStatus(state *domain.CoreProjectState) (string, string) {
+	var ack capabilityAck
+	err := protocol.ReadJSON(state.WorkspaceRoot, "setup/capability-ack.json", 64<<10, &ack)
+	if errors.Is(err, os.ErrNotExist) {
+		return "pending", ""
+	}
+	if err != nil {
+		return "invalid", err.Error()
+	}
+	if ack.ProjectID != state.ProjectID || ack.ProtocolVersion != state.ProtocolVersion || ack.Nonce != state.CapabilityNonce {
+		return "invalid", "capability acknowledgement identity or nonce mismatch"
+	}
+	if !ack.Capabilities.Read || !ack.Capabilities.WriteUTF8JSON || !ack.Capabilities.WriteUTF8MD {
+		return "invalid", "required plain-file capabilities were not acknowledged"
+	}
+	probe, err := protocol.ReadUTF8(state.WorkspaceRoot, "setup/capability-write-test.md", 64<<10)
+	if errors.Is(err, os.ErrNotExist) {
+		return "pending", ""
+	}
+	if err != nil {
+		return "invalid", err.Error()
+	}
+	if string(probe) != state.MarkdownProbe {
+		return "invalid", "capability markdown probe mismatch"
+	}
+	return "passed", ""
 }

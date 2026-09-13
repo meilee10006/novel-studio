@@ -14,10 +14,34 @@ func main() { os.Exit(run(os.Args[1:], os.Stdout, os.Stderr)) }
 
 func run(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "usage: novel-core <status|verify> [--project DIR]")
+		fmt.Fprintln(stderr, "usage: novel-core <init|status|verify> [options]")
 		return 2
 	}
 	switch args[0] {
+	case "init":
+		fs := flag.NewFlagSet("init", flag.ContinueOnError)
+		fs.SetOutput(stderr)
+		projectRoot := fs.String("project", "", "local authoritative project root")
+		workspaceRoot := fs.String("workspace", "", "Drive workspace root")
+		projectID := fs.String("project-id", "", "stable project id")
+		if err := fs.Parse(args[1:]); err != nil || fs.NArg() != 0 {
+			return 2
+		}
+		project, err := core.InitProject(core.InitOptions{ProjectID: *projectID, LocalRoot: *projectRoot, WorkspaceRoot: *workspaceRoot})
+		if err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
+		status, err := project.Status()
+		if err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
+		if err := json.NewEncoder(stdout).Encode(status); err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
+		return 0
 	case "status":
 		project, code := openProjectFromArgs("status", args[1:], stderr)
 		if code != 0 {
