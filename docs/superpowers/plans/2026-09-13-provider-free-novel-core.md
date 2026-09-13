@@ -24,6 +24,9 @@
 - 未知协议主版本必须拒绝；协议升级必须有显式迁移策略。
 - Notion 不属于 Release Gate。
 - 每项代码改动先写失败测试，再写最小实现，再跑测试，再提交。
+- 正式编码前必须先完成 Task 0 基线门禁；基线失败时停止实现并报告，不把上游失败算到本分支。
+- 新永久 ID 只能由 Core 在 ACCEPTED 提交时分配；ChatGPT 只在 Attempt 内使用临时 ID。
+- Reader Promise 标记 fulfilled 时必须引用已接受的 Story Event 证据。
 
 ---
 
@@ -48,10 +51,14 @@
 - `internal/core/recovery.go`：pending commit、重启恢复、备份恢复。
 - `internal/core/export.go`：正式书稿、published、backup、projection 输出。
 - `internal/core/serve.go`：低频目录对账循环；正确性不依赖文件事件顺序。
+- `internal/core/ids.go`：把 Attempt 内临时 ID 映射为 Core 分配的永久 Canon ID。
+- `internal/core/migrate.go`：本地 schema 与协议版本的显式迁移。
+- `internal/core/chatgpt_protocol.go`：生成项目根唯一的 `CHATGPT_PROTOCOL.md`。
 
 ### 新增协议与领域类型
 
 - `internal/protocol/types.go`：ProjectManifest、ReadyPointer、TaskEnvelope、SubmissionManifest、ResultEnvelope。
+- `internal/protocol/version.go`：本地 schema version、协议 major/minor 与兼容性判断。
 - `internal/protocol/io.go`：安全 JSON/Markdown 读取、原子写入、路径约束、大小上限。
 - `internal/protocol/digest.go`：SHA-256、Submission 实际摘要、稳定 Canon root 链。
 - `internal/domain/production_task.go`：TaskKind、ProductionResult、ReconciliationStatus、Violation。
@@ -69,7 +76,7 @@
 
 - `internal/tools/commit_chapter.go`：只在迁移阶段用于对照现有确定性提交行为；新 Core 不调用 Agent Tool schema。
 - `internal/store/chapter_render_transaction.go`：复用其中已经验证过的事务/恢复思路，不复用模型绑定。
-- `internal/store/checkpoint*.go` 或当前实际 CheckpointStore 文件：复用已有 checkpoint 能力。
+- `internal/store/checkpoints.go` 与 `internal/store/checkpoints_test.go`：复用已有 checkpoint 能力。
 - `internal/store/store.go`：继续作为状态组合根。
 
 ### 端到端测试
@@ -79,6 +86,44 @@
 - `internal/core/longform_e2e_test.go`：知识、时间、资源、伏笔、Ending Contract。
 - `internal/core/authoring_e2e_test.go`：Author Directive、Revision/Rebase、BLOCKED 恢复。
 - `internal/core/security_e2e_test.go`：路径穿越、符号链接、超大输入、manifest 篡改。
+
+---
+
+### Task 0: 实施前基线门禁
+
+**Files:**
+- No repository changes.
+
+**Purpose:** 在任何生产代码修改前建立可信基线，避免把上游既有失败误判成迁移回归。
+
+- [ ] **Step 1: 建立隔离工作区并核对分支**
+
+Run:
+```bash
+git branch --show-current
+git merge-base --is-ancestor e3beebbf2f35b9ff55fd781d82055b60d45970c8 HEAD
+git diff --name-only e3beebbf2f35b9ff55fd781d82055b60d45970c8...HEAD
+```
+
+Expected: 当前分支为 `provider-free-novel-core`；审计基线是 HEAD 祖先；开始编码前相对基线只允许已有 spec/plan 文档改动。
+
+- [ ] **Step 2: 拉取依赖**
+
+Run: `go mod download`
+
+Expected: exit 0。
+
+- [ ] **Step 3: 跑完整基线测试**
+
+Run: `go test ./...`
+
+Expected: exit 0。若失败，立即停止实现，保存失败测试名和输出并报告；未经作者明确决定，不进入 Task 1。
+
+- [ ] **Step 4: 跑基线 vet**
+
+Run: `go vet ./...`
+
+Expected: exit 0。失败处理与 Step 3 相同。
 
 ---
 
@@ -170,11 +215,11 @@ Run: `go test ./internal/core ./cmd/novel-core -v`
 
 Expected: PASS。
 
-- [ ] **Step 6: 跑现有基线测试并记录任何既有失败**
+- [ ] **Step 6: 跑完整回归**
 
 Run: `go test ./...`
 
-Expected: 新增代码不引入新的失败。若上游本来有失败，必须在提交说明中原样记录，不能把它写成 PASS。
+Expected: PASS；若出现新失败，先修复再提交。
 
 - [ ] **Step 7: Commit**
 
@@ -189,6 +234,7 @@ git commit -m "feat: add provider-free novel core spine"
 
 **Files:**
 - Create: `internal/protocol/types.go`
+- Create: `internal/protocol/version.go`
 - Create: `internal/protocol/io.go`
 - Create: `internal/protocol/digest.go`
 - Create: `internal/protocol/protocol_test.go`
@@ -197,6 +243,8 @@ git commit -m "feat: add provider-free novel core spine"
 - Modify: `internal/store/store.go`
 - Create: `internal/core/init.go`
 - Create: `internal/core/init_test.go`
+- Create: `internal/core/chatgpt_protocol.go`
+- Create: `internal/core/chatgpt_protocol_test.go`
 - Modify: `cmd/novel-core/main.go`
 
 **Interfaces:**
@@ -281,7 +329,7 @@ CHATGPT_PROTOCOL.md
 project.json
 ```
 
-在收到带正确 nonce 的 `setup/inbox/capability-ack.json` 前，不生成正式 READY。
+`CHATGPT_PROTOCOL.md` 必须由 `internal/core/chatgpt_protocol.go` 的单一模板生成，并写入当前 `protocol_version`。在收到带正确 nonce 的 `setup/inbox/capability-ack.json` 前，不生成正式 READY。
 
 - [ ] **Step 6: 加安全测试**
 
@@ -319,6 +367,8 @@ git commit -m "feat: initialize novel core projects and drive handshake"
 - Create: `internal/core/task.go`
 - Create: `internal/core/foundation.go`
 - Create: `internal/core/foundation_test.go`
+- Create: `internal/core/ids.go`
+- Create: `internal/core/ids_test.go`
 - Modify: `internal/protocol/types.go`
 - Modify: `internal/store/production.go`
 
@@ -387,7 +437,11 @@ SHA256(
 
 Foundation 的 `previous_root` 使用空字符串。
 
-- [ ] **Step 5: Foundation ACCEPT 后生成 Chapter 1 Task**
+- [ ] **Step 5: Foundation ACCEPT 时分配永久实体 ID**
+
+Foundation Submission 中人物、势力、地点、初始伏笔等新实体使用 Attempt-local ID。Core 在首次 ACCEPT 时分配永久 Canon ID，把映射写入 Foundation Receipt，并在进入 Store 前重写交叉引用。测试必须覆盖不同类别同名/同 local ID 不碰撞，以及拒绝的 Foundation Attempt 不占用永久 ID。
+
+- [ ] **Step 6: Foundation ACCEPT 后生成 Chapter 1 Task**
 
 测试必须断言：
 
@@ -398,13 +452,13 @@ ready := mustLoadReady(t, workspace)
 if ready.TaskKind != "chapter" || ready.Chapter != 1 { ... }
 ```
 
-- [ ] **Step 6: 运行测试**
+- [ ] **Step 7: 运行测试**
 
 Run: `go test ./internal/domain ./internal/store ./internal/core -v`
 
 Expected: PASS。
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
 git add internal/domain internal/core internal/protocol internal/store
@@ -420,6 +474,7 @@ git commit -m "feat: establish foundation and initial canon"
 - Create: `internal/core/reconcile.go`
 - Create: `internal/core/reconcile_test.go`
 - Modify: `internal/protocol/types.go`
+- Modify: `internal/protocol/version.go`
 - Modify: `internal/protocol/io.go`
 - Modify: `internal/protocol/digest.go`
 
@@ -461,6 +516,8 @@ manifest.json
 
 `manifest.json` 只声明文件名、任务身份、Attempt 身份、base Canon root、task digest 和 completion nonce；artifact digest 由 Core 读取实际字节后计算并写入 Result/Receipt。
 
+允许的 artifact 集合必须由当前 Task Pack 明确给出。章节首发集合只允许上述五个必需文件和可选 `next_arc_proposal.json`；出现未声明 artifact、绝对路径、重复规范化文件名或目录型 artifact 一律 `INVALID`。Story Event 在 Submission 内只使用 Attempt-local ID。
+
 - [ ] **Step 4: 实现 immutable-after-manifest 检查**
 
 第一次完整读取后保存实际 `submission_digest`。同一 Attempt 再次对账：
@@ -476,7 +533,8 @@ manifest.json
 ```text
 manifest 先到、文件后到 -> PENDING
 completion nonce 错 -> INVALID
-unknown major version -> INVALID
+unknown newer major version -> INVALID
+未声明 artifact -> INVALID
 same attempt same bytes -> idempotent
 same attempt changed bytes -> INVALID
 inactive attempt -> INVALID
@@ -503,7 +561,9 @@ git commit -m "feat: reconcile immutable chapter submissions"
 - Create: `internal/core/chapter.go`
 - Create: `internal/core/chapter_test.go`
 - Create: `internal/core/core_e2e_test.go`
-- Modify: `internal/core/validate.go` (create in this task)
+- Create: `internal/core/validate.go`
+- Modify: `internal/core/ids.go`
+- Modify: `internal/core/ids_test.go`
 - Modify: `internal/store/production.go`
 - Reuse: `internal/store/store.go`
 - Reuse behavior from: `internal/tools/commit_chapter.go`
@@ -577,7 +637,13 @@ READY next attempt
 
 明确不迁移：AIVoice、AIGCReport、provider usage、模型审批、模型身份绑定、向量 embedding。
 
-- [ ] **Step 5: 保证 Commit 前后可恢复**
+- [ ] **Step 5: 由 Core 分配永久 Canon ID**
+
+ACCEPTED 前，`events.json`、新增伏笔、冲突、Promise 等只允许使用 Attempt-local ID。Commit 时由 Core 分配稳定永久 ID，并把 `local_id -> canon_id` 映射写入 Receipt；后续 State Delta 应用到 Canon 时使用永久 ID。
+
+先写测试：两个不同 Attempt 都使用 `event-1`，最终必须得到不同 Canon Event ID；REWRITE 未接受的 Attempt 不得消耗或占用永久 ID。
+
+- [ ] **Step 6: 保证 Commit 前后可恢复**
 
 提交前写本地 `PendingCommit`，阶段至少包括：
 
@@ -592,7 +658,7 @@ settled
 
 每一步必须可幂等重放。
 
-- [ ] **Step 6: 加 REWRITE 测试**
+- [ ] **Step 7: 加 REWRITE 测试**
 
 ```go
 func TestRewriteKeepsTaskAndCreatesNewAttempt(t *testing.T) {
@@ -607,13 +673,13 @@ func TestRewriteKeepsTaskAndCreatesNewAttempt(t *testing.T) {
 }
 ```
 
-- [ ] **Step 7: 运行端到端测试**
+- [ ] **Step 8: 运行端到端测试**
 
 Run: `go test ./internal/core -run 'TestOneChapterLoop|TestRewrite' -v`
 
 Expected: PASS。
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 9: Commit**
 
 ```bash
 git add internal/core internal/store
@@ -627,7 +693,7 @@ git commit -m "feat: commit accepted chapters and advance canon"
 **Files:**
 - Create: `internal/core/context.go`
 - Create: `internal/core/context_test.go`
-- Expand: `internal/core/validate.go`
+- Modify: `internal/core/validate.go`
 - Create: `internal/core/longform_e2e_test.go`
 - Modify/Create domain files: `internal/domain/story_event.go`, `internal/domain/ending_contract.go`
 - Reuse: existing World/Character/Resource/Planning stores
@@ -696,6 +762,8 @@ paid_off -> closed
 ```
 
 任何未列出的跃迁返回 REWRITE。
+
+Reader Promise 标记 `fulfilled` 时必须引用当前已接受 Story Event；事件不存在、证据锚点缺失或 Promise 已 retired 时返回 REWRITE。先补 `TestReaderPromiseFulfilledRequiresAcceptedEventEvidence`。
 
 - [ ] **Step 6: 实现 Ending Contract 显式硬规则**
 
@@ -818,7 +886,7 @@ git commit -m "feat: add author directives and canon revision flow"
 
 ---
 
-### Task 8: Serve、崩溃恢复、备份和完整导出
+### Task 8: Serve、崩溃恢复、版本迁移、备份和完整导出
 
 **Files:**
 - Create: `internal/core/recovery.go`
@@ -826,6 +894,9 @@ git commit -m "feat: add author directives and canon revision flow"
 - Create: `internal/core/serve.go`
 - Create: `internal/core/export.go`
 - Create: `internal/core/export_test.go`
+- Create: `internal/core/migrate.go`
+- Create: `internal/core/migrate_test.go`
+- Modify: `internal/protocol/version.go`
 - Modify: `cmd/novel-core/main.go`
 
 **Interfaces:**
@@ -883,21 +954,25 @@ backup digest manifest
 
 Restore 必须先完整校验，再写入全新 local root；禁止覆盖当前运行中的项目目录。
 
-- [ ] **Step 6: 实现 export**
+- [ ] **Step 6: 实现显式 schema / protocol 迁移**
+
+项目本地 schema 版本和 Drive 协议版本分别管理。打开已知旧版本时先创建可验证 backup，再执行幂等迁移并写 migration receipt；未知的更新主版本必须拒绝打开，禁止“尽量解析”。先覆盖 `TestKnownSchemaMigratesAfterBackup`、`TestUnknownNewerMajorIsRejected`、`TestMigrationIsIdempotent`。
+
+- [ ] **Step 7: 实现 export**
 
 只从 Accepted Chapters 按 Canon 顺序导出；存在未结算 Revision、Receipt 链错误或 Ending Contract 未满足且请求 final export 时返回错误。
 
-- [ ] **Step 7: 运行测试**
+- [ ] **Step 8: 运行测试**
 
-Run: `go test ./internal/core ./cmd/novel-core -run 'TestRecover|TestBackup|TestExport|TestServe' -v`
+Run: `go test ./internal/core ./cmd/novel-core -run 'TestRecover|TestBackup|TestMigrate|TestUnknownNewerMajor|TestExport|TestServe' -v`
 
 Expected: PASS。
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 9: Commit**
 
 ```bash
-git add internal/core cmd/novel-core
-git commit -m "feat: recover serve backup and export novel core projects"
+git add internal/core internal/protocol cmd/novel-core
+git commit -m "feat: recover migrate backup and export novel core projects"
 ```
 
 ---
@@ -909,8 +984,9 @@ git commit -m "feat: recover serve backup and export novel core projects"
 - Modify: `internal/core/init.go`
 - Modify: `internal/core/task.go`
 - Modify: `internal/protocol/io.go`
+- Modify: `internal/core/chatgpt_protocol.go`
+- Modify: `internal/core/chatgpt_protocol_test.go`
 - Modify: `cmd/novel-core/main.go`
-- Create: `docs/novel-core-chatgpt-protocol.md`
 
 **Interfaces:**
 - No new public Core methods; this task hardens existing seams.
@@ -949,7 +1025,9 @@ init
 → export
 ```
 
-- [ ] **Step 3: 生成 `CHATGPT_PROTOCOL.md` 的固定模板**
+- [ ] **Step 3: 从唯一代码模板生成项目 `CHATGPT_PROTOCOL.md`**
+
+`internal/core/chatgpt_protocol.go` 是协议正文的唯一生成源；`novel-core init` 把带 `protocol_version` 的固定模板写到每个项目根目录。仓库不再维护第二份完整协议文档，避免两份内容漂移。
 
 模板必须明确写出：
 
@@ -982,12 +1060,12 @@ novel-core export
 
 Run: `go test ./...`
 
-Expected: 记录准确结果；若有遗留旧 runtime 测试失败，不能忽略，必须在下一任务 Contract 阶段处理。
+Expected: PASS。旧 runtime 在 Contract 前仍必须保持可测试；若本任务导致旧测试失败，先修复再提交。
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add internal/core internal/protocol cmd/novel-core docs/novel-core-chatgpt-protocol.md
+git add internal/core internal/protocol cmd/novel-core
 git commit -m "test: harden novel core production protocol"
 ```
 
@@ -998,13 +1076,14 @@ git commit -m "test: harden novel core production protocol"
 **Files:**
 - Delete or retire from release path: `internal/agents/**`
 - Delete or retire from release path: `internal/llmcodex/**`
-- Delete or retire from release path: model/provider-only portions of `internal/bootstrap/**`
-- Delete or retire from release path: model-driven writing entrypoints under `cmd/novel-studio/**`
+- Delete or split AI-only code from: `internal/bootstrap/models.go`, `internal/bootstrap/model_observer.go`, `internal/bootstrap/model_snapshot.go`, `internal/bootstrap/config.go`, `internal/bootstrap/configfile.go`
+- Migrate any still-needed deterministic CLI behavior, then remove `cmd/novel-studio/**` from the supported/release build; audit at minimum `main.go`, `deepseek_ai_judge.go`, `draft_ai_judge.go`, `pipeline_cmd.go`, `pipeline_planning_stages.go` before deletion
 - Modify: `go.mod`
 - Modify: `go.sum`
 - Modify: `internal/store/store.go`
-- Modify: packaging/build scripts and README files that still require provider/model setup
-- Keep only domain/store/rules code still used by `cmd/novel-core`
+- Modify: `config.example.jsonc` and any bootstrap config examples that still require provider/model setup
+- Audit/modify release packaging at minimum `.goreleaser.yml`, `Dockerfile`, `docker-compose.yml`，使首发入口指向 `novel-core`
+- Keep only domain/store/rules code still used by `cmd/novel-core`; any deterministic logic found in the files above must move before deletion
 
 **Interfaces:**
 - `cmd/novel-core` becomes the supported production binary for this fork.
@@ -1037,7 +1116,7 @@ B. 同时含可复用确定性逻辑 -> 先把确定性逻辑留在 domain/store
 
 - [ ] **Step 3: 移除旧模型启动路径**
 
-删除或停止构建所有必须创建 `bootstrap.ModelSet`、Coordinator、SubAgent、Writer/Drafter/Reviewer 模型实例的生产入口。
+删除所有必须创建 `bootstrap.ModelSet`、Coordinator、SubAgent、Writer/Drafter/Reviewer 模型实例的受支持生产入口。确定性 CLI 行为迁到 `cmd/novel-core` 后，旧 `cmd/novel-studio` 不再作为可发布二进制；`internal/agents/**` 和 `internal/llmcodex/**` 在确定性逻辑迁出后从首发构建图消失，而不是仅靠运行时配置“不开启”。
 
 - [ ] **Step 4: 清理 Store 必需依赖**
 
@@ -1087,6 +1166,8 @@ git commit -m "refactor: retire ai runtime from novel core production path"
 - Create: `docs/novel-core-release-checklist.md`
 - Modify: `README.md`
 - Modify: `README-TECHNICAL.md`
+- Modify if still user-facing: `README_EN.md`
+- Verify unchanged/preserved: `LICENSE`
 
 **Interfaces:**
 - No new code interfaces.
@@ -1134,7 +1215,15 @@ novel-core
 
 不得把 API Provider、Ollama、MCP 或 Work 写成新 Core 的必需步骤。
 
-- [ ] **Step 3: 跑最终自动验证**
+README 必须说明这是基于 `Xiaoyangy/novel-studio` 的 fork/改造，保留 Apache-2.0 `LICENSE`，不得暗示上游作者或项目为本 fork 背书；如果仓库中存在上游 NOTICE/第三方归属文件，必须继续保留并随分发带上。
+
+- [ ] **Step 3: 验证许可证和归属**
+
+Run: `test -f LICENSE && grep -q 'Apache License' LICENSE`
+
+Expected: exit 0；README 中存在上游来源说明。
+
+- [ ] **Step 4: 跑最终自动验证**
 
 Run:
 
@@ -1145,14 +1234,14 @@ go vet ./...
 
 Expected: exit 0。
 
-- [ ] **Step 4: 不伪造人工验收**
+- [ ] **Step 5: 不伪造人工验收**
 
 如果当前环境无法真实完成普通 ChatGPT + Drive 的人工链路，发布清单必须明确保持对应项为 `NOT RUN`；不得把 Core fixture 测试当作真实 ChatGPT PASS。
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add docs/novel-core-release-checklist.md README.md README-TECHNICAL.md
+git add docs/novel-core-release-checklist.md README.md README-TECHNICAL.md README_EN.md
 git commit -m "docs: define novel core release gate"
 ```
 
@@ -1175,4 +1264,9 @@ git commit -m "docs: define novel core release gate"
 - [ ] Recovery 不依赖 mtime、聊天历史或 Drive 到达顺序。
 - [ ] Notion 不在 Release Gate。
 - [ ] 旧 AI runtime 只在最后 Contract 阶段退出，避免迁移期间仓库长期不可运行。
+- [ ] 永久实体 ID 只在 ACCEPTED 时由 Core 分配，Attempt-local ID 不泄漏为 Canon ID。
+- [ ] Reader Promise 的 fulfilled 状态有已接受 Story Event 证据。
+- [ ] schema/protocol 迁移先备份、可幂等重跑，未知更新主版本拒绝。
+- [ ] `CHATGPT_PROTOCOL.md` 只有一个生成源，不维护第二份完整协议。
+- [ ] Apache-2.0 LICENSE 和上游归属得到保留。
 - [ ] 最终真实 ChatGPT 产品链路没有被自动测试冒充。
