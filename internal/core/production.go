@@ -118,6 +118,10 @@ func newTask(state *domain.CoreProductionState, kind, target, baseRoot string) *
 		TaskID: fmt.Sprintf("task-%06d", state.NextTaskSeq), Kind: kind,
 		Target: target, BaseCanonRoot: baseRoot,
 	}
+	if len(state.PendingControls) > 0 {
+		task.Constraints = append([]domain.CoreTaskConstraint(nil), state.PendingControls...)
+		state.PendingControls = nil
+	}
 	state.NextTaskSeq++
 	return task
 }
@@ -172,8 +176,11 @@ func (p *Project) writeActiveAttempt(projectState *domain.CoreProjectState, stat
 		return err
 	}
 	for name, value := range map[string]any{
-		"context.json":       map[string]any{},
-		"constraints.json":   map[string]any{"required_artifacts": attempt.RequiredArtifacts},
+		"context.json": map[string]any{},
+		"constraints.json": map[string]any{
+			"required_artifacts":  attempt.RequiredArtifacts,
+			"control_constraints": task.Constraints,
+		},
 		"canon_excerpt.json": map[string]any{"base_canon_root": task.BaseCanonRoot},
 	} {
 		if err := writeWorkspaceJSON(projectState.WorkspaceRoot, filepath.Join(base, name), value); err != nil {
