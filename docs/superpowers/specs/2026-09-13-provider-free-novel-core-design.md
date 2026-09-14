@@ -548,7 +548,7 @@ escalated ───────→ retired
 
 首次创建冲突必须使用当前 attempt 的 `local_id`，由 Core 在 ACCEPTED 时分配永久 `conflict-*` ID；参与方必须引用已进入 Canon 的人物 ID。每次状态推进都必须引用已验收事件证据。参与方、可读描述、升级条件和关闭条件属于冲突的定义性字段，创建后不得通过普通 transition 改写；transition 可省略这些字段，显式提供时必须与前态一致。`resolved` / `retired` 为终态；final export 前不能存在 `open` / `escalated` 冲突。Core 不判断文学意义上“是否真的解决”，只验证字段、状态边、参与方和证据。
 
-读者承诺至少允许 `advanced`、`fulfilled`、`deferred`、`retired`。`fulfilled` / `retired` 为终态，不得再恢复为 `advanced` / `deferred`。标记 `fulfilled` 时必须引用已经验收的事件证据；Core 只证明“有明确证据引用”，不宣称语义上真的让读者满意。
+读者承诺至少保存稳定 ID 与可读 statement；已有非空 statement 创建后不得通过普通状态推进改写，后续省略时继承前态。读者承诺至少允许 `advanced`、`fulfilled`、`deferred`、`retired`。`fulfilled` / `retired` 为终态，不得再恢复为 `advanced` / `deferred`。标记 `fulfilled` 时必须引用已经验收的事件证据；Core 只证明“有明确证据引用”，不宣称语义上真的让读者满意。
 
 ### 18.6 结局约束
 

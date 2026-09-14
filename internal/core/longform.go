@@ -340,8 +340,9 @@ func applyReaderPromiseChange(state *domain.CoreLongformState, change map[string
 		*violations = append(*violations, "reader promise state is unsupported: "+nextState)
 		return
 	}
-	if prev, exists := state.ReaderPromises[id]; exists && (prev.State == "fulfilled" || prev.State == "retired") && nextState != prev.State {
-		*violations = append(*violations, "reader promise terminal state cannot transition: "+prev.State+" -> "+nextState)
+	previous, exists := state.ReaderPromises[id]
+	if exists && (previous.State == "fulfilled" || previous.State == "retired") && nextState != previous.State {
+		*violations = append(*violations, "reader promise terminal state cannot transition: "+previous.State+" -> "+nextState)
 		return
 	}
 	evidenceID := cleanString(change["event_canon_id"])
@@ -358,8 +359,12 @@ func applyReaderPromiseChange(state *domain.CoreLongformState, change map[string
 		deadline = int(v)
 	}
 	statement := cleanString(change["statement"])
-	if statement == "" {
-		statement = state.ReaderPromises[id].Statement
+	if exists && previous.Statement != "" {
+		if statement != "" && statement != previous.Statement {
+			*violations = append(*violations, "reader promise statement cannot change after creation")
+			return
+		}
+		statement = previous.Statement
 	}
 	state.ReaderPromises[id] = domain.CoreReaderPromiseState{Statement: statement, State: nextState, EvidenceEventID: evidenceID, DeadlineChapter: deadline}
 }
