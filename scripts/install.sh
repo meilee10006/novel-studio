@@ -51,12 +51,12 @@ else
 fi
 
 RELEASE=$(curl -fsSL -H "Accept: application/vnd.github+json" -H "User-Agent: novel-core-installer" "$API")
-TAG=$(printf '%s\n' "$RELEASE" | sed -n 's/.*"tag_name":"\([^"]*\)".*/\1/p' | head -1)
+TAG=$(printf '%s\n' "$RELEASE" | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
 URL=$(printf '%s\n' "$RELEASE" \
 	| tr '{' '\n' \
 	| grep '"browser_download_url"' \
 	| grep "_${OS}_${ARCH}.tar.gz\"" \
-	| sed -n 's/.*"browser_download_url":"\([^"]*\)".*/\1/p' \
+	| sed -n 's/.*"browser_download_url"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' \
 	| head -1)
 [ -n "$TAG" ] || { echo "GitHub Release 响应缺少版本号，请稍后重试"; exit 1; }
 [ -n "$URL" ] || { echo "未找到 ${OS}_${ARCH} 安装包，请到 https://github.com/$REPO/releases 手动下载"; exit 1; }
@@ -64,7 +64,7 @@ CHECKSUM_URL=$(printf '%s\n' "$RELEASE" \
 	| tr '{' '\n' \
 	| grep '"browser_download_url"' \
 	| grep '_checksums.txt"' \
-	| sed -n 's/.*"browser_download_url":"\([^"]*\)".*/\1/p' \
+	| sed -n 's/.*"browser_download_url"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' \
 	| head -1)
 
 TMP=$(mktemp -d)

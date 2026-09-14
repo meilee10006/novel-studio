@@ -91,8 +91,10 @@ func TestInstallerMatchesGoReleaserMatrix(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(checklistRaw), "GoReleaser snapshot archives + checksums") {
-		t.Error("release checklist does not record the GoReleaser snapshot artifact gate")
+	for _, want := range []string{"GoReleaser snapshot archives + checksums", "Installer GitHub API parsing + checksum enforcement"} {
+		if !strings.Contains(string(checklistRaw), want) {
+			t.Errorf("release checklist does not record release gate %q", want)
+		}
 	}
 }
 

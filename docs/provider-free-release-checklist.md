@@ -22,6 +22,7 @@ This file records final release acceptance status only. It is not a design log o
 | `verify` recomputes Canon and active receipt chain | PASS |
 | GoReleaser snapshot archives + checksums | PASS |
 | Dockerfile arm64 cross-build | PASS |
+| Installer GitHub API parsing + checksum enforcement | PASS |
 | Apache-2.0 `LICENSE` retained | PASS |
 
 Automated fixtures prove Core mechanics only. They do not prove the ordinary ChatGPT product workflow.
