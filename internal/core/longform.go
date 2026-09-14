@@ -144,9 +144,17 @@ func applyKnowledgeChange(state *domain.CoreLongformState, change map[string]any
 			*violations = append(*violations, "knowledge transmission source is not evidenced")
 			return
 		}
-		if _, ok := state.Knowledge[from][factID]; !ok {
+		sourceFact, ok := state.Knowledge[from][factID]
+		if !ok {
 			*violations = append(*violations, "knowledge transmission source character does not know fact")
 			return
+		}
+		if sourceFact.Statement != "" {
+			if statement != "" && statement != sourceFact.Statement {
+				*violations = append(*violations, "knowledge transmitted statement conflicts with source fact")
+				return
+			}
+			statement = sourceFact.Statement
 		}
 	default:
 		*violations = append(*violations, "knowledge source kind is unsupported")
