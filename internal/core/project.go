@@ -71,6 +71,9 @@ func OpenProject(root string) (*Project, error) {
 	if state != nil && (state.SchemaVersion < 0 || state.SchemaVersion > coreSchemaVersion) {
 		return nil, fmt.Errorf("unsupported local core schema version %d", state.SchemaVersion)
 	}
+	if state != nil && !protocol.IsKnownVersion(state.ProtocolVersion) {
+		return nil, fmt.Errorf("unsupported local protocol version %q", state.ProtocolVersion)
+	}
 	return &Project{root: abs, store: st, submissionQuietPeriod: 250 * time.Millisecond}, nil
 }
 

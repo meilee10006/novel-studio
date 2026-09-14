@@ -267,8 +267,18 @@ func RestoreBackup(source, target string) (*Project, error) {
 	if err != nil {
 		return nil, fmt.Errorf("verify restored backup: %w", err)
 	}
-	if !verification.OK {
-		return nil, fmt.Errorf("verify restored backup: %s", strings.Join(verification.Problems, "; "))
+	problems := append([]string(nil), verification.Problems...)
+	if manifest.ProtocolVersion != protocol.CurrentVersion {
+		filtered := problems[:0]
+		for _, problem := range problems {
+			if !strings.HasPrefix(problem, "capability check:") {
+				filtered = append(filtered, problem)
+			}
+		}
+		problems = filtered
+	}
+	if len(problems) > 0 {
+		return nil, fmt.Errorf("verify restored backup: %s", strings.Join(problems, "; "))
 	}
 	_ = os.Remove(filepath.Join(stage, "meta", "core", "project.lock"))
 	if err := os.Rename(stage, targetRoot); err != nil {
@@ -301,7 +311,7 @@ func loadCoreBackupManifest(backupRoot string) (coreBackupManifest, error) {
 	if manifest.CoreSchemaVersion < 0 || manifest.CoreSchemaVersion > coreSchemaVersion {
 		return manifest, fmt.Errorf("unsupported backup core schema version %d", manifest.CoreSchemaVersion)
 	}
-	if manifest.ProtocolVersion != protocol.CurrentVersion {
+	if !protocol.IsKnownVersion(manifest.ProtocolVersion) {
 		return manifest, fmt.Errorf("unsupported backup protocol version %q", manifest.ProtocolVersion)
 	}
 	if !projectIDPattern.MatchString(manifest.ProjectID) {

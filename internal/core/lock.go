@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"syscall"
+
+	"github.com/chenhongyang/novel-studio/internal/protocol"
 )
 
 var ErrProjectLocked = errors.New("novel core project is locked by another writer")
@@ -27,6 +29,24 @@ func (p *Project) acquireProjectMutationLock() (func(), error) {
 	if state != nil && state.SchemaVersion != coreSchemaVersion {
 		release()
 		return nil, fmt.Errorf("local core schema version %d requires explicit migration to %d", state.SchemaVersion, coreSchemaVersion)
+	}
+	if state != nil && state.ProtocolVersion != protocol.CurrentVersion {
+		release()
+		return nil, fmt.Errorf("local protocol version %q requires explicit migration to %q", state.ProtocolVersion, protocol.CurrentVersion)
+	}
+	if receipt, err := p.store.LoadCoreMigrationReceipt(0, coreSchemaVersion); err != nil {
+		release()
+		return nil, err
+	} else if receipt != nil && receipt.State == "prepared" {
+		release()
+		return nil, fmt.Errorf("prepared schema migration requires recovery before mutation")
+	}
+	if receipt, err := p.store.LoadCoreProtocolMigrationReceipt(protocol.LegacyVersion, protocol.CurrentVersion); err != nil {
+		release()
+		return nil, err
+	} else if receipt != nil && receipt.State == "prepared" {
+		release()
+		return nil, fmt.Errorf("prepared protocol migration requires recovery before mutation")
 	}
 	return release, nil
 }

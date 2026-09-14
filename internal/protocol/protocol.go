@@ -6,11 +6,16 @@ import (
 )
 
 const (
+	LegacyVersion      = "0.9"
 	CurrentVersion     = "1.0"
 	MaxJSONDepth       = 64
 	MaxJSONArrayLength = 10000
 	DefaultMaxTextSize = 8 << 20
 )
+
+func IsKnownVersion(version string) bool {
+	return version == LegacyVersion || version == CurrentVersion
+}
 
 func RenderChatGPTProtocol(projectID string) string {
 	return fmt.Sprintf(`# Novel Core × ChatGPT App 协议
