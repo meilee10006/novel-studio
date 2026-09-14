@@ -108,7 +108,7 @@ func (p *Project) settleActiveSnapshotLocked() (ChapterSettlement, error) {
 		}
 		validationCanon = baseCanon
 	}
-	referenceViolations, err := p.validateCanonicalEntityReferences(canonical, validationCanon.Longform)
+	referenceViolations, err := p.validateCanonicalEntityReferences(canonical, validationCanon.Longform, mappings)
 	if err != nil {
 		return ChapterSettlement{}, err
 	}
@@ -241,10 +241,13 @@ func validateAndCanonicalizeChapter(files map[string][]byte, state *domain.CoreP
 
 	entityMappings, characterLookup, locationLookup, resourceLookup, seq := canonicalizeChapterEntityAdds(values["state_delta.json"], state.NextEntitySeq, &violations)
 	rewriteChapterLocalEntityRefs(values, characterLookup, locationLookup, resourceLookup)
+	foreshadowMappings, foreshadowLookup, seq := canonicalizeChapterForeshadows(values["state_delta.json"], seq, &violations)
+	rewriteChapterLocalForeshadowRefs(values["state_delta.json"], foreshadowLookup)
 	if len(violations) > 0 {
 		return nil, nil, violations, chapter, nil
 	}
 	mappings := append([]IDMapping(nil), entityMappings...)
+	mappings = append(mappings, foreshadowMappings...)
 	lookup := make(map[string]string, len(events))
 	for _, item := range events {
 		m := item.(map[string]any)
@@ -332,6 +335,64 @@ func canonicalizeChapterEntityAdds(value any, seq int, violations *[]string) ([]
 		}
 	}
 	return mappings, characters, locations, resources, seq
+}
+
+func canonicalizeChapterForeshadows(value any, seq int, violations *[]string) ([]IDMapping, map[string]string, int) {
+	root, _ := value.(map[string]any)
+	changes, _ := root["changes"].([]any)
+	defs := map[string]map[string]any{}
+	for _, raw := range changes {
+		change, _ := raw.(map[string]any)
+		if cleanString(change["kind"]) != "foreshadow" {
+			continue
+		}
+		localID := cleanString(change["local_id"])
+		if localID == "" {
+			continue
+		}
+		if cleanString(change["description"]) == "" {
+			*violations = append(*violations, "new foreshadow requires local_id and description")
+			continue
+		}
+		if _, exists := defs[localID]; exists {
+			*violations = append(*violations, "duplicate foreshadow local_id: "+localID)
+			continue
+		}
+		defs[localID] = change
+	}
+	localIDs := make([]string, 0, len(defs))
+	for localID := range defs {
+		localIDs = append(localIDs, localID)
+	}
+	sort.Strings(localIDs)
+	mappings := make([]IDMapping, 0, len(localIDs))
+	lookup := make(map[string]string, len(localIDs))
+	for _, localID := range localIDs {
+		canonID := fmt.Sprintf("foreshadow-%06d", seq)
+		seq++
+		lookup[localID] = canonID
+		change := defs[localID]
+		change["foreshadow_id"] = canonID
+		delete(change, "local_id")
+		mappings = append(mappings, IDMapping{EntityType: "foreshadow", LocalID: localID, CanonID: canonID})
+	}
+	return mappings, lookup, seq
+}
+
+func rewriteChapterLocalForeshadowRefs(value any, lookup map[string]string) {
+	if len(lookup) == 0 {
+		return
+	}
+	root, _ := value.(map[string]any)
+	for _, raw := range anySlice(root["changes"]) {
+		change, _ := raw.(map[string]any)
+		if cleanString(change["kind"]) != "foreshadow" {
+			continue
+		}
+		if local := cleanString(change["foreshadow_id"]); lookup[local] != "" {
+			change["foreshadow_id"] = lookup[local]
+		}
+	}
 }
 
 func rewriteChapterLocalEntityRefs(values map[string]any, characters, locations, resources map[string]string) {
@@ -473,7 +534,7 @@ func (p *Project) canonicalResourceIDs() (map[string]bool, error) {
 	return ids, nil
 }
 
-func (p *Project) validateCanonicalEntityReferences(canonical map[string][]byte, longform domain.CoreLongformState) ([]string, error) {
+func (p *Project) validateCanonicalEntityReferences(canonical map[string][]byte, longform domain.CoreLongformState, mappings []IDMapping) ([]string, error) {
 	ids, err := p.canonicalCharacterIDs()
 	if err != nil {
 		return nil, err
@@ -488,6 +549,15 @@ func (p *Project) validateCanonicalEntityReferences(canonical map[string][]byte,
 	}
 	for id := range longform.Resources {
 		resources[id] = true
+	}
+	foreshadows := map[string]bool{}
+	for id := range longform.Foreshadows {
+		foreshadows[id] = true
+	}
+	for _, mapping := range mappings {
+		if mapping.EntityType == "foreshadow" && mapping.CanonID != "" {
+			foreshadows[mapping.CanonID] = true
+		}
 	}
 	for id, entity := range longform.Entities {
 		switch entity.EntityType {
@@ -567,6 +637,12 @@ func (p *Project) validateCanonicalEntityReferences(canonical map[string][]byte,
 				violations = append(violations, "resource change requires resource_id")
 			} else if !resources[resourceID] {
 				violations = append(violations, "resource change references unknown canonical resource: "+resourceID)
+			}
+		}
+		if kind == "foreshadow" {
+			foreshadowID := cleanString(change["foreshadow_id"])
+			if foreshadowID != "" && !foreshadows[foreshadowID] {
+				violations = append(violations, "foreshadow change references unknown canonical foreshadow: "+foreshadowID)
 			}
 		}
 		if kind == "relationship" {

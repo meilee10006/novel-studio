@@ -13,13 +13,19 @@ import (
 func TestStatusPublishesDeterministicExportReadiness(t *testing.T) {
 	project, _, workspace, ready := acceptedFoundationProject(t)
 	first := longformChapterArtifacts(1, []map[string]any{
-		{"kind": "foreshadow", "foreshadow_id": "fs-open", "description": "红色纸伞必须回收", "state": "seeded", "event_ref": "e1"},
+		{"kind": "foreshadow", "local_id": "fs-open", "description": "红色纸伞必须回收", "state": "seeded", "event_ref": "e1"},
 		{"kind": "ending_resolution", "event_ref": "e1"},
 	})
-	if got := submitAndSettleChapter(t, project, workspace, ready, first); got.Result != "ACCEPTED" {
-		t.Fatalf("chapter 1=%+v", got)
+	settled := submitAndSettleChapter(t, project, workspace, ready, first)
+	if settled.Result != "ACCEPTED" {
+		t.Fatalf("chapter 1=%+v", settled)
 	}
-	assertExportReadinessJSON(t, filepath.Join(workspace, "exchange", "STATUS.json"), false, "foreshadow fs-open is seeded")
+	foreshadowID := mappingID(settled.IDMappings, "foreshadow", "fs-open")
+	if foreshadowID == "" {
+		t.Fatalf("foreshadow mapping missing: %+v", settled.IDMappings)
+	}
+	problem := "foreshadow " + foreshadowID + " is seeded"
+	assertExportReadinessJSON(t, filepath.Join(workspace, "exchange", "STATUS.json"), false, problem)
 	status, err := project.Status()
 	if err != nil {
 		t.Fatal(err)
@@ -28,13 +34,13 @@ func TestStatusPublishesDeterministicExportReadiness(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	assertExportReadinessBytes(t, statusRaw, false, "foreshadow fs-open is seeded")
+	assertExportReadinessBytes(t, statusRaw, false, problem)
 
 	ready = readReady(t, workspace)
 	second := longformChapterArtifacts(2, []map[string]any{
-		{"kind": "foreshadow", "foreshadow_id": "fs-open", "state": "payoff_ready", "event_ref": "e1"},
-		{"kind": "foreshadow", "foreshadow_id": "fs-open", "state": "paid_off", "event_ref": "e1"},
-		{"kind": "foreshadow", "foreshadow_id": "fs-open", "state": "closed", "event_ref": "e1"},
+		{"kind": "foreshadow", "foreshadow_id": foreshadowID, "state": "payoff_ready", "event_ref": "e1"},
+		{"kind": "foreshadow", "foreshadow_id": foreshadowID, "state": "paid_off", "event_ref": "e1"},
+		{"kind": "foreshadow", "foreshadow_id": foreshadowID, "state": "closed", "event_ref": "e1"},
 		{"kind": "ending_resolution", "event_ref": "e1"},
 	})
 	if got := submitAndSettleChapter(t, project, workspace, ready, second); got.Result != "ACCEPTED" {
@@ -170,7 +176,7 @@ func TestFinalExportBlocksNonTerminalLongformObligations(t *testing.T) {
 	project, _, workspace, ready := acceptedFoundationProject(t)
 	artifacts := revisionChapterArtifacts(1, "第一章结局正文")
 	delta, err := json.Marshal(map[string]any{"changes": []map[string]any{
-		{"kind": "foreshadow", "foreshadow_id": "f-open", "state": "seeded", "event_ref": "e1"},
+		{"kind": "foreshadow", "local_id": "f-open", "description": "未关闭伏笔", "state": "seeded", "event_ref": "e1"},
 		{"kind": "ending_resolution", "event_ref": "e1"},
 	}})
 	if err != nil {

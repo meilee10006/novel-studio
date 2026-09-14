@@ -320,7 +320,7 @@ func TestEvidenceBackedLongformChangesPersist(t *testing.T) {
 		{"kind": "resource", "resource_id": "cash", "delta": 3, "event_ref": "e1"},
 		{"kind": "location", "character_id": characterID, "location_id": locationID, "start_tick": 0, "end_tick": 10, "event_ref": "e1"},
 		{"kind": "relationship", "relationship_id": characterID + "|" + secondID, "tags": []string{"distrust"}, "event_ref": "e1"},
-		{"kind": "foreshadow", "foreshadow_id": "f-1", "state": "seeded", "event_ref": "e1"},
+		{"kind": "foreshadow", "local_id": "f-1", "description": "测试伏笔", "state": "seeded", "event_ref": "e1"},
 		{"kind": "reader_promise", "promise_id": "p-1", "state": "fulfilled", "event_ref": "e1"},
 	}
 	artifacts := longformChapterArtifacts(1, changes)
@@ -359,20 +359,70 @@ func TestOverlappingDifferentLocationsIsRewrite(t *testing.T) {
 		t.Fatalf("second=%+v", got)
 	}
 }
+func TestForeshadowGetsCanonicalIDAndRejectsUnknownCreation(t *testing.T) {
+	project, _, workspace, ready := acceptedFoundationProject(t)
+	first := longformChapterArtifacts(1, []map[string]any{{
+		"kind": "foreshadow", "local_id": "umbrella", "description": "红色纸伞与旧案有关", "state": "seeded", "event_ref": "e1",
+	}})
+	settled := submitAndSettleChapter(t, project, workspace, ready, first)
+	if settled.Result != "ACCEPTED" {
+		t.Fatalf("foreshadow create settlement=%+v", settled)
+	}
+	foreshadowID := mappingID(settled.IDMappings, "foreshadow", "umbrella")
+	if foreshadowID == "" {
+		t.Fatalf("foreshadow mapping missing: %+v", settled.IDMappings)
+	}
+	state := readCanonState(t, project)
+	if state.Longform.Foreshadows[foreshadowID].State != "seeded" {
+		t.Fatalf("foreshadows=%+v", state.Longform.Foreshadows)
+	}
+
+	next := readReady(t, workspace)
+	canonPath := filepath.Join(workspace, "exchange", "outbox", next.TaskID, next.AttemptID, "canon_excerpt.json")
+	canonRaw, err := os.ReadFile(canonPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(canonRaw), foreshadowID) || !strings.Contains(string(canonRaw), "红色纸伞与旧案有关") {
+		t.Fatalf("next task cannot discover canonical foreshadow: %s", canonRaw)
+	}
+
+	second := longformChapterArtifacts(2, []map[string]any{{
+		"kind": "foreshadow", "foreshadow_id": foreshadowID, "state": "reinforced", "event_ref": "e1",
+	}})
+	if got := submitAndSettleChapter(t, project, workspace, next, second); got.Result != "ACCEPTED" {
+		t.Fatalf("canonical foreshadow transition=%+v", got)
+	}
+
+	next = readReady(t, workspace)
+	rogue := longformChapterArtifacts(3, []map[string]any{{
+		"kind": "foreshadow", "foreshadow_id": "foreshadow-999999", "description": "凭空伏笔", "state": "seeded", "event_ref": "e1",
+	}})
+	got := submitAndSettleChapter(t, project, workspace, next, rogue)
+	if got.Result != "REWRITE" || !containsViolation(got.Violations, "foreshadow") {
+		t.Fatalf("unknown foreshadow creation=%+v", got)
+	}
+}
+
 func TestReadableObligationSemanticsPersistAcrossTransitions(t *testing.T) {
 	project, _, workspace, ready := acceptedFoundationProject(t)
 	foreshadowDescription := "红色纸伞与十年前旧案直接相关"
 	promiseStatement := "读者期待知道红色纸伞真正主人是谁"
 	first := longformChapterArtifacts(1, []map[string]any{
-		{"kind": "foreshadow", "foreshadow_id": "fs-umbrella", "state": "seeded", "description": foreshadowDescription, "event_ref": "e1"},
+		{"kind": "foreshadow", "local_id": "fs-umbrella", "state": "seeded", "description": foreshadowDescription, "event_ref": "e1"},
 		{"kind": "reader_promise", "promise_id": "promise-umbrella", "state": "advanced", "statement": promiseStatement},
 	})
-	if got := submitAndSettleChapter(t, project, workspace, ready, first); got.Result != "ACCEPTED" {
-		t.Fatalf("first=%+v", got)
+	settled := submitAndSettleChapter(t, project, workspace, ready, first)
+	if settled.Result != "ACCEPTED" {
+		t.Fatalf("first=%+v", settled)
+	}
+	foreshadowID := mappingID(settled.IDMappings, "foreshadow", "fs-umbrella")
+	if foreshadowID == "" {
+		t.Fatalf("foreshadow mapping missing: %+v", settled.IDMappings)
 	}
 	secondReady := readReady(t, workspace)
 	second := longformChapterArtifacts(2, []map[string]any{
-		{"kind": "foreshadow", "foreshadow_id": "fs-umbrella", "state": "reinforced", "event_ref": "e1"},
+		{"kind": "foreshadow", "foreshadow_id": foreshadowID, "state": "reinforced", "event_ref": "e1"},
 		{"kind": "reader_promise", "promise_id": "promise-umbrella", "state": "deferred", "deadline_chapter": 5},
 	})
 	if got := submitAndSettleChapter(t, project, workspace, secondReady, second); got.Result != "ACCEPTED" {
@@ -397,7 +447,7 @@ func TestEvidenceRequiredForRelationshipForeshadowAndPromise(t *testing.T) {
 		change map[string]any
 	}{
 		{"relationship", map[string]any{"kind": "relationship", "relationship_id": "a:b", "tags": []string{"trust"}}},
-		{"foreshadow", map[string]any{"kind": "foreshadow", "foreshadow_id": "f-1", "state": "seeded"}},
+		{"foreshadow", map[string]any{"kind": "foreshadow", "local_id": "f-1", "description": "缺证据伏笔", "state": "seeded"}},
 		{"promise", map[string]any{"kind": "reader_promise", "promise_id": "p-1", "state": "fulfilled"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -481,7 +531,10 @@ type CoreCanonStateView struct {
 		Locations map[string]struct {
 			LocationID string `json:"location_id"`
 		} `json:"locations"`
-		Resources      map[string]int64 `json:"resources"`
+		Resources   map[string]int64 `json:"resources"`
+		Foreshadows map[string]struct {
+			State string `json:"state"`
+		} `json:"foreshadows"`
 		ReaderPromises map[string]struct {
 			State string `json:"state"`
 		} `json:"reader_promises"`
