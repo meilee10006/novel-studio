@@ -345,3 +345,38 @@ func TestContextCompilerBoundsTravelConstraintsAndKeepsRelevantRoute(t *testing.
 		}
 	}
 }
+
+func TestContextCompilerBoundsLocationInventoryAndKeepsRelevantCharacter(t *testing.T) {
+	const budget = 16 << 10
+	locations := make(map[string]domain.CoreLocationState, 600)
+	for i := 1; i <= 600; i++ {
+		characterID := fmt.Sprintf("character-%06d", i)
+		locationID := fmt.Sprintf("location-%06d", i)
+		if i == 23 {
+			characterID = "character-red-umbrella"
+			locationID = "location-clocktower"
+		}
+		locations[characterID] = domain.CoreLocationState{LocationID: locationID, StartTick: int64(i), EndTick: int64(i + 1)}
+	}
+	canon := domain.CoreCanonState{
+		SchemaVersion: 1, Revision: 600, ProjectID: "book", LatestChapter: 600,
+		Longform: domain.CoreLongformState{Locations: locations},
+	}
+	out, err := compileTaskContext(contextCompilerInput{
+		Target: "chapter:601", CanonRoot: "root-600",
+		EndingContract: map[string]any{"main_resolution": "收束"}, BookPlan: map[string]any{"direction": "推进"},
+		Constraints: []domain.CoreTaskConstraint{{Instruction: "这一章必须跟进 character-red-umbrella 的位置"}}, CanonState: canon,
+	}, budget)
+	if err != nil {
+		t.Fatalf("location inventory should stay within fixed context budget: %v", err)
+	}
+	if out.TotalBytes > budget {
+		t.Fatalf("bytes=%d budget=%d", out.TotalBytes, budget)
+	}
+	text := string(out.CanonExcerptJSON)
+	for _, want := range []string{"character-red-umbrella", "location-clocktower"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("relevant location missing %q: %s", want, text)
+		}
+	}
+}

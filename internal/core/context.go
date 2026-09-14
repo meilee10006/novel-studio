@@ -182,14 +182,7 @@ func compactCanonStateForContext(state domain.CoreCanonState, query string, know
 		longform["knowledge"] = knowledge
 	}
 
-	locations := map[string]any{}
-	for characterID, value := range state.Longform.Locations {
-		locations[compactContextString(characterID)] = map[string]any{
-			"location_id": compactContextString(value.LocationID),
-			"start_tick":  value.StartTick,
-			"end_tick":    value.EndTick,
-		}
-	}
+	locations := compactLocationsForContext(state.Longform, query, knowledgeBudget/2)
 	if len(locations) > 0 {
 		longform["locations"] = locations
 	}
@@ -404,6 +397,71 @@ func compactKnowledgeForContext(state domain.CoreLongformState, query string, ma
 			} else {
 				selected[characterID] = items
 			}
+		}
+	}
+	return selected
+}
+
+type contextLocationCandidate struct {
+	CharacterID string
+	Value       domain.CoreLocationState
+}
+
+func compactLocationsForContext(state domain.CoreLongformState, query string, maxBytes int) map[string]map[string]any {
+	if maxBytes <= 0 || len(state.Locations) == 0 {
+		return nil
+	}
+	characterIDs := make([]string, 0, len(state.Locations))
+	for characterID := range state.Locations {
+		characterIDs = append(characterIDs, characterID)
+	}
+	sort.Strings(characterIDs)
+	candidates := make([]contextLocationCandidate, 0, len(characterIDs))
+	byID := map[string]contextLocationCandidate{}
+	docs := make([]retrieval.Document, 0, len(characterIDs))
+	for _, characterID := range characterIDs {
+		value := state.Locations[characterID]
+		candidate := contextLocationCandidate{CharacterID: characterID, Value: value}
+		candidates = append(candidates, candidate)
+		byID[characterID] = candidate
+		docs = append(docs, retrieval.Document{ID: characterID, Text: characterID + "\n" + value.LocationID})
+	}
+	ordered := make([]contextLocationCandidate, 0, len(candidates))
+	seen := map[string]bool{}
+	for _, hit := range retrieval.RankKeyword(docs, query, len(docs)) {
+		candidate := byID[hit.ID]
+		ordered = append(ordered, candidate)
+		seen[candidate.CharacterID] = true
+	}
+	remaining := make([]contextLocationCandidate, 0, len(candidates)-len(ordered))
+	for _, candidate := range candidates {
+		if !seen[candidate.CharacterID] {
+			remaining = append(remaining, candidate)
+		}
+	}
+	sort.SliceStable(remaining, func(i, j int) bool {
+		if remaining[i].Value.EndTick != remaining[j].Value.EndTick {
+			return remaining[i].Value.EndTick > remaining[j].Value.EndTick
+		}
+		return remaining[i].CharacterID < remaining[j].CharacterID
+	})
+	ordered = append(ordered, remaining...)
+
+	selected := map[string]map[string]any{}
+	for _, candidate := range ordered {
+		characterID := compactContextString(candidate.CharacterID)
+		locationID := compactContextString(candidate.Value.LocationID)
+		if characterID == "" || locationID == "" {
+			continue
+		}
+		selected[characterID] = map[string]any{
+			"location_id": locationID,
+			"start_tick":  candidate.Value.StartTick,
+			"end_tick":    candidate.Value.EndTick,
+		}
+		raw, err := json.Marshal(selected)
+		if err != nil || len(raw) > maxBytes {
+			delete(selected, characterID)
 		}
 	}
 	return selected
