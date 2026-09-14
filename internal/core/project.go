@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -34,6 +35,8 @@ type Status struct {
 	ActiveTarget      string   `json:"active_target,omitempty"`
 	ActiveAttemptID   string   `json:"active_attempt_id,omitempty"`
 	BlockID           string   `json:"block_id,omitempty"`
+	ExportReady       bool     `json:"export_ready"`
+	ExportProblems    []string `json:"export_problems,omitempty"`
 }
 
 type Verification struct {
@@ -43,17 +46,19 @@ type Verification struct {
 }
 
 type workspaceStatus struct {
-	SchemaVersion     int    `json:"schema_version"`
-	ProjectID         string `json:"project_id"`
-	ProtocolVersion   string `json:"protocol_version"`
-	Capability        string `json:"capability"`
-	CapabilityProblem string `json:"capability_problem,omitempty"`
-	CanonRoot         string `json:"canon_root,omitempty"`
-	ActiveTaskKind    string `json:"active_task_kind,omitempty"`
-	ActiveTarget      string `json:"active_target,omitempty"`
-	ActiveAttemptID   string `json:"active_attempt_id,omitempty"`
-	BlockID           string `json:"block_id,omitempty"`
-	RevisionReplay    bool   `json:"revision_replay,omitempty"`
+	SchemaVersion     int      `json:"schema_version"`
+	ProjectID         string   `json:"project_id"`
+	ProtocolVersion   string   `json:"protocol_version"`
+	Capability        string   `json:"capability"`
+	CapabilityProblem string   `json:"capability_problem,omitempty"`
+	CanonRoot         string   `json:"canon_root,omitempty"`
+	ActiveTaskKind    string   `json:"active_task_kind,omitempty"`
+	ActiveTarget      string   `json:"active_target,omitempty"`
+	ActiveAttemptID   string   `json:"active_attempt_id,omitempty"`
+	BlockID           string   `json:"block_id,omitempty"`
+	RevisionReplay    bool     `json:"revision_replay,omitempty"`
+	ExportReady       bool     `json:"export_ready"`
+	ExportProblems    []string `json:"export_problems,omitempty"`
 }
 
 func (p *Project) writeWorkspaceStatus(project *domain.CoreProjectState, production *domain.CoreProductionState) error {
@@ -79,7 +84,35 @@ func (p *Project) writeWorkspaceStatus(project *domain.CoreProjectState, product
 		}
 		out.RevisionReplay = production.RevisionReplay != nil
 	}
+	ready, problems, err := p.deterministicExportReadiness(production)
+	if err != nil {
+		return err
+	}
+	out.ExportReady, out.ExportProblems = ready, problems
 	return writeWorkspaceJSON(project.WorkspaceRoot, "exchange/STATUS.json", out)
+}
+
+func (p *Project) deterministicExportReadiness(production *domain.CoreProductionState) (bool, []string, error) {
+	if production == nil || production.CanonRoot == "" {
+		return false, nil, nil
+	}
+	raw, err := p.store.ReadCoreCanonStateBytes()
+	if err != nil {
+		return false, nil, err
+	}
+	var state domain.CoreCanonState
+	if err := protocol.DecodeJSON(raw, &state); err != nil {
+		return false, nil, err
+	}
+	problems := endingConstraintProblems(state.Longform, state.LatestChapter)
+	if state.LatestChapter <= 0 {
+		problems = append(problems, "no accepted chapters")
+	}
+	if production.RevisionReplay != nil {
+		problems = append(problems, "revision replay is still active")
+	}
+	sort.Strings(problems)
+	return len(problems) == 0, problems, nil
 }
 
 func OpenProject(root string) (*Project, error) {
@@ -140,6 +173,10 @@ func (p *Project) Status() (Status, error) {
 		if production.ActiveBlock != nil {
 			out.BlockID = production.ActiveBlock.BlockID
 		}
+	}
+	out.ExportReady, out.ExportProblems, err = p.deterministicExportReadiness(production)
+	if err != nil {
+		return Status{}, fmt.Errorf("compute export readiness: %w", err)
 	}
 	return out, nil
 }

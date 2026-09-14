@@ -10,6 +10,82 @@ import (
 	"testing"
 )
 
+func TestStatusPublishesDeterministicExportReadiness(t *testing.T) {
+	project, _, workspace, ready := acceptedFoundationProject(t)
+	first := longformChapterArtifacts(1, []map[string]any{
+		{"kind": "foreshadow", "foreshadow_id": "fs-open", "description": "红色纸伞必须回收", "state": "seeded", "event_ref": "e1"},
+		{"kind": "ending_resolution", "event_ref": "e1"},
+	})
+	if got := submitAndSettleChapter(t, project, workspace, ready, first); got.Result != "ACCEPTED" {
+		t.Fatalf("chapter 1=%+v", got)
+	}
+	assertExportReadinessJSON(t, filepath.Join(workspace, "exchange", "STATUS.json"), false, "foreshadow fs-open is seeded")
+	status, err := project.Status()
+	if err != nil {
+		t.Fatal(err)
+	}
+	statusRaw, err := json.Marshal(status)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertExportReadinessBytes(t, statusRaw, false, "foreshadow fs-open is seeded")
+
+	ready = readReady(t, workspace)
+	second := longformChapterArtifacts(2, []map[string]any{
+		{"kind": "foreshadow", "foreshadow_id": "fs-open", "state": "payoff_ready", "event_ref": "e1"},
+		{"kind": "foreshadow", "foreshadow_id": "fs-open", "state": "paid_off", "event_ref": "e1"},
+		{"kind": "foreshadow", "foreshadow_id": "fs-open", "state": "closed", "event_ref": "e1"},
+		{"kind": "ending_resolution", "event_ref": "e1"},
+	})
+	if got := submitAndSettleChapter(t, project, workspace, ready, second); got.Result != "ACCEPTED" {
+		t.Fatalf("chapter 2=%+v", got)
+	}
+	assertExportReadinessJSON(t, filepath.Join(workspace, "exchange", "STATUS.json"), true, "")
+	status, err = project.Status()
+	if err != nil {
+		t.Fatal(err)
+	}
+	statusRaw, err = json.Marshal(status)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertExportReadinessBytes(t, statusRaw, true, "")
+}
+
+func assertExportReadinessJSON(t *testing.T, path string, wantReady bool, wantProblem string) {
+	t.Helper()
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertExportReadinessBytes(t, raw, wantReady, wantProblem)
+}
+
+func assertExportReadinessBytes(t *testing.T, raw []byte, wantReady bool, wantProblem string) {
+	t.Helper()
+	var doc map[string]any
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		t.Fatal(err)
+	}
+	ready, ok := doc["export_ready"].(bool)
+	if !ok || ready != wantReady {
+		t.Fatalf("export_ready=%v want=%v doc=%s", doc["export_ready"], wantReady, raw)
+	}
+	problems, _ := doc["export_problems"].([]any)
+	if wantProblem == "" {
+		if len(problems) != 0 {
+			t.Fatalf("unexpected export problems: %v", problems)
+		}
+		return
+	}
+	for _, rawProblem := range problems {
+		if problem, _ := rawProblem.(string); strings.Contains(problem, wantProblem) {
+			return
+		}
+	}
+	t.Fatalf("missing export problem %q in %v", wantProblem, problems)
+}
+
 func TestFinalExportRequiresEndingResolution(t *testing.T) {
 	project, _, workspace, ready := acceptedFoundationProject(t)
 	settled := submitAndSettleChapter(t, project, workspace, ready, longformChapterArtifacts(1, nil))

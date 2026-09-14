@@ -83,7 +83,7 @@ novel-core status --project "$HOME/novels/book-local"
 
 ### 5. 在 ChatGPT App 中逐任务创作
 
-以 Drive 中的 `exchange/READY.json` 为唯一当前任务指针；`exchange/STATUS.json` 提供当前权威 `canon_root`、capability、活动 task/attempt/block。Drive 多文件同步不是原子操作：只有当 `STATUS.active_attempt_id == READY.attempt_id`、`STATUS.active_target == READY.target` 且 `STATUS.block_id == READY.block_id`（未阻塞时两边为空）时才继续；不一致就等待同步后重读。读取对应 `exchange/outbox/<task>/<attempt>/` 的任务、约束和上下文，然后把完整提交写到：
+以 Drive 中的 `exchange/READY.json` 为唯一当前任务指针；`exchange/STATUS.json` 提供当前权威 `canon_root`、capability、活动 task/attempt/block，以及 `export_ready` / `export_problems`。临近结局时以 `export_problems` 检查全量确定性阻塞项；`export_ready=true` 只表示导出前置条件满足，真正 `export` 仍会重新验证 Canon 完整性。Drive 多文件同步不是原子操作：只有当 `STATUS.active_attempt_id == READY.attempt_id`、`STATUS.active_target == READY.target` 且 `STATUS.block_id == READY.block_id`（未阻塞时两边为空）时才继续；不一致就等待同步后重读。读取对应 `exchange/outbox/<task>/<attempt>/` 的任务、约束和上下文，然后把完整提交写到：
 
 ```text
 exchange/inbox/<task-id>/<attempt-id>/
@@ -143,7 +143,7 @@ novel-core migrate \
 
 ## 最终导出
 
-只有满足确定性结局条件、没有活动 replay、没有未终态伏笔/读者承诺时才能导出：
+只有满足确定性结局条件、没有活动 replay、没有未终态伏笔/读者承诺时才能导出。可先用 `novel-core status` 或 Drive `exchange/STATUS.json` 查看 `export_ready` 与完整 `export_problems`；最终导出仍会执行更严格的 Canon 完整性校验：
 
 ```bash
 novel-core export \

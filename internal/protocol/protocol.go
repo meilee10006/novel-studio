@@ -30,7 +30,8 @@ func RenderChatGPTProtocol(projectID string) string {
 - ChatGPT 只写 exchange/inbox、exchange/control/inbox，以及能力检查要求的 setup 回执文件。
 - 不修改 Core 写入的文件，不使用 Google Docs/Sheets 代替协议文件。
 - 当前任务只以 exchange/READY.json 为准；没有 READY 时不要自行推进小说状态。
-- exchange/STATUS.json 给出当前权威 canon_root、capability、活动 task/attempt/block；control 的 base_canon_root 必须取 STATUS.json 的当前 canon_root，不要用历史 revision READY 的 base_canon_root 猜当前根。
+- exchange/STATUS.json 给出当前权威 canon_root、capability、活动 task/attempt/block，以及 export_ready/export_problems。export_ready 只表示确定性的导出前置条件已满足；真正 final export 仍会重新验证 Canon root 与活动 artifact inventory。control 的 base_canon_root 必须取 STATUS.json 的当前 canon_root，不要用历史 revision READY 的 base_canon_root 猜当前根。
+- 临近结局时必须读取 STATUS.export_problems；其中会列出尚未终态的伏笔/读者承诺、缺失或过期的 ending_resolution、活动 revision replay 等阻塞项。不要因为当前 task context 没带某个 obligation 就假设它已经关闭。
 - Drive 多文件同步不是原子事务。每次读取 READY 与 STATUS 后，必须确认 STATUS.active_attempt_id == READY.attempt_id、STATUS.active_target == READY.target，且 STATUS.block_id == READY.block_id（正常未阻塞时两边都为空）；如果不一致，说明文件仍在同步，等待后重新读取，不能据此提交或发 control。
 - 每次都先读取当前 READY 和对应 outbox/<task-id>/<attempt-id>/ 的 task.json、constraints.json、context.json、canon_excerpt.json、recent_prose.md。
 
