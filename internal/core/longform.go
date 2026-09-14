@@ -63,8 +63,12 @@ func decodeCurrentEvents(raw []byte, chapter int) (map[string]domain.CoreEventEv
 }
 
 func applyLongformChange(state *domain.CoreLongformState, change map[string]any, chapter int, violations *[]string) {
-	kind, _ := change["kind"].(string)
-	switch strings.TrimSpace(kind) {
+	kind := cleanString(change["kind"])
+	if kind == "" {
+		*violations = append(*violations, "state change kind is required")
+		return
+	}
+	switch kind {
 	case "character_add":
 		applyEntityAdd(state, change, "character", violations)
 	case "location_add":
@@ -87,6 +91,8 @@ func applyLongformChange(state *domain.CoreLongformState, change map[string]any,
 		applyReaderPromiseChange(state, change, chapter, violations)
 	case "ending_resolution":
 		applyEndingResolutionChange(state, change, violations)
+	default:
+		*violations = append(*violations, "unsupported state change kind: "+kind)
 	}
 }
 func applyEntityAdd(state *domain.CoreLongformState, change map[string]any, entityType string, violations *[]string) {
