@@ -40,7 +40,8 @@ func TestSupportedReleasePathsTargetNovelCore(t *testing.T) {
 		{path: "Dockerfile", required: []string{"./cmd/novel-core", "/usr/local/bin/novel-core", `ENTRYPOINT ["novel-core"]`}, forbidden: []string{"./cmd/novel-studio", "/usr/local/bin/novel-studio", `ENTRYPOINT ["novel-studio"]`}},
 		{path: "docker-compose.yml", required: []string{"novel-core:"}, forbidden: []string{"\n  novel-studio:", "qdrant:", "/root/.novel-studio", "8765:8765"}},
 		{path: "scripts/run-local.sh", required: []string{"go run ./cmd/novel-core"}, forbidden: []string{"go run ./cmd/novel-studio", "--pipeline", "service open"}},
-		{path: "scripts/install.sh", required: []string{`BIN="novel-core"`}, forbidden: []string{`BIN="novel-studio"`, "novel-studio doctor"}},
+		{path: "scripts/install.sh", required: []string{`BIN="novel-core"`, "NOVEL_CORE_VERSION", "NOVEL_CORE_INSTALL_DIR", "provider-free-novel-core/scripts/install.sh"}, forbidden: []string{`BIN="novel-studio"`, "novel-studio doctor", "NOVEL_STUDIO_VERSION", "NOVEL_STUDIO_INSTALL_DIR", "/main/scripts/install.sh"}},
+		{path: ".dockerignore", required: []string{"\nnovel-core\n", "\nworkspace\n", "\ndist\n", "\ndeconstruction-library\n"}, forbidden: []string{"\nnovel-studio\n", "\n.novel-studio\n", "\nconfig\n", "\ntasks\n", "\nrefer\n", "\noutput*\n", "\ndata\n", "models/embedding", "__pycache__", "*.pyc", ".codegraph"}},
 		{path: ".github/workflows/ci.yml", required: []string{"/tmp/novel-core", "./cmd/novel-core"}, forbidden: []string{"go build -trimpath -o /tmp/novel-studio ./cmd/novel-studio", "service start --host"}},
 	}
 	for _, check := range checks {

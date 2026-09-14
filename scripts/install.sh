@@ -4,16 +4,16 @@
 #   curl -fsSL https://raw.githubusercontent.com/meilee10006/novel-studio/provider-free-novel-core/scripts/install.sh | sh
 #   curl -fsSL https://raw.githubusercontent.com/meilee10006/novel-studio/provider-free-novel-core/scripts/install.sh | sh -s -- v1.2.3
 #
-# 自定义安装目录： curl -fsSL ... | NOVEL_STUDIO_INSTALL_DIR="$HOME/.local/bin" sh
-# 指定版本：NOVEL_STUDIO_VERSION=v1.2.3 curl -fsSL ... | sh
+# 自定义安装目录： curl -fsSL ... | NOVEL_CORE_INSTALL_DIR="$HOME/.local/bin" sh
+# 指定版本：NOVEL_CORE_VERSION=v1.2.3 curl -fsSL ... | sh
 set -e
 
 REPO="meilee10006/novel-studio"
 BIN="novel-core"
-VERSION="${NOVEL_STUDIO_VERSION:-${1:-latest}}"
+VERSION="${NOVEL_CORE_VERSION:-${1:-latest}}"
 
-if [ -n "${NOVEL_STUDIO_INSTALL_DIR:-}" ]; then
-	DEST="$NOVEL_STUDIO_INSTALL_DIR"
+if [ -n "${NOVEL_CORE_INSTALL_DIR:-}" ]; then
+	DEST="$NOVEL_CORE_INSTALL_DIR"
 elif command -v "$BIN" >/dev/null 2>&1 && [ -w "$(dirname "$(command -v "$BIN")")" ]; then
 	DEST=$(dirname "$(command -v "$BIN")")
 elif [ -d /usr/local/bin ] && [ -w /usr/local/bin ]; then
@@ -100,7 +100,7 @@ if [ -w "$DEST" ]; then
 	mv "$TMP/$BIN" "$DEST/$BIN"
 else
 	echo "安装目录不可写：$DEST" >&2
-	echo "请改用用户目录：curl -fsSL https://raw.githubusercontent.com/$REPO/main/scripts/install.sh | NOVEL_STUDIO_INSTALL_DIR=\"$HOME/.local/bin\" sh" >&2
+	echo "请改用用户目录：curl -fsSL https://raw.githubusercontent.com/$REPO/provider-free-novel-core/scripts/install.sh | NOVEL_CORE_INSTALL_DIR=\"$HOME/.local/bin\" sh" >&2
 	exit 1
 fi
 chmod +x "$DEST/$BIN"
