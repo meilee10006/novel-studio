@@ -125,13 +125,66 @@ func TestKnowledgeStatementPersistsAndAppearsInNextContext(t *testing.T) {
 	}
 }
 
+func TestChapterCanAddCanonicalResourceForLaterTasks(t *testing.T) {
+	project, _, workspace, ready := acceptedFoundationProject(t)
+	artifacts := longformChapterArtifacts(1, []map[string]any{
+		{"kind": "resource_add", "local_id": "cash", "name": "现金", "event_ref": "e1"},
+		{"kind": "resource", "resource_id": "cash", "delta": 3, "event_ref": "e1"},
+	})
+	settled := submitAndSettleChapter(t, project, workspace, ready, artifacts)
+	if settled.Result != "ACCEPTED" {
+		t.Fatalf("chapter 1 settlement=%+v", settled)
+	}
+	resourceID := mappingID(settled.IDMappings, "resource", "cash")
+	if resourceID == "" {
+		t.Fatalf("resource mapping missing: %+v", settled.IDMappings)
+	}
+	state := readCanonState(t, project)
+	entity, ok := state.Longform.Entities[resourceID]
+	if !ok || entity.Name != "现金" || entity.EntityType != "resource" {
+		t.Fatalf("dynamic entities=%+v", state.Longform.Entities)
+	}
+	if state.Longform.Resources[resourceID] != 3 {
+		t.Fatalf("resources=%+v", state.Longform.Resources)
+	}
+
+	next := readReady(t, workspace)
+	canonPath := filepath.Join(workspace, "exchange", "outbox", next.TaskID, next.AttemptID, "canon_excerpt.json")
+	canonRaw, err := os.ReadFile(canonPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(canonRaw), resourceID) || !strings.Contains(string(canonRaw), "现金") {
+		t.Fatalf("next task cannot discover dynamic resource: %s", canonRaw)
+	}
+
+	second := longformChapterArtifacts(2, []map[string]any{{
+		"kind": "resource", "resource_id": resourceID, "delta": -1, "event_ref": "e1",
+	}})
+	if got := submitAndSettleChapter(t, project, workspace, next, second); got.Result != "ACCEPTED" {
+		t.Fatalf("chapter 2 with dynamic resource settlement=%+v", got)
+	}
+}
+
 func TestResourceCannotGoNegative(t *testing.T) {
 	project, _, workspace, ready := acceptedFoundationProject(t)
-	artifacts := longformChapterArtifacts(1, []map[string]any{{
-		"kind": "resource", "resource_id": "cash", "delta": -1, "event_ref": "e1",
+	first := longformChapterArtifacts(1, []map[string]any{{
+		"kind": "resource_add", "local_id": "cash", "name": "现金", "event_ref": "e1",
+	}})
+	settled := submitAndSettleChapter(t, project, workspace, ready, first)
+	if settled.Result != "ACCEPTED" {
+		t.Fatalf("resource add settlement=%+v", settled)
+	}
+	resourceID := mappingID(settled.IDMappings, "resource", "cash")
+	if resourceID == "" {
+		t.Fatalf("resource mapping missing: %+v", settled.IDMappings)
+	}
+	ready = readReady(t, workspace)
+	artifacts := longformChapterArtifacts(2, []map[string]any{{
+		"kind": "resource", "resource_id": resourceID, "delta": -1, "event_ref": "e1",
 	}})
 	settlement := submitAndSettleChapter(t, project, workspace, ready, artifacts)
-	if settlement.Result != "REWRITE" || !containsViolation(settlement.Violations, "resource") {
+	if settlement.Result != "REWRITE" || !containsViolation(settlement.Violations, "resource balance") {
 		t.Fatalf("settlement=%+v", settlement)
 	}
 }
@@ -263,6 +316,7 @@ func TestEvidenceBackedLongformChangesPersist(t *testing.T) {
 	ready := readReady(t, workspace)
 	changes := []map[string]any{
 		{"kind": "knowledge_add", "character_id": characterID, "fact_id": "secret-a", "source": map[string]any{"kind": "observed", "event_ref": "e1"}},
+		{"kind": "resource_add", "local_id": "cash", "name": "现金", "event_ref": "e1"},
 		{"kind": "resource", "resource_id": "cash", "delta": 3, "event_ref": "e1"},
 		{"kind": "location", "character_id": characterID, "location_id": locationID, "start_tick": 0, "end_tick": 10, "event_ref": "e1"},
 		{"kind": "relationship", "relationship_id": characterID + "|" + secondID, "tags": []string{"distrust"}, "event_ref": "e1"},
@@ -275,8 +329,9 @@ func TestEvidenceBackedLongformChangesPersist(t *testing.T) {
 		t.Fatalf("settlement=%+v", settlement)
 	}
 	state := readCanonState(t, project)
-	if state.Longform.Resources["cash"] != 3 {
-		t.Fatalf("resources=%+v", state.Longform.Resources)
+	resourceID := mappingID(settlement.IDMappings, "resource", "cash")
+	if resourceID == "" || state.Longform.Resources[resourceID] != 3 {
+		t.Fatalf("resource mapping=%q resources=%+v", resourceID, state.Longform.Resources)
 	}
 	if _, ok := state.Longform.Knowledge[characterID]["secret-a"]; !ok {
 		t.Fatalf("knowledge=%+v", state.Longform.Knowledge)

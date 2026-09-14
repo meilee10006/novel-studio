@@ -69,6 +69,8 @@ func applyLongformChange(state *domain.CoreLongformState, change map[string]any,
 		applyEntityAdd(state, change, "character", violations)
 	case "location_add":
 		applyEntityAdd(state, change, "location", violations)
+	case "resource_add":
+		applyEntityAdd(state, change, "resource", violations)
 	case "knowledge_add":
 		applyKnowledgeChange(state, change, violations)
 	case "resource":

@@ -239,8 +239,8 @@ func validateAndCanonicalizeChapter(files map[string][]byte, state *domain.CoreP
 		return nil, nil, violations, chapter, nil
 	}
 
-	entityMappings, characterLookup, locationLookup, seq := canonicalizeChapterEntityAdds(values["state_delta.json"], state.NextEntitySeq, &violations)
-	rewriteChapterLocalEntityRefs(values, characterLookup, locationLookup)
+	entityMappings, characterLookup, locationLookup, resourceLookup, seq := canonicalizeChapterEntityAdds(values["state_delta.json"], state.NextEntitySeq, &violations)
+	rewriteChapterLocalEntityRefs(values, characterLookup, locationLookup, resourceLookup)
 	if len(violations) > 0 {
 		return nil, nil, violations, chapter, nil
 	}
@@ -271,7 +271,7 @@ func validateAndCanonicalizeChapter(files map[string][]byte, state *domain.CoreP
 	}
 	return canonical, mappings, nil, chapter, nil
 }
-func canonicalizeChapterEntityAdds(value any, seq int, violations *[]string) ([]IDMapping, map[string]string, map[string]string, int) {
+func canonicalizeChapterEntityAdds(value any, seq int, violations *[]string) ([]IDMapping, map[string]string, map[string]string, map[string]string, int) {
 	root, _ := value.(map[string]any)
 	changes, _ := root["changes"].([]any)
 	defs := map[string]map[string]any{}
@@ -285,6 +285,8 @@ func canonicalizeChapterEntityAdds(value any, seq int, violations *[]string) ([]
 			entityType = "character"
 		case "location_add":
 			entityType = "location"
+		case "resource_add":
+			entityType = "resource"
 		default:
 			continue
 		}
@@ -310,6 +312,7 @@ func canonicalizeChapterEntityAdds(value any, seq int, violations *[]string) ([]
 	mappings := make([]IDMapping, 0, len(keys))
 	characters := map[string]string{}
 	locations := map[string]string{}
+	resources := map[string]string{}
 	for _, key := range keys {
 		entityType := types[key]
 		localID := strings.TrimPrefix(key, entityType+"\x00")
@@ -324,12 +327,14 @@ func canonicalizeChapterEntityAdds(value any, seq int, violations *[]string) ([]
 			characters[localID] = canonID
 		case "location":
 			locations[localID] = canonID
+		case "resource":
+			resources[localID] = canonID
 		}
 	}
-	return mappings, characters, locations, seq
+	return mappings, characters, locations, resources, seq
 }
 
-func rewriteChapterLocalEntityRefs(values map[string]any, characters, locations map[string]string) {
+func rewriteChapterLocalEntityRefs(values map[string]any, characters, locations, resources map[string]string) {
 	if len(characters) > 0 {
 		if contract, ok := values["chapter_contract.json"].(map[string]any); ok {
 			if local := cleanString(contract["declared_pov"]); characters[local] != "" {
@@ -359,6 +364,9 @@ func rewriteChapterLocalEntityRefs(values map[string]any, characters, locations 
 		}
 		if local := cleanString(change["location_id"]); locations[local] != "" {
 			change["location_id"] = locations[local]
+		}
+		if local := cleanString(change["resource_id"]); resources[local] != "" {
+			change["resource_id"] = resources[local]
 		}
 		if cleanString(change["kind"]) == "relationship" {
 			left, right, ok := relationshipCharacterIDs(cleanString(change["relationship_id"]))
@@ -443,6 +451,28 @@ func (p *Project) canonicalLocationIDs() (map[string]bool, error) {
 	return ids, nil
 }
 
+func (p *Project) canonicalResourceIDs() (map[string]bool, error) {
+	worldRaw, err := p.store.ReadCoreCanonArtifact("world.json")
+	if err != nil {
+		return nil, err
+	}
+	var root map[string]any
+	if err := protocol.DecodeJSON(worldRaw, &root); err != nil {
+		return nil, err
+	}
+	ids := map[string]bool{}
+	for _, raw := range anySlice(root["entities"]) {
+		item, _ := raw.(map[string]any)
+		if cleanString(item["entity_type"]) != "resource" {
+			continue
+		}
+		if id := cleanString(item["canon_id"]); id != "" {
+			ids[id] = true
+		}
+	}
+	return ids, nil
+}
+
 func (p *Project) validateCanonicalEntityReferences(canonical map[string][]byte, longform domain.CoreLongformState) ([]string, error) {
 	ids, err := p.canonicalCharacterIDs()
 	if err != nil {
@@ -452,12 +482,21 @@ func (p *Project) validateCanonicalEntityReferences(canonical map[string][]byte,
 	if err != nil {
 		return nil, err
 	}
+	resources, err := p.canonicalResourceIDs()
+	if err != nil {
+		return nil, err
+	}
+	for id := range longform.Resources {
+		resources[id] = true
+	}
 	for id, entity := range longform.Entities {
 		switch entity.EntityType {
 		case "character":
 			ids[id] = true
 		case "location":
 			locations[id] = true
+		case "resource":
+			resources[id] = true
 		}
 	}
 	var delta map[string]any
@@ -474,6 +513,10 @@ func (p *Project) validateCanonicalEntityReferences(canonical map[string][]byte,
 		case "location_add":
 			if id := cleanString(change["canon_id"]); id != "" {
 				locations[id] = true
+			}
+		case "resource_add":
+			if id := cleanString(change["canon_id"]); id != "" {
+				resources[id] = true
 			}
 		}
 	}
@@ -516,6 +559,14 @@ func (p *Project) validateCanonicalEntityReferences(canonical map[string][]byte,
 				violations = append(violations, "location change requires location_id")
 			} else if !locations[locationID] {
 				violations = append(violations, "location change references unknown canonical location: "+locationID)
+			}
+		}
+		if kind == "resource" {
+			resourceID := cleanString(change["resource_id"])
+			if resourceID == "" {
+				violations = append(violations, "resource change requires resource_id")
+			} else if !resources[resourceID] {
+				violations = append(violations, "resource change references unknown canonical resource: "+resourceID)
 			}
 		}
 		if kind == "relationship" {
