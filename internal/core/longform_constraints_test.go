@@ -17,6 +17,62 @@ func TestEndingResolutionRequiresAcceptedEvent(t *testing.T) {
 	}
 }
 
+func TestChapterRejectsUnknownCanonicalCharacterReferences(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		events map[string]any
+		change map[string]any
+	}{
+		{
+			name: "event observer",
+			events: map[string]any{"events": []any{map[string]any{
+				"local_id": "e1", "evidence_anchor": "主角看见门口的灯", "observers": []string{"character-999999"},
+			}}},
+		},
+		{
+			name: "knowledge character",
+			change: map[string]any{
+				"kind": "knowledge_add", "character_id": "character-999999", "fact_id": "secret-a",
+				"source": map[string]any{"kind": "observed", "event_ref": "e1"},
+			},
+		},
+		{
+			name: "location character",
+			change: map[string]any{
+				"kind": "location", "character_id": "character-999999", "location_id": "location-a", "start_tick": 0, "end_tick": 1, "event_ref": "e1",
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			project, _, workspace, ready := acceptedFoundationProject(t)
+			changes := []map[string]any{}
+			if tc.change != nil {
+				changes = append(changes, tc.change)
+			}
+			artifacts := longformChapterArtifacts(1, changes)
+			if tc.events != nil {
+				raw, _ := json.Marshal(tc.events)
+				artifacts["events.json"] = raw
+			}
+			got := submitAndSettleChapter(t, project, workspace, ready, artifacts)
+			if got.Result != "REWRITE" || !containsViolation(got.Violations, "character") {
+				t.Fatalf("settlement=%+v", got)
+			}
+		})
+	}
+}
+
+func TestLocationChangeRequiresCharacterID(t *testing.T) {
+	project, _, workspace, ready := acceptedFoundationProject(t)
+	artifacts := longformChapterArtifacts(1, []map[string]any{{
+		"kind": "location", "location_id": "location-a", "start_tick": 0, "end_tick": 1, "event_ref": "e1",
+	}})
+	got := submitAndSettleChapter(t, project, workspace, ready, artifacts)
+	if got.Result != "REWRITE" || !containsViolation(got.Violations, "character_id") {
+		t.Fatalf("settlement=%+v", got)
+	}
+}
+
 func TestKnowledgeWithoutSourceIsRewrite(t *testing.T) {
 	project, _, workspace, ready := acceptedFoundationProject(t)
 	artifacts := longformChapterArtifacts(1, []map[string]any{{

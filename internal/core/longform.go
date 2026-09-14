@@ -144,6 +144,7 @@ func applyResourceChange(state *domain.CoreLongformState, change map[string]any,
 func applyLocationChange(state *domain.CoreLongformState, change map[string]any, violations *[]string) {
 	characterID := cleanString(change["character_id"])
 	if characterID == "" {
+		*violations = append(*violations, "location change requires character_id")
 		return
 	}
 	locationID := cleanString(change["location_id"])

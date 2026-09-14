@@ -90,11 +90,11 @@ func (p *Project) settleActiveSnapshotLocked() (ChapterSettlement, error) {
 		return ChapterSettlement{}, err
 	}
 	if len(violations) == 0 {
-		povViolations, err := p.validateDeclaredPOV(canonical["chapter_contract.json"])
+		referenceViolations, err := p.validateCanonicalCharacterReferences(canonical)
 		if err != nil {
 			return ChapterSettlement{}, err
 		}
-		violations = append(violations, povViolations...)
+		violations = append(violations, referenceViolations...)
 	}
 	if len(violations) > 0 {
 		return p.rejectChapter(project, state, task, attempt, record, files, violations)
@@ -288,12 +288,7 @@ func rewriteEventRefs(value any, lookup map[string]string, violations *[]string)
 	}
 }
 
-func (p *Project) validateDeclaredPOV(contractRaw []byte) ([]string, error) {
-	var contract map[string]any
-	if err := protocol.DecodeJSON(contractRaw, &contract); err != nil {
-		return nil, err
-	}
-	pov := cleanString(contract["declared_pov"])
+func (p *Project) canonicalCharacterIDs() (map[string]bool, error) {
 	charactersRaw, err := p.store.ReadCoreCanonArtifact("characters.json")
 	if err != nil {
 		return nil, err
@@ -302,14 +297,72 @@ func (p *Project) validateDeclaredPOV(contractRaw []byte) ([]string, error) {
 	if err := protocol.DecodeJSON(charactersRaw, &root); err != nil {
 		return nil, err
 	}
+	ids := map[string]bool{}
 	items, _ := root["characters"].([]any)
 	for _, raw := range items {
 		item, _ := raw.(map[string]any)
-		if cleanString(item["canon_id"]) == pov {
-			return nil, nil
+		if id := cleanString(item["canon_id"]); id != "" {
+			ids[id] = true
 		}
 	}
-	return []string{"chapter_contract.declared_pov is not a canonical character"}, nil
+	return ids, nil
+}
+
+func (p *Project) validateCanonicalCharacterReferences(canonical map[string][]byte) ([]string, error) {
+	ids, err := p.canonicalCharacterIDs()
+	if err != nil {
+		return nil, err
+	}
+	var violations []string
+	var contract map[string]any
+	if err := protocol.DecodeJSON(canonical["chapter_contract.json"], &contract); err != nil {
+		return nil, err
+	}
+	if pov := cleanString(contract["declared_pov"]); !ids[pov] {
+		violations = append(violations, "chapter_contract.declared_pov is not a canonical character")
+	}
+
+	var eventsRoot map[string]any
+	if err := protocol.DecodeJSON(canonical["events.json"], &eventsRoot); err != nil {
+		return nil, err
+	}
+	for _, raw := range anySlice(eventsRoot["events"]) {
+		item, _ := raw.(map[string]any)
+		for _, field := range []string{"actors", "observers"} {
+			for _, id := range stringSlice(item[field]) {
+				if !ids[id] {
+					violations = append(violations, "story event "+field+" references unknown canonical character: "+id)
+				}
+			}
+		}
+	}
+
+	var delta map[string]any
+	if err := protocol.DecodeJSON(canonical["state_delta.json"], &delta); err != nil {
+		return nil, err
+	}
+	for _, raw := range anySlice(delta["changes"]) {
+		change, _ := raw.(map[string]any)
+		kind := cleanString(change["kind"])
+		characterID := cleanString(change["character_id"])
+		if kind == "location" && characterID == "" {
+			violations = append(violations, "location change requires character_id")
+		} else if characterID != "" && !ids[characterID] {
+			violations = append(violations, kind+" change references unknown canonical character: "+characterID)
+		}
+		if source, ok := change["source"].(map[string]any); ok {
+			if from := cleanString(source["from_character_id"]); from != "" && !ids[from] {
+				violations = append(violations, "knowledge source references unknown canonical character: "+from)
+			}
+		}
+	}
+	sort.Strings(violations)
+	return violations, nil
+}
+
+func anySlice(value any) []any {
+	items, _ := value.([]any)
+	return items
 }
 
 func chapterNumberFromTarget(target string) (int, error) {

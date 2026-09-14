@@ -11,6 +11,7 @@ import (
 func TestChapterSnapshotAcceptedAdvancesCanonAndReady(t *testing.T) {
 	project, local, workspace, first := acceptedFoundationProject(t)
 	artifacts := validChapterArtifacts(1)
+	artifacts["state_delta.json"] = []byte(`{"changes":[{"kind":"resource","resource_id":"cash","delta":1,"event_ref":"e1"}]}`)
 	writeSubmission(t, workspace, first, artifacts, false)
 	project.submissionQuietPeriod = 0
 	if _, err := project.ScanActiveSubmission(); err != nil {
