@@ -140,7 +140,7 @@ func applyKnowledgeChange(state *domain.CoreLongformState, change map[string]any
 		}
 	case "transmitted":
 		from := cleanString(source["from_character_id"])
-		if !exists || from == "" || !containsString(event.Observers, characterID) {
+		if !exists || from == "" || !containsString(event.Actors, from) || !containsString(event.Observers, characterID) {
 			*violations = append(*violations, "knowledge transmission source is not evidenced")
 			return
 		}
