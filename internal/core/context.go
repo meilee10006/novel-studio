@@ -44,6 +44,7 @@ func compileTaskContext(input contextCompilerInput, budget int) (contextCompiler
 	if budget <= 0 {
 		return contextCompilerOutput{}, fmt.Errorf("context budget must be positive")
 	}
+	query := contextQuery(input)
 	contextDoc := map[string]any{
 		"target":              input.Target,
 		"book_plan":           input.BookPlan,
@@ -52,12 +53,11 @@ func compileTaskContext(input contextCompilerInput, budget int) (contextCompiler
 		"retrieved_old_prose": []map[string]any{},
 	}
 	if input.FoundationReference != nil {
-		contextDoc["foundation_reference"] = input.FoundationReference
+		contextDoc["foundation_reference"] = compactFoundationReferenceForContext(input.FoundationReference, query, budget/4)
 	}
 	if input.RevisionCandidate != nil {
 		contextDoc["revision_candidate"] = input.RevisionCandidate
 	}
-	query := contextQuery(input)
 	canonDoc := map[string]any{
 		"base_canon_root": input.CanonRoot,
 		"state":           compactCanonStateForContext(input.CanonState, query, budget/4),
@@ -1037,6 +1037,120 @@ func compactFoundationValue(value any) any {
 	default:
 		return nil
 	}
+}
+
+type contextFoundationCandidate struct {
+	Key        string
+	Collection string
+	Item       map[string]any
+	Mandatory  bool
+}
+
+func compactFoundationReferenceForContext(reference map[string]any, query string, maxBytes int) map[string]any {
+	foundation, _ := reference["foundation"].(map[string]any)
+	style, _ := reference["style_profile"].(map[string]any)
+	platform, _ := reference["platform_profile"].(map[string]any)
+	out := map[string]any{
+		"foundation":       foundation,
+		"characters":       map[string]any{"characters": []any{}},
+		"world":            map[string]any{"entities": []any{}},
+		"style_profile":    style,
+		"platform_profile": platform,
+	}
+	if maxBytes <= 0 {
+		return out
+	}
+	mandatoryIDs := map[string]bool{}
+	for _, key := range []string{"protagonist", "opening_location"} {
+		if ref, ok := foundation[key].(map[string]any); ok {
+			if id := compactContextString(ref["canon_id"]); id != "" {
+				mandatoryIDs[id] = true
+			}
+		}
+	}
+	candidates := make([]contextFoundationCandidate, 0)
+	appendCandidates := func(collection string, raw any) {
+		items, _ := raw.([]any)
+		for _, value := range items {
+			item, ok := value.(map[string]any)
+			if !ok {
+				continue
+			}
+			id := compactContextString(item["canon_id"])
+			if id == "" {
+				continue
+			}
+			copyItem := map[string]any{"canon_id": id}
+			if name := compactContextString(item["name"]); name != "" {
+				copyItem["name"] = name
+			}
+			if collection == "world" {
+				if entityType := compactContextString(item["entity_type"]); entityType != "" {
+					copyItem["entity_type"] = entityType
+				}
+			}
+			candidates = append(candidates, contextFoundationCandidate{
+				Key: collection + ":" + id, Collection: collection, Item: copyItem, Mandatory: mandatoryIDs[id],
+			})
+		}
+	}
+	if characters, ok := reference["characters"].(map[string]any); ok {
+		appendCandidates("characters", characters["characters"])
+	}
+	if world, ok := reference["world"].(map[string]any); ok {
+		appendCandidates("world", world["entities"])
+	}
+	sort.SliceStable(candidates, func(i, j int) bool { return candidates[i].Key < candidates[j].Key })
+	byKey := map[string]contextFoundationCandidate{}
+	docs := make([]retrieval.Document, 0, len(candidates))
+	ordered := make([]contextFoundationCandidate, 0, len(candidates))
+	seen := map[string]bool{}
+	for _, candidate := range candidates {
+		byKey[candidate.Key] = candidate
+		text := candidate.Key + "\n" + compactContextString(candidate.Item["name"]) + "\n" + compactContextString(candidate.Item["entity_type"])
+		docs = append(docs, retrieval.Document{ID: candidate.Key, Text: text})
+		if candidate.Mandatory {
+			ordered = append(ordered, candidate)
+			seen[candidate.Key] = true
+		}
+	}
+	for _, hit := range retrieval.RankKeyword(docs, query, len(docs)) {
+		if seen[hit.ID] {
+			continue
+		}
+		candidate := byKey[hit.ID]
+		ordered = append(ordered, candidate)
+		seen[candidate.Key] = true
+	}
+	for _, candidate := range candidates {
+		if !seen[candidate.Key] {
+			ordered = append(ordered, candidate)
+		}
+	}
+
+	characterItems := []any{}
+	worldItems := []any{}
+	for _, candidate := range ordered {
+		if candidate.Collection == "characters" {
+			characterItems = append(characterItems, candidate.Item)
+		} else {
+			worldItems = append(worldItems, candidate.Item)
+		}
+		out["characters"] = map[string]any{"characters": characterItems}
+		out["world"] = map[string]any{"entities": worldItems}
+		raw, err := json.Marshal(out)
+		if err == nil && len(raw) <= maxBytes {
+			continue
+		}
+		if candidate.Collection == "characters" {
+			characterItems = characterItems[:len(characterItems)-1]
+		} else {
+			worldItems = worldItems[:len(worldItems)-1]
+		}
+		out["characters"] = map[string]any{"characters": characterItems}
+		out["world"] = map[string]any{"entities": worldItems}
+	}
+	return out
 }
 
 func compactContextString(value any) string {

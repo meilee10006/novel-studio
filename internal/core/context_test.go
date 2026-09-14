@@ -415,3 +415,53 @@ func TestContextCompilerBoundsResourceInventoryAndKeepsRelevantResource(t *testi
 		t.Fatalf("relevant resource missing: %s", text)
 	}
 }
+
+func TestContextCompilerBoundsFoundationReferenceAndKeepsRelevantEntities(t *testing.T) {
+	const budget = 16 << 10
+	characters := make([]any, 0, 1200)
+	world := make([]any, 0, 1200)
+	for i := 1; i <= 1200; i++ {
+		characterID := fmt.Sprintf("character-%06d", i)
+		characterName := fmt.Sprintf("常规人物-%04d", i)
+		locationID := fmt.Sprintf("location-%06d", i)
+		locationName := fmt.Sprintf("常规地点-%04d", i)
+		if i == 31 {
+			characterID = "character-red-umbrella"
+			characterName = "红色纸伞侦探"
+			locationID = "location-red-umbrella"
+			locationName = "红伞钟楼"
+		}
+		characters = append(characters, map[string]any{"canon_id": characterID, "name": characterName})
+		world = append(world, map[string]any{"entity_type": "location", "canon_id": locationID, "name": locationName})
+	}
+	foundationReference := map[string]any{
+		"foundation": map[string]any{
+			"title":            "大型设定书",
+			"protagonist":      map[string]any{"entity_type": "character", "canon_id": "character-000001"},
+			"opening_location": map[string]any{"entity_type": "location", "canon_id": "location-000001"},
+		},
+		"characters":       map[string]any{"characters": characters},
+		"world":            map[string]any{"entities": world},
+		"style_profile":    map[string]any{"language": "zh-CN"},
+		"platform_profile": map[string]any{"platform": "fanqie"},
+	}
+	out, err := compileTaskContext(contextCompilerInput{
+		Target: "chapter:2", CanonRoot: "root-1",
+		EndingContract: map[string]any{"main_resolution": "收束"}, BookPlan: map[string]any{"direction": "推进"},
+		FoundationReference: foundationReference,
+		Constraints:         []domain.CoreTaskConstraint{{Instruction: "本章必须让红色纸伞侦探前往红伞钟楼"}},
+		CanonState:          domain.CoreCanonState{},
+	}, budget)
+	if err != nil {
+		t.Fatalf("foundation reference should stay within fixed context budget: %v", err)
+	}
+	if out.TotalBytes > budget {
+		t.Fatalf("bytes=%d budget=%d", out.TotalBytes, budget)
+	}
+	text := string(out.ContextJSON)
+	for _, want := range []string{"character-000001", "location-000001", "character-red-umbrella", "location-red-umbrella"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("foundation reference missing %q: %s", want, text)
+		}
+	}
+}
