@@ -44,8 +44,8 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
-            ghcr.io/xiaoyangy/novel-studio:${{ github.ref_name }}
-            ghcr.io/xiaoyangy/novel-studio:latest
+            ghcr.io/meilee10006/novel-studio:${{ github.ref_name }}
+            ghcr.io/meilee10006/novel-studio:latest
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
