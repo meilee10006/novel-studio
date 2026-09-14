@@ -189,7 +189,7 @@ knowledge_add 的 fact_id 是稳定标识，statement 是后续新对话可直�
 
 首次创建冲突使用 local_id，并同时提供 description、participants、state=open、escalation_condition、close_condition 和 event_ref；participants 必须是唯一非空字符串数组，每个元素都引用 canonical character ID。只有 ACCEPTED 时 Core 才分配永久 conflict ID，并通过 id_mappings 返回；后续状态推进使用 conflict_id 字段填写该 canonical ID。transition 如果再次携带 participants，也必须满足同样结构且参与方集合不可变。合法主路径为 open → escalated → resolved，也允许 open/escalated → retired；每次推进都必须引用已验收事件证据。final export 前所有 conflict 必须是 resolved 或 retired。Core 只验证状态边、参与方、条件字段和证据引用，不判断文学意义上的冲突是否精彩或是否真的解决。
 
-首次创建读者承诺使用 local_id，并提供 reader_promise.statement；只有 ACCEPTED 时 Core 才分配永久 reader promise ID，并通过 id_mappings 返回，后续状态推进使用 promise_id 字段填写该 canonical ID。后续推进若省略 statement，Core 保留前态文本；旧 Canon 已存在的历史 promise key 仍兼容继续推进。reader_promise 可用 advanced、deferred、fulfilled、retired；deferred 必须带未来的 deadline_chapter，fulfilled 必须有 event_ref；final export 前必须是 fulfilled 或 retired。最终主线收束还必须提交带本章事件证据的 ending_resolution。
+首次创建读者承诺使用 local_id，并提供 reader_promise.statement；只有 ACCEPTED 时 Core 才分配永久 reader promise ID，并通过 id_mappings 返回，后续状态推进使用 promise_id 字段填写该 canonical ID。后续推进若省略 statement，Core 保留前态文本；旧 Canon 已存在的历史 promise key 仍兼容继续推进。reader_promise 可用 advanced、deferred、fulfilled、retired；deferred 必须带未来的 deadline_chapter，fulfilled 必须有 event_ref；fulfilled / retired 为终态，不得恢复为 advanced/deferred；final export 前必须是 fulfilled 或 retired。最终主线收束还必须提交带本章事件证据的 ending_resolution。
 
 如果 task 要求 rolling planning 修复，planning_patch.json 最小形状为：
 

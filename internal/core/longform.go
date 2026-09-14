@@ -330,6 +330,10 @@ func applyReaderPromiseChange(state *domain.CoreLongformState, change map[string
 		*violations = append(*violations, "reader promise state is unsupported: "+nextState)
 		return
 	}
+	if prev, exists := state.ReaderPromises[id]; exists && (prev.State == "fulfilled" || prev.State == "retired") && nextState != prev.State {
+		*violations = append(*violations, "reader promise terminal state cannot transition: "+prev.State+" -> "+nextState)
+		return
+	}
 	evidenceID := cleanString(change["event_canon_id"])
 	if nextState == "fulfilled" && !requireEvidence(state, change, "reader promise", violations) {
 		return
