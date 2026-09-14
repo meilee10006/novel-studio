@@ -31,11 +31,12 @@ jobs:
       - name: Dashboard client tests
         run: node --test services/dashboard/test_client.js
       - name: Build release binary
-        run: go build -trimpath -o /tmp/novel-studio ./cmd/novel-studio
+        run: go build -trimpath -o /tmp/novel-core ./cmd/novel-core
       - name: Smoke test release binary
         run: |
-          /tmp/novel-studio --version
-          /tmp/novel-studio doctor --config /tmp/missing-novel-studio-config.json --json || test $? -eq 1
+          env -u OPENAI_API_KEY -u ANTHROPIC_API_KEY -u DEEPSEEK_API_KEY -u LITELLM_API_KEY /tmp/novel-core --version
+          mkdir -p /tmp/novel-core-smoke
+          env -u OPENAI_API_KEY -u ANTHROPIC_API_KEY -u DEEPSEEK_API_KEY -u LITELLM_API_KEY /tmp/novel-core status --project /tmp/novel-core-smoke
 
   race_core:
     runs-on: ubuntu-latest
@@ -100,17 +101,7 @@ jobs:
           build-args: GOPROXY=https://proxy.golang.org,direct
           cache-from: type=gha
           cache-to: type=gha,mode=max
-      - name: Smoke test embedded dashboard
+      - name: Smoke test provider-free container
         run: |
-          trap 'docker rm -f novel-studio-dashboard-smoke >/dev/null 2>&1 || true' EXIT
-          docker run -d --name novel-studio-dashboard-smoke \
-            -p 18765:8765 novel-studio:test \
-            service start --host 0.0.0.0 --port 8765
-          for _ in {1..30}; do
-            if curl -fsS http://127.0.0.1:18765/api/health | grep -q '"ok": true'; then
-              exit 0
-            fi
-            sleep 1
-          done
-          docker logs novel-studio-dashboard-smoke
-          exit 1
+          docker run --rm novel-studio:test --version
+          docker run --rm novel-studio:test status --project /workspace

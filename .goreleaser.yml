@@ -6,9 +6,9 @@ before:
     - go mod tidy
 
 builds:
-  - id: novel-studio
-    main: ./cmd/novel-studio
-    binary: novel-studio
+  - id: novel-core
+    main: ./cmd/novel-core
+    binary: novel-core
     env:
       - CGO_ENABLED=0
     ldflags:
@@ -24,9 +24,9 @@ builds:
       - arm64
 
 archives:
-  - id: novel-studio-archive
+  - id: novel-core-archive
     ids:
-      - novel-studio
+      - novel-core
     formats:
       - tar.gz
     files:
@@ -65,5 +65,5 @@ changelog:
 
 release:
   github:
-    owner: Xiaoyangy
+    owner: meilee10006
     name: novel-studio

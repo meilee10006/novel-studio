@@ -14,12 +14,30 @@ import (
 	"github.com/chenhongyang/novel-studio/internal/core"
 )
 
+var (
+	version = "dev"
+	commit  = "none"
+	date    = "unknown"
+)
+
 func main() { os.Exit(run(os.Args[1:], os.Stdout, os.Stderr)) }
+
+func printUsage(w io.Writer) {
+	fmt.Fprintln(w, "usage: novel-core <init|serve|status|verify|export|restore|migrate> [options]")
+}
 
 func run(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "usage: novel-core <init|serve|status|verify|export|restore|migrate> [options]")
+		printUsage(stderr)
 		return 2
+	}
+	switch args[0] {
+	case "help", "-h", "--help":
+		printUsage(stdout)
+		return 0
+	case "--version", "version":
+		fmt.Fprintf(stdout, "novel-core %s (commit=%s date=%s)\n", version, commit, date)
+		return 0
 	}
 	switch args[0] {
 	case "init":

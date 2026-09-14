@@ -1,5 +1,5 @@
 #!/bin/sh
-# novel-studio 一键安装脚本
+# provider-free Novel Core 一键安装脚本
 #
 #   curl -fsSL https://raw.githubusercontent.com/Xiaoyangy/novel-studio/main/scripts/install.sh | sh
 #   curl -fsSL https://raw.githubusercontent.com/Xiaoyangy/novel-studio/main/scripts/install.sh | sh -s -- v1.2.3
@@ -9,7 +9,7 @@
 set -e
 
 REPO="Xiaoyangy/novel-studio"
-BIN="novel-studio"
+BIN="novel-core"
 VERSION="${NOVEL_STUDIO_VERSION:-${1:-latest}}"
 
 if [ -n "${NOVEL_STUDIO_INSTALL_DIR:-}" ]; then
@@ -50,7 +50,7 @@ else
 	echo "查询版本 $TAG..."
 fi
 
-RELEASE=$(curl -fsSL -H "Accept: application/vnd.github+json" -H "User-Agent: novel-studio-installer" "$API")
+RELEASE=$(curl -fsSL -H "Accept: application/vnd.github+json" -H "User-Agent: novel-core-installer" "$API")
 TAG=$(printf '%s\n' "$RELEASE" | sed -n 's/.*"tag_name":"\([^"]*\)".*/\1/p' | head -1)
 URL=$(printf '%s\n' "$RELEASE" \
 	| tr '{' '\n' \
@@ -112,16 +112,9 @@ echo "✓ 安装完成：$DEST/$BIN"
 [ -n "$TAG" ] && echo "版本：$TAG"
 "$DEST/$BIN" --version
 if command -v "$BIN" >/dev/null 2>&1; then
-	if "$DEST/$BIN" --help 2>/dev/null | grep -q "novel-studio doctor"; then
-		echo "下一步：$BIN doctor"
-	fi
-	echo "然后运行：$BIN"
+	echo "下一步：$BIN --help"
 else
 	echo "提示：$DEST 不在 PATH 中。当前终端先运行："
 	echo "  export PATH=\"$DEST:\$PATH\""
-	if "$DEST/$BIN" --help 2>/dev/null | grep -q "novel-studio doctor"; then
-		echo "然后运行：$BIN doctor"
-	else
-		echo "然后运行：$BIN"
-	fi
+	echo "然后运行：$BIN --help"
 fi
