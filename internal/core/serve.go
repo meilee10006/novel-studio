@@ -46,7 +46,11 @@ func (p *Project) servePassLocked() error {
 	if err := p.serveControlsLocked(); err != nil {
 		return err
 	}
-	return p.serveSubmissionLocked()
+	if err := p.serveSubmissionLocked(); err != nil {
+		return err
+	}
+	_ = p.writeNotionProjectionLocked()
+	return nil
 }
 
 func (p *Project) serveControlsLocked() error {
