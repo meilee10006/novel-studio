@@ -48,7 +48,10 @@ func (p *Project) CreateBackup(destination string) (BackupResult, error) {
 		return BackupResult{}, err
 	}
 	defer release()
+	return p.createBackupUnlocked(destination)
+}
 
+func (p *Project) createBackupUnlocked(destination string) (BackupResult, error) {
 	destination = strings.TrimSpace(destination)
 	if destination == "" {
 		return BackupResult{}, fmt.Errorf("backup destination is required")
@@ -295,7 +298,7 @@ func loadCoreBackupManifest(backupRoot string) (coreBackupManifest, error) {
 	if manifest.Format != coreBackupFormat || manifest.BackupSchemaVersion != coreBackupSchemaVersion {
 		return manifest, fmt.Errorf("unsupported backup format or schema version")
 	}
-	if manifest.CoreSchemaVersion != coreSchemaVersion {
+	if manifest.CoreSchemaVersion < 0 || manifest.CoreSchemaVersion > coreSchemaVersion {
 		return manifest, fmt.Errorf("unsupported backup core schema version %d", manifest.CoreSchemaVersion)
 	}
 	if manifest.ProtocolVersion != protocol.CurrentVersion {

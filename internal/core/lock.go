@@ -14,6 +14,23 @@ func (p *Project) acquireProjectWriteLock() (func(), error) {
 	return p.acquireProjectLock(syscall.LOCK_EX)
 }
 
+func (p *Project) acquireProjectMutationLock() (func(), error) {
+	release, err := p.acquireProjectWriteLock()
+	if err != nil {
+		return nil, err
+	}
+	state, err := p.store.LoadCoreProjectState()
+	if err != nil {
+		release()
+		return nil, err
+	}
+	if state != nil && state.SchemaVersion != coreSchemaVersion {
+		release()
+		return nil, fmt.Errorf("local core schema version %d requires explicit migration to %d", state.SchemaVersion, coreSchemaVersion)
+	}
+	return release, nil
+}
+
 func (p *Project) acquireProjectReadLock() (func(), error) {
 	return p.acquireProjectLock(syscall.LOCK_SH)
 }

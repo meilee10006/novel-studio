@@ -88,3 +88,13 @@ func TestRestoreCommandIsAvailable(t *testing.T) {
 		t.Fatalf("restore command not routed: code=%d stderr=%s", code, stderr.String())
 	}
 }
+
+func TestMigrateCommandIsAvailable(t *testing.T) {
+	root := t.TempDir()
+	backup := filepath.Join(t.TempDir(), "pre-migration")
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"migrate", "--project", root, "--backup", backup}, &stdout, &stderr)
+	if code == 2 || strings.Contains(stderr.String(), "unknown command") {
+		t.Fatalf("migrate command not routed: code=%d stderr=%s", code, stderr.String())
+	}
+}

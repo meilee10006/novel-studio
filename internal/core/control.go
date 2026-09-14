@@ -26,7 +26,7 @@ type ControlResult struct {
 }
 
 func (p *Project) ScanControlMessage(messageID string) (ControlStatus, error) {
-	release, err := p.acquireProjectWriteLock()
+	release, err := p.acquireProjectMutationLock()
 	if err != nil {
 		return ControlStatus{}, err
 	}
@@ -148,7 +148,7 @@ func (p *Project) invalidateControl(record *domain.CoreControlRecord, problem st
 }
 
 func (p *Project) ProcessControlMessage(messageID string) (ControlResult, error) {
-	release, err := p.acquireProjectWriteLock()
+	release, err := p.acquireProjectMutationLock()
 	if err != nil {
 		return ControlResult{}, err
 	}

@@ -14,7 +14,7 @@ func main() { os.Exit(run(os.Args[1:], os.Stdout, os.Stderr)) }
 
 func run(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "usage: novel-core <init|status|verify|export|restore> [options]")
+		fmt.Fprintln(stderr, "usage: novel-core <init|status|verify|export|restore|migrate> [options]")
 		return 2
 	}
 	switch args[0] {
@@ -72,6 +72,29 @@ func run(args []string, stdout, stderr io.Writer) int {
 			return 1
 		}
 		if !result.OK {
+			return 1
+		}
+		return 0
+	case "migrate":
+		fs := flag.NewFlagSet("migrate", flag.ContinueOnError)
+		fs.SetOutput(stderr)
+		projectRoot := fs.String("project", ".", "local project root")
+		backup := fs.String("backup", "", "pre-migration backup directory")
+		if err := fs.Parse(args[1:]); err != nil || fs.NArg() != 0 {
+			return 2
+		}
+		project, err := core.OpenProject(*projectRoot)
+		if err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
+		result, err := project.Migrate(*backup)
+		if err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
+		if err := json.NewEncoder(stdout).Encode(result); err != nil {
+			fmt.Fprintln(stderr, err)
 			return 1
 		}
 		return 0

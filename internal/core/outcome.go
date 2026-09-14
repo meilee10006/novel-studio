@@ -19,7 +19,7 @@ type ProtocolRetryResult struct {
 }
 
 func (p *Project) RetryInvalidSubmission() (ProtocolRetryResult, error) {
-	release, err := p.acquireProjectWriteLock()
+	release, err := p.acquireProjectMutationLock()
 	if err != nil {
 		return ProtocolRetryResult{}, err
 	}

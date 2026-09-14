@@ -10,3 +10,15 @@ type CoreProjectState struct {
 	CapabilityNonce string `json:"capability_nonce"`
 	MarkdownProbe   string `json:"markdown_probe"`
 }
+
+type CoreMigrationReceipt struct {
+	SchemaVersion   int    `json:"schema_version"`
+	State           string `json:"state"`
+	ProjectID       string `json:"project_id"`
+	FromSchema      int    `json:"from_schema"`
+	ToSchema        int    `json:"to_schema"`
+	BackupPath      string `json:"backup_path"`
+	CanonRootBefore string `json:"canon_root_before"`
+	CanonRootAfter  string `json:"canon_root_after,omitempty"`
+	CompletedAt     string `json:"completed_at,omitempty"`
+}

@@ -61,7 +61,7 @@ type readyDocument struct {
 }
 
 func (p *Project) Reconcile() error {
-	release, err := p.acquireProjectWriteLock()
+	release, err := p.acquireProjectMutationLock()
 	if err != nil {
 		return err
 	}
@@ -227,7 +227,7 @@ func (p *Project) writeActiveAttempt(projectState *domain.CoreProjectState, stat
 	})
 }
 func (p *Project) SettleFoundation(sub FoundationSubmission) (FoundationSettlement, error) {
-	release, err := p.acquireProjectWriteLock()
+	release, err := p.acquireProjectMutationLock()
 	if err != nil {
 		return FoundationSettlement{}, err
 	}

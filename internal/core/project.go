@@ -63,7 +63,15 @@ func OpenProject(root string) (*Project, error) {
 	if !info.IsDir() {
 		return nil, fmt.Errorf("project root %q is not a directory", abs)
 	}
-	return &Project{root: abs, store: store.NewStore(abs), submissionQuietPeriod: 250 * time.Millisecond}, nil
+	st := store.NewStore(abs)
+	state, err := st.LoadCoreProjectState()
+	if err != nil {
+		return nil, fmt.Errorf("load core project metadata: %w", err)
+	}
+	if state != nil && (state.SchemaVersion < 0 || state.SchemaVersion > coreSchemaVersion) {
+		return nil, fmt.Errorf("unsupported local core schema version %d", state.SchemaVersion)
+	}
+	return &Project{root: abs, store: st, submissionQuietPeriod: 250 * time.Millisecond}, nil
 }
 
 func (p *Project) Status() (Status, error) {

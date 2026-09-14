@@ -16,7 +16,7 @@ const maxSubmissionBytes = 32 << 20
 type SubmissionStatus = domain.CoreSubmissionRecord
 
 func (p *Project) ScanActiveSubmission() (SubmissionStatus, error) {
-	release, err := p.acquireProjectWriteLock()
+	release, err := p.acquireProjectMutationLock()
 	if err != nil {
 		return SubmissionStatus{}, err
 	}

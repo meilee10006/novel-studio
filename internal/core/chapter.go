@@ -24,7 +24,7 @@ type ChapterSettlement struct {
 }
 
 func (p *Project) SettleActiveSnapshot() (ChapterSettlement, error) {
-	release, err := p.acquireProjectWriteLock()
+	release, err := p.acquireProjectMutationLock()
 	if err != nil {
 		return ChapterSettlement{}, err
 	}
