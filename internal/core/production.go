@@ -389,22 +389,32 @@ type foundationEntityDef struct{ entityType, localID string }
 func collectFoundationEntities(values map[string]any, violations *[]string) map[string]foundationEntityDef {
 	defs := map[string]foundationEntityDef{}
 	if root, ok := values["characters.json"].(map[string]any); ok {
-		items, _ := root["characters"].([]any)
-		if len(items) == 0 {
-			*violations = append(*violations, "characters must contain at least one character")
-		}
-		for _, item := range items {
-			collectEntityDef(item, "character", defs, violations)
+		items, ok := root["characters"].([]any)
+		if !ok {
+			*violations = append(*violations, "characters must be an array")
+		} else {
+			if len(items) == 0 {
+				*violations = append(*violations, "characters must contain at least one character")
+			}
+			for _, item := range items {
+				collectEntityDef(item, "character", defs, violations)
+			}
 		}
 	} else {
 		*violations = append(*violations, "characters.json must be an object")
 	}
 	if root, ok := values["world.json"].(map[string]any); ok {
-		items, _ := root["entities"].([]any)
-		for _, item := range items {
-			m, _ := item.(map[string]any)
-			entityType, _ := m["entity_type"].(string)
-			collectEntityDef(item, entityType, defs, violations)
+		if rawEntities, exists := root["entities"]; exists {
+			items, ok := rawEntities.([]any)
+			if !ok {
+				*violations = append(*violations, "world.entities must be an array")
+			} else {
+				for _, item := range items {
+					m, _ := item.(map[string]any)
+					entityType, _ := m["entity_type"].(string)
+					collectEntityDef(item, entityType, defs, violations)
+				}
+			}
 		}
 	} else {
 		*violations = append(*violations, "world.json must be an object")
