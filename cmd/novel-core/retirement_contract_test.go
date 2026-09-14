@@ -115,3 +115,24 @@ func TestProviderFreeCoreUsesDedicatedStore(t *testing.T) {
 		}
 	}
 }
+
+func TestProviderFreeStoreContainsOnlyCorePersistence(t *testing.T) {
+	root := filepath.Clean(filepath.Join("..", ".."))
+	entries, err := os.ReadDir(filepath.Join(root, "internal", "store"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	allowed := map[string]bool{
+		"core_store.go": true, "io.go": true, "core_project.go": true,
+		"core_production.go": true, "core_control.go": true,
+		"core_submission.go": true, "core_commit.go": true,
+	}
+	for _, entry := range entries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".go" {
+			continue
+		}
+		if !allowed[entry.Name()] {
+			t.Errorf("legacy store file remains: %s", entry.Name())
+		}
+	}
+}
