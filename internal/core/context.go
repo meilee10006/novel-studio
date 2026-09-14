@@ -187,11 +187,8 @@ func compactCanonStateForContext(state domain.CoreCanonState, query string, know
 		longform["locations"] = locations
 	}
 
-	if len(state.Longform.Resources) > 0 {
-		resources := map[string]int64{}
-		for id, value := range state.Longform.Resources {
-			resources[compactContextString(id)] = value
-		}
+	resources := compactResourcesForContext(state.Longform, query, knowledgeBudget/2)
+	if len(resources) > 0 {
 		longform["resources"] = resources
 	}
 
@@ -462,6 +459,62 @@ func compactLocationsForContext(state domain.CoreLongformState, query string, ma
 		raw, err := json.Marshal(selected)
 		if err != nil || len(raw) > maxBytes {
 			delete(selected, characterID)
+		}
+	}
+	return selected
+}
+
+type contextResourceCandidate struct {
+	ID    string
+	Value int64
+}
+
+func compactResourcesForContext(state domain.CoreLongformState, query string, maxBytes int) map[string]int64 {
+	if maxBytes <= 0 || len(state.Resources) == 0 {
+		return nil
+	}
+	ids := make([]string, 0, len(state.Resources))
+	for id := range state.Resources {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	candidates := make([]contextResourceCandidate, 0, len(ids))
+	byID := map[string]contextResourceCandidate{}
+	docs := make([]retrieval.Document, 0, len(ids))
+	for _, id := range ids {
+		value := state.Resources[id]
+		candidate := contextResourceCandidate{ID: id, Value: value}
+		candidates = append(candidates, candidate)
+		byID[id] = candidate
+		text := id
+		if entity, ok := state.Entities[id]; ok {
+			text += "\n" + entity.Name + "\n" + entity.Description
+		}
+		docs = append(docs, retrieval.Document{ID: id, Text: text})
+	}
+	ordered := make([]contextResourceCandidate, 0, len(candidates))
+	seen := map[string]bool{}
+	for _, hit := range retrieval.RankKeyword(docs, query, len(docs)) {
+		candidate := byID[hit.ID]
+		ordered = append(ordered, candidate)
+		seen[candidate.ID] = true
+	}
+	for _, candidate := range candidates {
+		if !seen[candidate.ID] {
+			ordered = append(ordered, candidate)
+		}
+	}
+
+	selected := map[string]int64{}
+	for _, candidate := range ordered {
+		id := compactContextString(candidate.ID)
+		if id == "" {
+			continue
+		}
+		selected[id] = candidate.Value
+		raw, err := json.Marshal(selected)
+		if err != nil || len(raw) > maxBytes {
+			delete(selected, id)
 		}
 	}
 	return selected

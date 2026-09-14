@@ -380,3 +380,38 @@ func TestContextCompilerBoundsLocationInventoryAndKeepsRelevantCharacter(t *test
 		}
 	}
 }
+
+func TestContextCompilerBoundsResourceInventoryAndKeepsRelevantResource(t *testing.T) {
+	const budget = 16 << 10
+	resources := make(map[string]int64, 2000)
+	entities := make(map[string]domain.CoreEntityState, 2000)
+	for i := 1; i <= 2000; i++ {
+		resourceID := fmt.Sprintf("resource-%06d", i)
+		name := fmt.Sprintf("常规资源-%03d", i)
+		if i == 29 {
+			resourceID = "resource-red-umbrella"
+			name = "红色纸伞基金"
+		}
+		resources[resourceID] = int64(i)
+		entities[resourceID] = domain.CoreEntityState{EntityType: "resource", Name: name}
+	}
+	canon := domain.CoreCanonState{
+		SchemaVersion: 1, Revision: 2000, ProjectID: "book", LatestChapter: 2000,
+		Longform: domain.CoreLongformState{Resources: resources, Entities: entities},
+	}
+	out, err := compileTaskContext(contextCompilerInput{
+		Target: "chapter:2001", CanonRoot: "root-2000",
+		EndingContract: map[string]any{"main_resolution": "收束"}, BookPlan: map[string]any{"direction": "推进"},
+		Constraints: []domain.CoreTaskConstraint{{Instruction: "这一章必须核对红色纸伞基金余额"}}, CanonState: canon,
+	}, budget)
+	if err != nil {
+		t.Fatalf("resource inventory should stay within fixed context budget: %v", err)
+	}
+	if out.TotalBytes > budget {
+		t.Fatalf("bytes=%d budget=%d", out.TotalBytes, budget)
+	}
+	text := string(out.CanonExcerptJSON)
+	if !strings.Contains(text, "resource-red-umbrella") {
+		t.Fatalf("relevant resource missing: %s", text)
+	}
+}
