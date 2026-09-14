@@ -253,6 +253,8 @@ func validateAndCanonicalizeChapter(files map[string][]byte, state *domain.CoreP
 			violations = append(violations, "story event kind must be onscreen or offscreen")
 			continue
 		}
+		validateOptionalStoryEventStringArray(m, "actors", &violations)
+		validateOptionalStoryEventStringArray(m, "observers", &violations)
 		anchor, _ := m["evidence_anchor"].(string)
 		if kind == "offscreen" {
 			refs := stringSlice(m["constraint_refs"])
@@ -877,6 +879,24 @@ func relationshipCharacterIDs(id string) (string, string, bool) {
 		}
 	}
 	return "", "", false
+}
+
+func validateOptionalStoryEventStringArray(event map[string]any, field string, violations *[]string) {
+	raw, exists := event[field]
+	if !exists {
+		return
+	}
+	items, ok := raw.([]any)
+	if !ok {
+		*violations = append(*violations, "story event "+field+" must be an array")
+		return
+	}
+	for _, item := range items {
+		if cleanString(item) == "" {
+			*violations = append(*violations, "story event "+field+" entries must be non-empty strings")
+			return
+		}
+	}
 }
 
 func anySlice(value any) []any {
