@@ -256,7 +256,11 @@ func applyForeshadowChange(state *domain.CoreLongformState, change map[string]an
 		return
 	}
 	description := cleanString(change["description"])
-	if description == "" {
+	if previous.Description != "" {
+		if description != "" && description != previous.Description {
+			*violations = append(*violations, "foreshadow description cannot change after creation")
+			return
+		}
 		description = previous.Description
 	}
 	state.Foreshadows[id] = domain.CoreForeshadowState{Description: description, State: nextState, EvidenceEventID: cleanString(change["event_canon_id"])}
