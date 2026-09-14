@@ -187,6 +187,7 @@ func validateAndCanonicalizeChapter(files map[string][]byte, state *domain.CoreP
 		values[name] = value
 	}
 	contract, ok := values["chapter_contract.json"].(map[string]any)
+	knownConstraints := map[string]bool{}
 	if !ok {
 		violations = append(violations, "chapter_contract.json must be an object")
 	} else {
@@ -197,6 +198,12 @@ func validateAndCanonicalizeChapter(files map[string][]byte, state *domain.CoreP
 		pov, _ := contract["declared_pov"].(string)
 		if strings.TrimSpace(pov) == "" {
 			violations = append(violations, "chapter_contract.declared_pov is required")
+		}
+		for _, raw := range anySlice(contract["hard_constraints"]) {
+			item, _ := raw.(map[string]any)
+			if id := cleanString(item["id"]); id != "" {
+				knownConstraints[id] = true
+			}
 		}
 	}
 	eventsRoot, ok := values["events.json"].(map[string]any)
@@ -223,9 +230,19 @@ func validateAndCanonicalizeChapter(files map[string][]byte, state *domain.CoreP
 			continue
 		}
 		seen[localID] = true
-		kind, _ := m["kind"].(string)
+		kind := cleanString(m["kind"])
 		anchor, _ := m["evidence_anchor"].(string)
-		if kind != "offscreen" && (strings.TrimSpace(anchor) == "" || !strings.Contains(body, anchor)) {
+		if kind == "offscreen" {
+			refs := stringSlice(m["constraint_refs"])
+			if len(refs) == 0 {
+				violations = append(violations, "offscreen story event requires constraint_refs")
+			}
+			for _, ref := range refs {
+				if !knownConstraints[ref] {
+					violations = append(violations, "offscreen story event references unknown hard constraint: "+ref)
+				}
+			}
+		} else if strings.TrimSpace(anchor) == "" || !strings.Contains(body, anchor) {
 			violations = append(violations, "visible story event evidence anchor is absent from chapter")
 		}
 	}
