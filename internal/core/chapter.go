@@ -856,6 +856,10 @@ func (p *Project) validateCanonicalEntityReferences(canonical map[string][]byte,
 			}
 		}
 		if kind == "relationship" {
+			if rawTags, exists := change["tags"]; exists {
+				_, tagProblems := stringArray(rawTags, "relationship tags")
+				violations = append(violations, tagProblems...)
+			}
 			left, right, ok := relationshipCharacterIDs(cleanString(change["relationship_id"]))
 			if !ok {
 				violations = append(violations, "relationship change requires two canonical character ids")
