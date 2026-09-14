@@ -587,7 +587,7 @@ func candidateTargetForPattern(p domain.EvolutionPattern) string {
 	case "review":
 		return "editor checklist"
 	case "prompt":
-		return "assets/prompts/writer.md or book user_rules"
+		return "optional writing references or book user_rules"
 	case "lint":
 		return "ai_voice metrics / commit self-check"
 	default:

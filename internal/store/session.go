@@ -86,8 +86,8 @@ func (s *SessionStore) logEntry(rel string, msg any, fallback *sessionLogMeta) e
 	if err := json.Unmarshal(obj["role"], &role); err != nil || role == "" {
 		return nil
 	}
-	// 旧实现只接受具体的 agentcore.Message。去掉类型依赖后仍用其稳定 JSON
-	// 形状做边界：自定义状态消息即使碰巧有 role，也不应写入会话日志。
+	// 兼容读取历史会话时仍按旧消息的稳定 JSON 形状做边界；
+	// 自定义状态消息即使碰巧有 role，也不应写入会话日志。
 	if _, ok := obj["content"]; !ok {
 		return nil
 	}

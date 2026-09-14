@@ -1,11 +1,5 @@
-// Package errs provides application-level error sentinels for novel-studio.
-// Callers wrap errors with fmt.Errorf("...: %w", errs.ErrXxx) and use
-// errors.Is to detect categories.
-//
-// Provider runtime errors (rate_limit / timeout / stream_idle / network / auth
-// / context_overflow) live in agentcore — use agentcore.ClassifyProvider,
-// agentcore.IsFailoverEligible, agentcore.FailoverReason, and
-// agentcore.IsStreamIdleMessage directly.
+// Package errs contains legacy-compatible error sentinels used by persisted store/domain code.
+// Provider/model runtime classification was retired with the legacy AI runtime.
 package errs
 
 import "errors"

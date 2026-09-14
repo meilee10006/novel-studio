@@ -77,3 +77,46 @@ func TestReleaseChecklistSeparatesAutomatedAndManualAcceptance(t *testing.T) {
 		}
 	}
 }
+
+func TestExpiredRuntimeDocumentationIsRemoved(t *testing.T) {
+	root := filepath.Clean(filepath.Join("..", ".."))
+	retired := []string{
+		"docs/architecture.md", "docs/architecture-overview.html", "docs/engineering-overview.html",
+		"docs/subscription-and-pipeline-setup.md", "docs/writing-review-workflow.md",
+		"docs/context-management.md", "docs/data-lifecycle-and-progression.md",
+		"docs/observability.md", "docs/project-structure.md", "docs/design-audits",
+		"docs/assets", "assets/prompts", "scripts/shared_skill_files.json",
+		"README-20260714.md", "scripts/check_chapter_wordcount.py", "scripts/novel.png", "scripts/sample.gif",
+	}
+	for _, rel := range retired {
+		if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(rel))); !os.IsNotExist(err) {
+			t.Errorf("expired content still exists: %s", rel)
+		}
+	}
+	deconReadme, err := os.ReadFile(filepath.Join(root, "deconstruction-library", "README.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	decon := string(deconReadme)
+	for _, want := range []string{"optional research workspace", "not read by novel-core", "never authoritative"} {
+		if !strings.Contains(decon, want) {
+			t.Errorf("deconstruction README missing %q", want)
+		}
+	}
+
+	assetReadme, err := os.ReadFile(filepath.Join(root, "assets", "README.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(assetReadme)
+	for _, want := range []string{"optional writing references", "not loaded by novel-core", "never authoritative"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("assets README missing %q", want)
+		}
+	}
+	for _, forbidden := range []string{"internal/aigc", "internal/rag", "Coordinator", "Drafter"} {
+		if strings.Contains(text, forbidden) {
+			t.Errorf("assets README still documents retired runtime %q", forbidden)
+		}
+	}
+}
