@@ -20,6 +20,7 @@ This file records final release acceptance status only. It is not a design log o
 | path / symlink / size / JSON-shape security tests | PASS |
 | final-export hard-condition tests | PASS |
 | `verify` recomputes Canon and active receipt chain | PASS |
+| GoReleaser snapshot archives + checksums | PASS |
 | Apache-2.0 `LICENSE` retained | PASS |
 
 Automated fixtures prove Core mechanics only. They do not prove the ordinary ChatGPT product workflow.

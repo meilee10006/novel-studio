@@ -64,3 +64,34 @@ func TestSupportedReleasePathsTargetNovelCore(t *testing.T) {
 		})
 	}
 }
+
+func TestInstallerMatchesGoReleaserMatrix(t *testing.T) {
+	root := filepath.Clean(filepath.Join("..", ".."))
+	goreleaserRaw, err := os.ReadFile(filepath.Join(root, ".goreleaser.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	installerRaw, err := os.ReadFile(filepath.Join(root, "scripts", "install.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	goreleaser := string(goreleaserRaw)
+	installer := string(installerRaw)
+	for _, want := range []string{"- linux", "- darwin", "- amd64", "- arm64"} {
+		if !strings.Contains(goreleaser, want) {
+			t.Errorf("GoReleaser matrix missing %q", want)
+		}
+	}
+	for _, want := range []string{`Darwin) OS="Darwin"`, `Linux)  OS="Linux"`, `x86_64|amd64)  ARCH="x86_64"`, `arm64|aarch64) ARCH="arm64"`} {
+		if !strings.Contains(installer, want) {
+			t.Errorf("installer mapping missing %q", want)
+		}
+	}
+	checklistRaw, err := os.ReadFile(filepath.Join(root, "docs", "provider-free-release-checklist.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(checklistRaw), "GoReleaser snapshot archives + checksums") {
+		t.Error("release checklist does not record the GoReleaser snapshot artifact gate")
+	}
+}
