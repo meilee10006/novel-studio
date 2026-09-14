@@ -8,6 +8,7 @@ type CoreEventEvidence struct {
 }
 
 type CoreKnowledgeFact struct {
+	Statement       string `json:"statement,omitempty"`
 	SourceKind      string `json:"source_kind"`
 	EvidenceEventID string `json:"evidence_event_id"`
 	FromCharacterID string `json:"from_character_id,omitempty"`

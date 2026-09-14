@@ -172,17 +172,27 @@ func compactCanonStateForContext(state domain.CoreCanonState) map[string]any {
 	}
 	longform := map[string]any{}
 
-	knowledge := map[string][]string{}
+	knowledge := map[string][]map[string]string{}
 	for characterID, facts := range state.Longform.Knowledge {
-		ids := make([]string, 0, len(facts))
+		factIDs := make([]string, 0, len(facts))
 		for factID := range facts {
-			if id := compactContextString(factID); id != "" {
-				ids = append(ids, id)
-			}
+			factIDs = append(factIDs, factID)
 		}
-		sort.Strings(ids)
-		if len(ids) > 0 {
-			knowledge[compactContextString(characterID)] = ids
+		sort.Strings(factIDs)
+		items := make([]map[string]string, 0, len(factIDs))
+		for _, factID := range factIDs {
+			id := compactContextString(factID)
+			if id == "" {
+				continue
+			}
+			item := map[string]string{"fact_id": id}
+			if statement := compactContextString(facts[factID].Statement); statement != "" {
+				item["statement"] = statement
+			}
+			items = append(items, item)
+		}
+		if len(items) > 0 {
+			knowledge[compactContextString(characterID)] = items
 		}
 	}
 	if len(knowledge) > 0 {

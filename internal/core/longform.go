@@ -84,6 +84,7 @@ func applyLongformChange(state *domain.CoreLongformState, change map[string]any,
 func applyKnowledgeChange(state *domain.CoreLongformState, change map[string]any, violations *[]string) {
 	characterID := cleanString(change["character_id"])
 	factID := cleanString(change["fact_id"])
+	statement := cleanString(change["statement"])
 	if characterID == "" || factID == "" {
 		*violations = append(*violations, "knowledge change requires character_id and fact_id")
 		return
@@ -120,7 +121,7 @@ func applyKnowledgeChange(state *domain.CoreLongformState, change map[string]any
 		state.Knowledge[characterID] = map[string]domain.CoreKnowledgeFact{}
 	}
 	state.Knowledge[characterID][factID] = domain.CoreKnowledgeFact{
-		SourceKind: kind, EvidenceEventID: eventID, FromCharacterID: cleanString(source["from_character_id"]),
+		Statement: statement, SourceKind: kind, EvidenceEventID: eventID, FromCharacterID: cleanString(source["from_character_id"]),
 	}
 }
 

@@ -2,6 +2,8 @@ package core
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -92,6 +94,33 @@ func TestKnowledgeWithoutSourceIsRewrite(t *testing.T) {
 	settlement := submitAndSettleChapter(t, project, workspace, ready, artifacts)
 	if settlement.Result != "REWRITE" || !containsViolation(settlement.Violations, "knowledge") {
 		t.Fatalf("settlement=%+v", settlement)
+	}
+}
+
+func TestKnowledgeStatementPersistsAndAppearsInNextContext(t *testing.T) {
+	project, _, workspace, ready := acceptedFoundationProject(t)
+	statement := "主角知道门口的灯后藏着钥匙"
+	artifacts := longformChapterArtifacts(1, []map[string]any{{
+		"kind": "knowledge_add", "character_id": "character-000001", "fact_id": "secret-a", "statement": statement,
+		"source": map[string]any{"kind": "observed", "event_ref": "e1"},
+	}})
+	settlement := submitAndSettleChapter(t, project, workspace, ready, artifacts)
+	if settlement.Result != "ACCEPTED" {
+		t.Fatalf("settlement=%+v", settlement)
+	}
+	state := readCanonState(t, project)
+	fact, ok := state.Longform.Knowledge["character-000001"]["secret-a"].(map[string]any)
+	if !ok || fact["statement"] != statement {
+		t.Fatalf("knowledge fact lost statement: %+v", state.Longform.Knowledge["character-000001"]["secret-a"])
+	}
+	next := readReady(t, workspace)
+	contextPath := filepath.Join(workspace, "exchange", "outbox", next.TaskID, next.AttemptID, "canon_excerpt.json")
+	raw, err := os.ReadFile(contextPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw), statement) || !strings.Contains(string(raw), "secret-a") {
+		t.Fatalf("next context lost readable knowledge fact: %s", raw)
 	}
 }
 

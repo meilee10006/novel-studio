@@ -162,7 +162,7 @@ state_delta 支持的 change kind 包括 knowledge_add、resource、location、r
 
 ~~~json
 {"changes":[
-  {"kind":"knowledge_add","character_id":"character-000001","fact_id":"fact-secret","source":{"kind":"observed","event_ref":"e1"}},
+  {"kind":"knowledge_add","character_id":"character-000001","fact_id":"fact-secret","statement":"主角知道密室钥匙在管家手中","source":{"kind":"observed","event_ref":"e1"}},
   {"kind":"resource","resource_id":"money","delta":10,"event_ref":"e1"},
   {"kind":"location","character_id":"character-000001","location_id":"location-000002","start_tick":1,"end_tick":2,"event_ref":"e1"},
   {"kind":"relationship","relationship_id":"character-000001|character-000003","tags":["互相信任"],"event_ref":"e1"},
@@ -172,7 +172,7 @@ state_delta 支持的 change kind 包括 knowledge_add、resource、location、r
 ]}
 ~~~
 
-knowledge_add 的 observed source 要求对应 events.json 事件把该角色列在 observers 中，例如 {"local_id":"e1","evidence_anchor":"...","observers":["character-000001"]}。resource、location、relationship、foreshadow、ending_resolution 需要事件证据。
+knowledge_add 的 fact_id 是稳定标识，statement 是后续新对话可直接理解的事实文本；新增知识应同时提供两者。observed source 要求对应 events.json 事件把该角色列在 observers 中，例如 {"local_id":"e1","evidence_anchor":"...","observers":["character-000001"]}。旧 Canon 中没有 statement 的知识仍按 fact_id 兼容读取。resource、location、relationship、foreshadow、ending_resolution 需要事件证据。
 
 foreshadow 合法推进主路径为 planned → seeded → reinforced → payoff_ready → paid_off → closed，也可在允许阶段 retired；final export 前所有 foreshadow 必须是 closed 或 retired。reader_promise 可用 advanced、deferred、fulfilled、retired；deferred 必须带未来的 deadline_chapter，fulfilled 必须有 event_ref；final export 前必须是 fulfilled 或 retired。最终主线收束还必须提交带本章事件证据的 ending_resolution。
 
