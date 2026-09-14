@@ -75,11 +75,11 @@ Core validates only facts it can mechanically prove, including:
 - locations and travel constraints;
 - resources;
 - relationship/evidence transitions;
-- foreshadow and reader-promise state machines;
+- foreshadow, story-conflict, and reader-promise state machines;
 - rolling arc planning contracts;
 - ending-resolution evidence.
 
-Chapter submissions may introduce new characters, locations, or tracked resources with `state_delta.character_add` / `state_delta.location_add` / `state_delta.resource_add`. Core allocates the permanent entity ID only on ACCEPTED, rewrites same-attempt local character/location/resource references to the canonical ID, records the mapping in the result/receipt, and carries the dynamic entity in Canon for later task contexts and historical revision snapshots. New foreshadows use an attempt-local ID on first creation and receive a permanent foreshadow ID only on ACCEPTED; later lifecycle transitions must reference that canonical ID. Reader promises use the same lifecycle-ID rule: an attempt-local ID on first creation, a permanent ID only on ACCEPTED, then canonical `promise_id` references thereafter.
+Chapter submissions may introduce new characters, locations, or tracked resources with `state_delta.character_add` / `state_delta.location_add` / `state_delta.resource_add`. Core allocates the permanent entity ID only on ACCEPTED, rewrites same-attempt local character/location/resource references to the canonical ID, records the mapping in the result/receipt, and carries the dynamic entity in Canon for later task contexts and historical revision snapshots. New foreshadows use an attempt-local ID on first creation and receive a permanent foreshadow ID only on ACCEPTED; later lifecycle transitions must reference that canonical ID. Story conflicts follow the same permanent-ID rule and store canonical-character participants, readable description, escalation/close conditions, current state, and the latest evidence event. Their deterministic lifecycle is `open → escalated → resolved`, with `open/escalated → retired`; every transition requires accepted event evidence. Reader promises use the same lifecycle-ID rule: an attempt-local ID on first creation, a permanent ID only on ACCEPTED, then canonical `promise_id` references thereafter.
 
 Core does not score prose quality, emotional strength, pacing, commercial potential, or “AI-ness”. Those are creative/editorial decisions for the author and ChatGPT App.
 
@@ -142,6 +142,7 @@ Final export is allowed only when:
 - historical revision/replay is settled;
 - ending resolution has accepted event evidence on the latest accepted chapter;
 - foreshadows are terminal (`closed`/`retired`);
+- story conflicts are terminal (`resolved`/`retired`);
 - reader promises are terminal (`fulfilled`/`retired`);
 - a recomputed Canon root matches the current head.
 

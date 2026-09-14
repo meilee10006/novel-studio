@@ -130,6 +130,11 @@ func endingConstraintProblems(state domain.CoreLongformState, latestChapter int)
 			problems = append(problems, fmt.Sprintf("foreshadow %s is %s", id, item.State))
 		}
 	}
+	for id, item := range state.Conflicts {
+		if item.State != "resolved" && item.State != "retired" {
+			problems = append(problems, fmt.Sprintf("conflict %s is %s", id, item.State))
+		}
+	}
 	for id, item := range state.ReaderPromises {
 		if item.State != "fulfilled" && item.State != "retired" {
 			problems = append(problems, fmt.Sprintf("reader promise %s is %s", id, item.State))

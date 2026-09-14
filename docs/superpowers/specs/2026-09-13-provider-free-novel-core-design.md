@@ -538,7 +538,15 @@ planned → seeded → reinforced → payoff_ready → paid_off → closed
 
 允许明确的 `retired` / `misdirected` 分支，但不得跳过协议未允许的状态边。
 
-冲突必须有稳定 ID、参与方、状态、升级/关闭条件和证据事件，不能无证据自动消失。
+冲突必须有稳定 ID、参与方、可读描述、状态、升级/关闭条件和证据事件，不能无证据自动消失。首发确定性状态机固定为：
+
+```text
+open → escalated → resolved
+  └──────────────→ retired
+escalated ───────→ retired
+```
+
+首次创建冲突必须使用当前 attempt 的 `local_id`，由 Core 在 ACCEPTED 时分配永久 `conflict-*` ID；参与方必须引用已进入 Canon 的人物 ID。每次状态推进都必须引用已验收事件证据。`resolved` / `retired` 为终态；final export 前不能存在 `open` / `escalated` 冲突。Core 不判断文学意义上“是否真的解决”，只验证字段、状态边、参与方和证据。
 
 读者承诺至少允许 `advanced`、`fulfilled`、`deferred`、`retired`。标记 `fulfilled` 时必须引用已经验收的事件证据；Core 只证明“有明确证据引用”，不宣称语义上真的让读者满意。
 

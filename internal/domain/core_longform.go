@@ -38,6 +38,15 @@ type CoreForeshadowState struct {
 	EvidenceEventID string `json:"evidence_event_id,omitempty"`
 }
 
+type CoreConflictState struct {
+	Description         string   `json:"description,omitempty"`
+	Participants        []string `json:"participants,omitempty"`
+	State               string   `json:"state"`
+	EscalationCondition string   `json:"escalation_condition,omitempty"`
+	CloseCondition      string   `json:"close_condition,omitempty"`
+	EvidenceEventID     string   `json:"evidence_event_id,omitempty"`
+}
+
 type CoreReaderPromiseState struct {
 	Statement       string `json:"statement,omitempty"`
 	State           string `json:"state"`
@@ -63,6 +72,7 @@ type CoreLongformState struct {
 	Resources         map[string]int64                        `json:"resources,omitempty"`
 	Relationships     map[string]CoreEvidenceState            `json:"relationships,omitempty"`
 	Foreshadows       map[string]CoreForeshadowState          `json:"foreshadows,omitempty"`
+	Conflicts         map[string]CoreConflictState            `json:"conflicts,omitempty"`
 	ReaderPromises    map[string]CoreReaderPromiseState       `json:"reader_promises,omitempty"`
 	TravelConstraints []CoreTravelConstraint                  `json:"travel_constraints,omitempty"`
 	Ending            *CoreEndingState                        `json:"ending,omitempty"`

@@ -159,7 +159,7 @@ self_review.json：
 
 events.json 的 local_id 只在本次提交中使用。除 kind=offscreen 外，可见事件必须有 evidence_anchor，且 anchor 必须逐字出现在 chapter.md。state_delta 中要引用本章事件时使用 event_ref；Core ACCEPTED 时会把它改成 event_canon_id。没有结构化状态变化时可以使用 {"changes":[]}。
 
-state_delta 支持的 change kind 包括 character_add、location_add、resource_add、knowledge_add、resource、location、relationship、foreshadow、reader_promise、ending_resolution；需要事件证据的 change 使用本章 event_ref。不要自行发明 canonical event ID。常用合法形状如下：
+state_delta 支持的 change kind 包括 character_add、location_add、resource_add、knowledge_add、resource、location、relationship、foreshadow、conflict、reader_promise、ending_resolution；需要事件证据的 change 使用本章 event_ref。不要自行发明 canonical event ID。常用合法形状如下：
 
 ~~~json
 {"changes":[
@@ -171,6 +171,7 @@ state_delta 支持的 change kind 包括 character_add、location_add、resource
   {"kind":"location","character_id":"character-000001","location_id":"location-000002","start_tick":1,"end_tick":2,"event_ref":"e1"},
   {"kind":"relationship","relationship_id":"character-000001|character-000003","tags":["互相信任"],"event_ref":"e1"},
   {"kind":"foreshadow","local_id":"fs-001","description":"红色纸伞与十年前旧案直接相关","state":"seeded","event_ref":"e1"},
+  {"kind":"conflict","local_id":"rivalry","description":"主角与管家争夺同一把钥匙","participants":["character-000001","character-000003"],"state":"open","escalation_condition":"争夺公开化","close_condition":"钥匙归属明确且双方停止争夺","event_ref":"e1"},
   {"kind":"reader_promise","local_id":"promise-001","statement":"读者期待知道红色纸伞真正主人是谁","state":"advanced"},
   {"kind":"ending_resolution","event_ref":"e1"}
 ]}
@@ -178,9 +179,13 @@ state_delta 支持的 change kind 包括 character_add、location_add、resource
 
 character_add 用本次尝试内的 local_id 声明新人物，并用 event_ref 证明其在本章进入故事；location_add 同理声明新地点；resource_add 同理声明需要持续追踪数量的资源。**同一提交**中，chapter_contract.declared_pov、events.json 的 actors/observers、state_delta 的 character_id、relationship_id 两端以及 knowledge source.from_character_id 可以先引用新人物 local_id，location change 的 location_id 可以先引用新地点 local_id，resource change 的 resource_id 可以先引用新资源 local_id；Core ACCEPTED 时会统一改写成 canonical character/location/resource ID。处理结果的 id_mappings 给出 local_id → canon_id；后续任务只能使用 canonical ID，动态人物、地点和资源都会出现在后续 canon_excerpt 的 entities 中。旧 Canon 已存在的历史资源键继续兼容读取，但新提交不要凭空发明新的 resource_id。
 
-knowledge_add 的 fact_id 是稳定标识，statement 是后续新对话可直接理解的事实文本；新增知识应同时提供两者。observed source 要求对应 events.json 事件把该角色列在 observers 中，例如 {"local_id":"e1","evidence_anchor":"...","observers":["character-000001"]}。旧 Canon 中没有 statement 的知识仍按 fact_id 兼容读取。resource、location、relationship、foreshadow、ending_resolution 需要事件证据。
+knowledge_add 的 fact_id 是稳定标识，statement 是后续新对话可直接理解的事实文本；新增知识应同时提供两者。observed source 要求对应 events.json 事件把该角色列在 observers 中，例如 {"local_id":"e1","evidence_anchor":"...","observers":["character-000001"]}。旧 Canon 中没有 statement 的知识仍按 fact_id 兼容读取。resource、location、relationship、foreshadow、conflict、ending_resolution 需要事件证据。
 
-首次创建伏笔使用 local_id，并提供 foreshadow.description 作为后续新对话可读的伏笔语义；只有 ACCEPTED 时 Core 才分配永久 foreshadow ID，并通过 id_mappings 返回，后续状态推进使用 foreshadow_id 字段填写该 canonical ID。后续推进若省略 description，Core 保留前态描述；旧 Canon 已存在的历史伏笔 key 仍兼容继续推进。foreshadow 合法推进主路径为 planned → seeded → reinforced → payoff_ready → paid_off → closed，也可在允许阶段 retired；final export 前所有 foreshadow 必须是 closed 或 retired。首次创建读者承诺使用 local_id，并提供 reader_promise.statement；只有 ACCEPTED 时 Core 才分配永久 reader promise ID，并通过 id_mappings 返回，后续状态推进使用 promise_id 字段填写该 canonical ID。后续推进若省略 statement，Core 保留前态文本；旧 Canon 已存在的历史 promise key 仍兼容继续推进。reader_promise 可用 advanced、deferred、fulfilled、retired；deferred 必须带未来的 deadline_chapter，fulfilled 必须有 event_ref；final export 前必须是 fulfilled 或 retired。最终主线收束还必须提交带本章事件证据的 ending_resolution。
+首次创建伏笔使用 local_id，并提供 foreshadow.description 作为后续新对话可读的伏笔语义；只有 ACCEPTED 时 Core 才分配永久 foreshadow ID，并通过 id_mappings 返回，后续状态推进使用 foreshadow_id 字段填写该 canonical ID。后续推进若省略 description，Core 保留前态描述；旧 Canon 已存在的历史伏笔 key 仍兼容继续推进。foreshadow 合法推进主路径为 planned → seeded → reinforced → payoff_ready → paid_off → closed，也可在允许阶段 retired；final export 前所有 foreshadow 必须是 closed 或 retired。
+
+首次创建冲突使用 local_id，并同时提供 description、participants、state=open、escalation_condition、close_condition 和 event_ref；participants 必须引用 canonical character ID。只有 ACCEPTED 时 Core 才分配永久 conflict ID，并通过 id_mappings 返回；后续状态推进使用 conflict_id 字段填写该 canonical ID。合法主路径为 open → escalated → resolved，也允许 open/escalated → retired；每次推进都必须引用已验收事件证据。final export 前所有 conflict 必须是 resolved 或 retired。Core 只验证状态边、参与方、条件字段和证据引用，不判断文学意义上的冲突是否精彩或是否真的解决。
+
+首次创建读者承诺使用 local_id，并提供 reader_promise.statement；只有 ACCEPTED 时 Core 才分配永久 reader promise ID，并通过 id_mappings 返回，后续状态推进使用 promise_id 字段填写该 canonical ID。后续推进若省略 statement，Core 保留前态文本；旧 Canon 已存在的历史 promise key 仍兼容继续推进。reader_promise 可用 advanced、deferred、fulfilled、retired；deferred 必须带未来的 deadline_chapter，fulfilled 必须有 event_ref；final export 前必须是 fulfilled 或 retired。最终主线收束还必须提交带本章事件证据的 ending_resolution。
 
 如果 task 要求 rolling planning 修复，planning_patch.json 最小形状为：
 

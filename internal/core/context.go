@@ -226,6 +226,11 @@ func compactCanonStateForContext(state domain.CoreCanonState, query string, know
 		longform["reader_promises"] = promises
 	}
 
+	conflicts := compactConflictsForContext(state.Longform, query, knowledgeBudget/2)
+	if len(conflicts) > 0 {
+		longform["conflicts"] = conflicts
+	}
+
 	if len(state.Longform.TravelConstraints) > 0 {
 		travel := make([]map[string]any, 0, len(state.Longform.TravelConstraints))
 		for _, value := range state.Longform.TravelConstraints {
@@ -581,6 +586,100 @@ func compactReaderPromisesForContext(state domain.CoreLongformState, query strin
 		}
 		if candidate.Value.DeadlineChapter > 0 {
 			item["deadline_chapter"] = candidate.Value.DeadlineChapter
+		}
+		selected[id] = item
+		raw, err := json.Marshal(selected)
+		if err != nil || len(raw) > maxBytes {
+			delete(selected, id)
+		}
+	}
+	return selected
+}
+
+type contextConflictCandidate struct {
+	ID       string
+	Value    domain.CoreConflictState
+	Chapter  int
+	Priority int
+}
+
+func compactConflictsForContext(state domain.CoreLongformState, query string, maxBytes int) map[string]map[string]any {
+	if maxBytes <= 0 {
+		return nil
+	}
+	ids := make([]string, 0, len(state.Conflicts))
+	for id, value := range state.Conflicts {
+		if value.State == "open" || value.State == "escalated" {
+			ids = append(ids, id)
+		}
+	}
+	sort.Strings(ids)
+	candidates := make([]contextConflictCandidate, 0, len(ids))
+	byID := map[string]contextConflictCandidate{}
+	docs := make([]retrieval.Document, 0, len(ids))
+	for _, id := range ids {
+		value := state.Conflicts[id]
+		chapter := 0
+		if event, ok := state.Events[value.EvidenceEventID]; ok {
+			chapter = event.Chapter
+		}
+		priority := 1
+		if value.State == "escalated" {
+			priority = 2
+		}
+		candidate := contextConflictCandidate{ID: id, Value: value, Chapter: chapter, Priority: priority}
+		candidates = append(candidates, candidate)
+		byID[id] = candidate
+		docs = append(docs, retrieval.Document{ID: id, Text: id + "\n" + value.Description + "\n" + value.State + "\n" + value.EscalationCondition + "\n" + value.CloseCondition})
+	}
+	ordered := make([]contextConflictCandidate, 0, len(candidates))
+	seen := map[string]bool{}
+	for _, hit := range retrieval.RankKeyword(docs, query, len(docs)) {
+		candidate := byID[hit.ID]
+		ordered = append(ordered, candidate)
+		seen[candidate.ID] = true
+	}
+	remaining := make([]contextConflictCandidate, 0, len(candidates)-len(ordered))
+	for _, candidate := range candidates {
+		if !seen[candidate.ID] {
+			remaining = append(remaining, candidate)
+		}
+	}
+	sort.SliceStable(remaining, func(i, j int) bool {
+		if remaining[i].Priority != remaining[j].Priority {
+			return remaining[i].Priority > remaining[j].Priority
+		}
+		if remaining[i].Chapter != remaining[j].Chapter {
+			return remaining[i].Chapter > remaining[j].Chapter
+		}
+		return remaining[i].ID < remaining[j].ID
+	})
+	ordered = append(ordered, remaining...)
+
+	selected := map[string]map[string]any{}
+	for _, candidate := range ordered {
+		id := compactContextString(candidate.ID)
+		if id == "" {
+			continue
+		}
+		participants := make([]string, 0, len(candidate.Value.Participants))
+		for _, participant := range candidate.Value.Participants {
+			if compact := compactContextString(participant); compact != "" {
+				participants = append(participants, compact)
+			}
+		}
+		item := map[string]any{
+			"state":        compactContextString(candidate.Value.State),
+			"participants": participants,
+		}
+		if description := compactContextString(candidate.Value.Description); description != "" {
+			item["description"] = description
+		}
+		if condition := compactContextString(candidate.Value.EscalationCondition); condition != "" {
+			item["escalation_condition"] = condition
+		}
+		if condition := compactContextString(candidate.Value.CloseCondition); condition != "" {
+			item["close_condition"] = condition
 		}
 		selected[id] = item
 		raw, err := json.Marshal(selected)

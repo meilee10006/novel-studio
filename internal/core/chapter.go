@@ -245,12 +245,15 @@ func validateAndCanonicalizeChapter(files map[string][]byte, state *domain.CoreP
 	rewriteChapterLocalForeshadowRefs(values["state_delta.json"], foreshadowLookup)
 	promiseMappings, promiseLookup, seq := canonicalizeChapterReaderPromises(values["state_delta.json"], seq, &violations)
 	rewriteChapterLocalReaderPromiseRefs(values["state_delta.json"], promiseLookup)
+	conflictMappings, conflictLookup, seq := canonicalizeChapterConflicts(values["state_delta.json"], seq, &violations)
+	rewriteChapterLocalConflictRefs(values["state_delta.json"], conflictLookup)
 	if len(violations) > 0 {
 		return nil, nil, violations, chapter, nil
 	}
 	mappings := append([]IDMapping(nil), entityMappings...)
 	mappings = append(mappings, foreshadowMappings...)
 	mappings = append(mappings, promiseMappings...)
+	mappings = append(mappings, conflictMappings...)
 	lookup := make(map[string]string, len(events))
 	for _, item := range events {
 		m := item.(map[string]any)
@@ -456,6 +459,64 @@ func rewriteChapterLocalReaderPromiseRefs(value any, lookup map[string]string) {
 	}
 }
 
+func canonicalizeChapterConflicts(value any, seq int, violations *[]string) ([]IDMapping, map[string]string, int) {
+	root, _ := value.(map[string]any)
+	changes, _ := root["changes"].([]any)
+	defs := map[string]map[string]any{}
+	for _, raw := range changes {
+		change, _ := raw.(map[string]any)
+		if cleanString(change["kind"]) != "conflict" {
+			continue
+		}
+		localID := cleanString(change["local_id"])
+		if localID == "" {
+			continue
+		}
+		if cleanString(change["description"]) == "" || len(stringSlice(change["participants"])) == 0 || cleanString(change["escalation_condition"]) == "" || cleanString(change["close_condition"]) == "" {
+			*violations = append(*violations, "new conflict requires local_id, description, participants, escalation_condition, and close_condition")
+			continue
+		}
+		if _, exists := defs[localID]; exists {
+			*violations = append(*violations, "duplicate conflict local_id: "+localID)
+			continue
+		}
+		defs[localID] = change
+	}
+	localIDs := make([]string, 0, len(defs))
+	for localID := range defs {
+		localIDs = append(localIDs, localID)
+	}
+	sort.Strings(localIDs)
+	mappings := make([]IDMapping, 0, len(localIDs))
+	lookup := make(map[string]string, len(localIDs))
+	for _, localID := range localIDs {
+		canonID := fmt.Sprintf("conflict-%06d", seq)
+		seq++
+		lookup[localID] = canonID
+		change := defs[localID]
+		change["conflict_id"] = canonID
+		delete(change, "local_id")
+		mappings = append(mappings, IDMapping{EntityType: "conflict", LocalID: localID, CanonID: canonID})
+	}
+	return mappings, lookup, seq
+}
+
+func rewriteChapterLocalConflictRefs(value any, lookup map[string]string) {
+	if len(lookup) == 0 {
+		return
+	}
+	root, _ := value.(map[string]any)
+	for _, raw := range anySlice(root["changes"]) {
+		change, _ := raw.(map[string]any)
+		if cleanString(change["kind"]) != "conflict" {
+			continue
+		}
+		if local := cleanString(change["conflict_id"]); lookup[local] != "" {
+			change["conflict_id"] = lookup[local]
+		}
+	}
+}
+
 func rewriteChapterLocalEntityRefs(values map[string]any, characters, locations, resources map[string]string) {
 	if len(characters) > 0 {
 		if contract, ok := values["chapter_contract.json"].(map[string]any); ok {
@@ -624,9 +685,16 @@ func (p *Project) validateCanonicalEntityReferences(canonical map[string][]byte,
 	for id := range longform.ReaderPromises {
 		readerPromises[id] = true
 	}
+	conflicts := map[string]bool{}
+	for id := range longform.Conflicts {
+		conflicts[id] = true
+	}
 	for _, mapping := range mappings {
 		if mapping.EntityType == "reader_promise" && mapping.CanonID != "" {
 			readerPromises[mapping.CanonID] = true
+		}
+		if mapping.EntityType == "conflict" && mapping.CanonID != "" {
+			conflicts[mapping.CanonID] = true
 		}
 	}
 	for id, entity := range longform.Entities {
@@ -719,6 +787,17 @@ func (p *Project) validateCanonicalEntityReferences(canonical map[string][]byte,
 			promiseID := cleanString(change["promise_id"])
 			if promiseID != "" && !readerPromises[promiseID] {
 				violations = append(violations, "reader promise change references unknown canonical promise: "+promiseID)
+			}
+		}
+		if kind == "conflict" {
+			conflictID := cleanString(change["conflict_id"])
+			if conflictID != "" && !conflicts[conflictID] {
+				violations = append(violations, "conflict change references unknown canonical conflict: "+conflictID)
+			}
+			for _, participant := range stringSlice(change["participants"]) {
+				if !ids[participant] {
+					violations = append(violations, "conflict participant references unknown canonical character: "+participant)
+				}
 			}
 		}
 		if kind == "relationship" {

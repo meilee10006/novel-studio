@@ -495,6 +495,7 @@ func TestEvidenceRequiredForRelationshipForeshadowAndPromise(t *testing.T) {
 	}{
 		{"relationship", map[string]any{"kind": "relationship", "relationship_id": "a:b", "tags": []string{"trust"}}},
 		{"foreshadow", map[string]any{"kind": "foreshadow", "local_id": "f-1", "description": "缺证据伏笔", "state": "seeded"}},
+		{"conflict", map[string]any{"kind": "conflict", "local_id": "c-1", "description": "缺证据冲突", "participants": []string{"character-000001"}, "state": "open", "escalation_condition": "升级", "close_condition": "关闭"}},
 		{"promise", map[string]any{"kind": "reader_promise", "local_id": "p-1", "statement": "缺证据承诺", "state": "fulfilled"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -582,6 +583,9 @@ type CoreCanonStateView struct {
 		Foreshadows map[string]struct {
 			State string `json:"state"`
 		} `json:"foreshadows"`
+		Conflicts map[string]struct {
+			State string `json:"state"`
+		} `json:"conflicts"`
 		ReaderPromises map[string]struct {
 			State string `json:"state"`
 		} `json:"reader_promises"`

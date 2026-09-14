@@ -210,6 +210,7 @@ func TestContextCompilerBoundsActiveObligationsAndKeepsRelevantUrgentItems(t *te
 	const budget = 16 << 10
 	foreshadows := make(map[string]domain.CoreForeshadowState, 240)
 	promises := make(map[string]domain.CoreReaderPromiseState, 240)
+	conflicts := make(map[string]domain.CoreConflictState, 240)
 	events := make(map[string]domain.CoreEventEvidence, 240)
 	for i := 1; i <= 240; i++ {
 		eventID := fmt.Sprintf("story-event-%06d", i)
@@ -230,10 +231,24 @@ func TestContextCompilerBoundsActiveObligationsAndKeepsRelevantUrgentItems(t *te
 			statement = "下一章必须揭示匿名信的寄件人身份"
 		}
 		promises[promiseID] = domain.CoreReaderPromiseState{Statement: statement, State: "deferred", DeadlineChapter: deadline}
+		conflictID := fmt.Sprintf("conflict-%03d", i)
+		conflictDescription := fmt.Sprintf("常规冲突 %03d：%s", i, strings.Repeat("冲突", 40))
+		state := "open"
+		if i%3 == 0 {
+			state = "escalated"
+		}
+		if i == 13 {
+			conflictID = "conflict-red-umbrella"
+			conflictDescription = "红色纸伞引发主角与管家的公开争夺"
+		}
+		conflicts[conflictID] = domain.CoreConflictState{
+			Description: conflictDescription, Participants: []string{"character-000001"}, State: state,
+			EscalationCondition: "争夺公开化", CloseCondition: "争夺结束", EvidenceEventID: eventID,
+		}
 	}
 	canon := domain.CoreCanonState{
 		SchemaVersion: 1, Revision: 600, ProjectID: "book", LatestChapter: 600,
-		Longform: domain.CoreLongformState{Events: events, Foreshadows: foreshadows, ReaderPromises: promises},
+		Longform: domain.CoreLongformState{Events: events, Foreshadows: foreshadows, Conflicts: conflicts, ReaderPromises: promises},
 	}
 	out, err := compileTaskContext(contextCompilerInput{
 		Target: "chapter:601", CanonRoot: "root-600",
@@ -248,7 +263,7 @@ func TestContextCompilerBoundsActiveObligationsAndKeepsRelevantUrgentItems(t *te
 		t.Fatalf("bytes=%d budget=%d", out.TotalBytes, budget)
 	}
 	text := string(out.CanonExcerptJSON)
-	for _, want := range []string{"fs-red-umbrella", "红色纸伞与十年前旧案直接相关", "promise-urgent", "下一章必须揭示匿名信的寄件人身份"} {
+	for _, want := range []string{"fs-red-umbrella", "红色纸伞与十年前旧案直接相关", "promise-urgent", "下一章必须揭示匿名信的寄件人身份", "conflict-red-umbrella", "红色纸伞引发主角与管家的公开争夺"} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("priority obligation missing %q: %s", want, text)
 		}

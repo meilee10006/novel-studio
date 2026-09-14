@@ -13,7 +13,7 @@
 
 ## 为什么这样设计
 
-聊天很适合创作，却不适合作为百万字连载的唯一数据库。这个 fork 把“真相”从聊天上下文移到本地可验证文件：人物知识、事件证据、地点、资源、关系、伏笔、读者承诺、滚动规划、章节版本根与回执链都由 `novel-core` 维护。
+聊天很适合创作，却不适合作为百万字连载的唯一数据库。这个 fork 把“真相”从聊天上下文移到本地可验证文件：人物知识、事件证据、地点、资源、关系、伏笔、冲突、读者承诺、滚动规划、章节版本根与回执链都由 `novel-core` 维护。
 
 因此即使换 ChatGPT 对话、重启 Core、Drive 发生延迟，当前活动状态仍可从本地权威文件恢复；历史章节修改则进入显式 revision/replay，而不是偷偷覆盖后文。
 
@@ -107,7 +107,7 @@ exchange/control/inbox/<message-id>/
 
 control 的 `base_canon_root` 必须从当前 `exchange/STATUS.json.canon_root` 复制；历史 revision 的 READY 可能绑定较早父 root，不能拿它替代当前权威 root。
 
-章节中首次正式出现的新人物/地点/资源可分别通过 `state_delta.character_add` / `state_delta.location_add` / `state_delta.resource_add` 使用本次 attempt 的 `local_id` 声明；同一提交可引用这些 local ID。只有 ACCEPTED 后 Core 才分配永久 character/location/resource ID，并在 result 的 `id_mappings` 中返回；后续章节必须使用 canonical ID。 首次创建伏笔同样使用 `state_delta.foreshadow.local_id`；ACCEPTED 后从 `id_mappings` 取得永久 foreshadow ID，后续生命周期推进只使用该 canonical ID。 首次创建读者承诺也使用 `state_delta.reader_promise.local_id`；ACCEPTED 后取得永久 reader-promise ID，后续推进只使用 canonical `promise_id`。
+章节中首次正式出现的新人物/地点/资源可分别通过 `state_delta.character_add` / `state_delta.location_add` / `state_delta.resource_add` 使用本次 attempt 的 `local_id` 声明；同一提交可引用这些 local ID。只有 ACCEPTED 后 Core 才分配永久 character/location/resource ID，并在 result 的 `id_mappings` 中返回；后续章节必须使用 canonical ID。首次创建伏笔同样使用 `state_delta.foreshadow.local_id`；ACCEPTED 后从 `id_mappings` 取得永久 foreshadow ID，后续生命周期推进只使用该 canonical ID。首次创建故事冲突使用 `state_delta.conflict.local_id`，同时声明 canonical character `participants`、升级/关闭条件与事件证据；ACCEPTED 后取得永久 `conflict-*` ID，后续只用 `conflict_id`，合法主路径为 `open → escalated → resolved`，也可从 `open/escalated` 进入 `retired`。首次创建读者承诺也使用 `state_delta.reader_promise.local_id`；ACCEPTED 后取得永久 reader-promise ID，后续推进只使用 canonical `promise_id`。
 
 首发支持：
 
@@ -145,7 +145,7 @@ novel-core migrate \
 
 ## 最终导出
 
-只有满足确定性结局条件、没有活动 replay、没有未终态伏笔/读者承诺时才能导出。可先用 `novel-core status` 或 Drive `exchange/STATUS.json` 查看 `export_ready` 与完整 `export_problems`；最终导出仍会执行更严格的 Canon 完整性校验：
+只有满足确定性结局条件、没有活动 replay、没有未终态伏笔/冲突/读者承诺时才能导出；冲突必须是 `resolved` 或 `retired`。可先用 `novel-core status` 或 Drive `exchange/STATUS.json` 查看 `export_ready` 与完整 `export_problems`；最终导出仍会执行更严格的 Canon 完整性校验：
 
 ```bash
 novel-core export \

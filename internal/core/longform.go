@@ -81,6 +81,8 @@ func applyLongformChange(state *domain.CoreLongformState, change map[string]any,
 		applyRelationshipChange(state, change, violations)
 	case "foreshadow":
 		applyForeshadowChange(state, change, violations)
+	case "conflict":
+		applyConflictChange(state, change, violations)
 	case "reader_promise":
 		applyReaderPromiseChange(state, change, chapter, violations)
 	case "ending_resolution":
@@ -236,6 +238,64 @@ func applyForeshadowChange(state *domain.CoreLongformState, change map[string]an
 	}
 	state.Foreshadows[id] = domain.CoreForeshadowState{Description: description, State: nextState, EvidenceEventID: cleanString(change["event_canon_id"])}
 }
+func applyConflictChange(state *domain.CoreLongformState, change map[string]any, violations *[]string) {
+	id := cleanString(change["conflict_id"])
+	nextState := cleanString(change["state"])
+	if id == "" || nextState == "" {
+		*violations = append(*violations, "conflict change requires conflict_id and state")
+		return
+	}
+	if !requireEvidence(state, change, "conflict", violations) {
+		return
+	}
+	previous, exists := state.Conflicts[id]
+	if !exists {
+		if nextState != "open" {
+			*violations = append(*violations, fmt.Sprintf("illegal conflict transition %q -> %q", "", nextState))
+			return
+		}
+		description := cleanString(change["description"])
+		participants := stringSlice(change["participants"])
+		escalation := cleanString(change["escalation_condition"])
+		closeCondition := cleanString(change["close_condition"])
+		if description == "" || len(participants) == 0 || escalation == "" || closeCondition == "" {
+			*violations = append(*violations, "new conflict requires description, participants, escalation_condition, and close_condition")
+			return
+		}
+		sort.Strings(participants)
+		state.Conflicts[id] = domain.CoreConflictState{
+			Description: description, Participants: participants, State: nextState,
+			EscalationCondition: escalation, CloseCondition: closeCondition,
+			EvidenceEventID: cleanString(change["event_canon_id"]),
+		}
+		return
+	}
+	if !validConflictTransition(previous.State, nextState) {
+		*violations = append(*violations, fmt.Sprintf("illegal conflict transition %q -> %q", previous.State, nextState))
+		return
+	}
+	if participants := stringSlice(change["participants"]); len(participants) > 0 {
+		sort.Strings(participants)
+		if strings.Join(participants, "\x00") != strings.Join(previous.Participants, "\x00") {
+			*violations = append(*violations, "conflict participants are immutable after creation")
+			return
+		}
+	}
+	state.Conflicts[id] = domain.CoreConflictState{
+		Description: previous.Description, Participants: append([]string(nil), previous.Participants...), State: nextState,
+		EscalationCondition: previous.EscalationCondition, CloseCondition: previous.CloseCondition,
+		EvidenceEventID: cleanString(change["event_canon_id"]),
+	}
+}
+
+func validConflictTransition(prev, next string) bool {
+	allowed := map[string]map[string]bool{
+		"open":      {"escalated": true, "retired": true},
+		"escalated": {"resolved": true, "retired": true},
+	}
+	return allowed[prev][next]
+}
+
 func applyReaderPromiseChange(state *domain.CoreLongformState, change map[string]any, chapter int, violations *[]string) {
 	id := cleanString(change["promise_id"])
 	nextState := cleanString(change["state"])
@@ -366,6 +426,9 @@ func ensureLongformMaps(state *domain.CoreLongformState) {
 	}
 	if state.Foreshadows == nil {
 		state.Foreshadows = map[string]domain.CoreForeshadowState{}
+	}
+	if state.Conflicts == nil {
+		state.Conflicts = map[string]domain.CoreConflictState{}
 	}
 	if state.ReaderPromises == nil {
 		state.ReaderPromises = map[string]domain.CoreReaderPromiseState{}
