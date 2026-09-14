@@ -26,6 +26,11 @@ type ControlResult struct {
 }
 
 func (p *Project) ScanControlMessage(messageID string) (ControlStatus, error) {
+	release, err := p.acquireProjectWriteLock()
+	if err != nil {
+		return ControlStatus{}, err
+	}
+	defer release()
 	if !controlMessageIDPattern.MatchString(messageID) {
 		return ControlStatus{}, fmt.Errorf("invalid control message id %q", messageID)
 	}
@@ -143,6 +148,11 @@ func (p *Project) invalidateControl(record *domain.CoreControlRecord, problem st
 }
 
 func (p *Project) ProcessControlMessage(messageID string) (ControlResult, error) {
+	release, err := p.acquireProjectWriteLock()
+	if err != nil {
+		return ControlResult{}, err
+	}
+	defer release()
 	project, state, err := p.activeProduction()
 	if err != nil {
 		return ControlResult{}, err
