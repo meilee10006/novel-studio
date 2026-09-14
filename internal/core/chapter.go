@@ -384,6 +384,19 @@ func (p *Project) validateCanonicalEntityReferences(canonical map[string][]byte)
 				violations = append(violations, "location change references unknown canonical location: "+locationID)
 			}
 		}
+		if kind == "relationship" {
+			left, right, ok := relationshipCharacterIDs(cleanString(change["relationship_id"]))
+			if !ok {
+				violations = append(violations, "relationship change requires two canonical character ids")
+			} else {
+				if !ids[left] {
+					violations = append(violations, "relationship change references unknown canonical character: "+left)
+				}
+				if !ids[right] {
+					violations = append(violations, "relationship change references unknown canonical character: "+right)
+				}
+			}
+		}
 		if source, ok := change["source"].(map[string]any); ok {
 			if from := cleanString(source["from_character_id"]); from != "" && !ids[from] {
 				violations = append(violations, "knowledge source references unknown canonical character: "+from)
@@ -392,6 +405,21 @@ func (p *Project) validateCanonicalEntityReferences(canonical map[string][]byte)
 	}
 	sort.Strings(violations)
 	return violations, nil
+}
+
+func relationshipCharacterIDs(id string) (string, string, bool) {
+	for _, sep := range []string{"|", ":"} {
+		if strings.Count(id, sep) != 1 {
+			continue
+		}
+		parts := strings.SplitN(id, sep, 2)
+		left := strings.TrimSpace(parts[0])
+		right := strings.TrimSpace(parts[1])
+		if left != "" && right != "" {
+			return left, right, true
+		}
+	}
+	return "", "", false
 }
 
 func anySlice(value any) []any {

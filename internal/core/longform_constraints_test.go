@@ -134,14 +134,57 @@ func TestResourceCannotGoNegative(t *testing.T) {
 		t.Fatalf("settlement=%+v", settlement)
 	}
 }
+
+func TestRelationshipRejectsUnknownCanonicalCharacter(t *testing.T) {
+	project, workspace, firstID, secondID, _ := projectWithTwoCharacters(t)
+	ready := readReady(t, workspace)
+	got := submitAndSettleChapter(t, project, workspace, ready, longformChapterArtifacts(1, []map[string]any{{
+		"kind": "relationship", "relationship_id": firstID + "|character-999999", "tags": []string{"distrust"}, "event_ref": "e1",
+	}}))
+	if got.Result != "REWRITE" || !containsViolation(got.Violations, "relationship") {
+		t.Fatalf("unknown relationship endpoint settlement=%+v", got)
+	}
+
+	ready = readReady(t, workspace)
+	got = submitAndSettleChapter(t, project, workspace, ready, longformChapterArtifacts(1, []map[string]any{{
+		"kind": "relationship", "relationship_id": firstID + "|" + secondID, "tags": []string{"distrust"}, "event_ref": "e1",
+	}}))
+	if got.Result != "ACCEPTED" {
+		t.Fatalf("canonical relationship settlement=%+v", got)
+	}
+}
+
+func projectWithTwoCharacters(t *testing.T) (*Project, string, string, string, string) {
+	t.Helper()
+	project, _, workspace := newCapabilityPassedProject(t)
+	if err := project.Reconcile(); err != nil {
+		t.Fatal(err)
+	}
+	ready := readReady(t, workspace)
+	artifacts := validFoundationArtifacts()
+	artifacts["characters.json"] = []byte(`{"characters":[{"local_id":"first","name":"甲"},{"local_id":"second","name":"乙"}]}`)
+	artifacts["foundation.json"] = []byte(`{"title":"测试书","protagonist":{"entity_type":"character","local_ref":"first"},"opening_location":{"entity_type":"location","local_ref":"same"}}`)
+	result, err := project.SettleFoundation(FoundationSubmission{Manifest: manifestForReady(ready, artifacts), Artifacts: artifacts})
+	if err != nil || result.Result != "ACCEPTED" {
+		t.Fatalf("foundation=%+v err=%v", result, err)
+	}
+	firstID := mappingID(result.IDMappings, "character", "first")
+	secondID := mappingID(result.IDMappings, "character", "second")
+	locationID := mappingID(result.IDMappings, "location", "same")
+	if firstID == "" || secondID == "" || locationID == "" {
+		t.Fatalf("mappings=%+v", result.IDMappings)
+	}
+	return project, workspace, firstID, secondID, locationID
+}
+
 func TestEvidenceBackedLongformChangesPersist(t *testing.T) {
-	project, workspace, characterID, locationID, _ := projectWithTravelConstraint(t, 0)
+	project, workspace, characterID, secondID, locationID := projectWithTwoCharacters(t)
 	ready := readReady(t, workspace)
 	changes := []map[string]any{
 		{"kind": "knowledge_add", "character_id": characterID, "fact_id": "secret-a", "source": map[string]any{"kind": "observed", "event_ref": "e1"}},
 		{"kind": "resource", "resource_id": "cash", "delta": 3, "event_ref": "e1"},
 		{"kind": "location", "character_id": characterID, "location_id": locationID, "start_tick": 0, "end_tick": 10, "event_ref": "e1"},
-		{"kind": "relationship", "relationship_id": "character-000001:character-000002", "tags": []string{"distrust"}, "event_ref": "e1"},
+		{"kind": "relationship", "relationship_id": characterID + "|" + secondID, "tags": []string{"distrust"}, "event_ref": "e1"},
 		{"kind": "foreshadow", "foreshadow_id": "f-1", "state": "seeded", "event_ref": "e1"},
 		{"kind": "reader_promise", "promise_id": "p-1", "state": "fulfilled", "event_ref": "e1"},
 	}
@@ -222,8 +265,21 @@ func TestEvidenceRequiredForRelationshipForeshadowAndPromise(t *testing.T) {
 		{"promise", map[string]any{"kind": "reader_promise", "promise_id": "p-1", "state": "fulfilled"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			project, _, workspace, ready := acceptedFoundationProject(t)
-			artifacts := longformChapterArtifacts(1, []map[string]any{tc.change})
+			change := make(map[string]any, len(tc.change))
+			for key, value := range tc.change {
+				change[key] = value
+			}
+			var project *Project
+			var workspace string
+			if tc.name == "relationship" {
+				var firstID, secondID string
+				project, workspace, firstID, secondID, _ = projectWithTwoCharacters(t)
+				change["relationship_id"] = firstID + "|" + secondID
+			} else {
+				project, _, workspace, _ = acceptedFoundationProject(t)
+			}
+			ready := readReady(t, workspace)
+			artifacts := longformChapterArtifacts(1, []map[string]any{change})
 			got := submitAndSettleChapter(t, project, workspace, ready, artifacts)
 			if got.Result != "REWRITE" || !containsViolation(got.Violations, "evidence") {
 				t.Fatalf("settlement=%+v", got)
