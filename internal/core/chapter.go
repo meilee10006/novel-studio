@@ -516,7 +516,12 @@ func canonicalizeChapterConflicts(value any, seq int, violations *[]string) ([]I
 		if localID == "" {
 			continue
 		}
-		if cleanString(change["description"]) == "" || len(stringSlice(change["participants"])) == 0 || cleanString(change["escalation_condition"]) == "" || cleanString(change["close_condition"]) == "" {
+		participants, participantProblems := stringArray(change["participants"], "conflict participants")
+		if len(participantProblems) > 0 {
+			*violations = append(*violations, participantProblems...)
+			continue
+		}
+		if cleanString(change["description"]) == "" || len(participants) == 0 || cleanString(change["escalation_condition"]) == "" || cleanString(change["close_condition"]) == "" {
 			*violations = append(*violations, "new conflict requires local_id, description, participants, escalation_condition, and close_condition")
 			continue
 		}
@@ -838,7 +843,13 @@ func (p *Project) validateCanonicalEntityReferences(canonical map[string][]byte,
 			if conflictID != "" && !conflicts[conflictID] {
 				violations = append(violations, "conflict change references unknown canonical conflict: "+conflictID)
 			}
-			for _, participant := range stringSlice(change["participants"]) {
+			var participants []string
+			if rawParticipants, exists := change["participants"]; exists {
+				var participantProblems []string
+				participants, participantProblems = stringArray(rawParticipants, "conflict participants")
+				violations = append(violations, participantProblems...)
+			}
+			for _, participant := range participants {
 				if !ids[participant] {
 					violations = append(violations, "conflict participant references unknown canonical character: "+participant)
 				}
