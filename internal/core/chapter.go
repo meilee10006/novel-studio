@@ -290,6 +290,8 @@ func validateAndCanonicalizeChapter(files map[string][]byte, state *domain.CoreP
 			if !exists || decision == nil {
 				violations = append(violations, "self_review.ok=false requires author_decision_required")
 			}
+		} else if decision, exists := review["author_decision_required"]; exists && decision != nil {
+			violations = append(violations, "self_review.ok=true cannot include author_decision_required")
 		}
 	}
 	if len(violations) > 0 {
