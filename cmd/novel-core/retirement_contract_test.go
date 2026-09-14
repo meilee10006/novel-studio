@@ -136,3 +136,44 @@ func TestProviderFreeStoreContainsOnlyCorePersistence(t *testing.T) {
 		}
 	}
 }
+
+func TestProviderFreeDomainContainsOnlyCoreTypes(t *testing.T) {
+	root := filepath.Clean(filepath.Join("..", ".."))
+	entries, err := os.ReadDir(filepath.Join(root, "internal", "domain"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	allowed := map[string]bool{
+		"core_commit.go":     true,
+		"core_control.go":    true,
+		"core_longform.go":   true,
+		"core_production.go": true,
+		"core_project.go":    true,
+		"core_submission.go": true,
+	}
+	for _, entry := range entries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".go" {
+			continue
+		}
+		if !allowed[entry.Name()] {
+			t.Errorf("legacy domain file remains: %s", entry.Name())
+		}
+	}
+	for _, dir := range []string{"internal/testutil", "internal/rules", "internal/stylestat"} {
+		if _, err := os.Stat(filepath.Join(root, dir)); err == nil {
+			t.Errorf("legacy domain-support package remains: %s", dir)
+		} else if !os.IsNotExist(err) {
+			t.Fatal(err)
+		}
+	}
+	projectRaw, err := os.ReadFile(filepath.Join(root, "internal", "core", "project.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	projectText := string(projectRaw)
+	for _, forbidden := range []string{"NovelName", "domain.Phase", "CurrentChapter", "TotalChapters", "CompletedChapters"} {
+		if strings.Contains(projectText, forbidden) {
+			t.Errorf("legacy progress status surface remains: %q", forbidden)
+		}
+	}
+}

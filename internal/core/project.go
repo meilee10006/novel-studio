@@ -22,23 +22,18 @@ type Project struct {
 }
 
 type Status struct {
-	Root              string       `json:"root"`
-	Initialized       bool         `json:"initialized"`
-	NovelName         string       `json:"novel_name,omitempty"`
-	Phase             domain.Phase `json:"phase,omitempty"`
-	CurrentChapter    int          `json:"current_chapter,omitempty"`
-	TotalChapters     int          `json:"total_chapters,omitempty"`
-	CompletedChapters int          `json:"completed_chapters,omitempty"`
-	Warnings          []string     `json:"warnings,omitempty"`
-	ProjectID         string       `json:"project_id,omitempty"`
-	ProtocolVersion   string       `json:"protocol_version,omitempty"`
-	Capability        string       `json:"capability,omitempty"`
-	CapabilityProblem string       `json:"capability_problem,omitempty"`
-	CanonRoot         string       `json:"canon_root,omitempty"`
-	ActiveTaskKind    string       `json:"active_task_kind,omitempty"`
-	ActiveTarget      string       `json:"active_target,omitempty"`
-	ActiveAttemptID   string       `json:"active_attempt_id,omitempty"`
-	BlockID           string       `json:"block_id,omitempty"`
+	Root              string   `json:"root"`
+	Initialized       bool     `json:"initialized"`
+	Warnings          []string `json:"warnings,omitempty"`
+	ProjectID         string   `json:"project_id,omitempty"`
+	ProtocolVersion   string   `json:"protocol_version,omitempty"`
+	Capability        string   `json:"capability,omitempty"`
+	CapabilityProblem string   `json:"capability_problem,omitempty"`
+	CanonRoot         string   `json:"canon_root,omitempty"`
+	ActiveTaskKind    string   `json:"active_task_kind,omitempty"`
+	ActiveTarget      string   `json:"active_target,omitempty"`
+	ActiveAttemptID   string   `json:"active_attempt_id,omitempty"`
+	BlockID           string   `json:"block_id,omitempty"`
 }
 
 type Verification struct {

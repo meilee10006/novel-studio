@@ -41,7 +41,7 @@ func TestProviderFreeStatusIgnoresLegacyProgress(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if status.Initialized || status.NovelName != "" || status.TotalChapters != 0 || status.CompletedChapters != 0 {
+	if status.Initialized {
 		t.Fatalf("legacy progress leaked into provider-free status: %+v", status)
 	}
 	verification, err := project.Verify()

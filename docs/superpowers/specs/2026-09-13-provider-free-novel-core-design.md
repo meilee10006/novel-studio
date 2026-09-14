@@ -156,7 +156,7 @@ cmd/novel-core
     ↓
 internal/core
     ↓
-internal/protocol   internal/domain   internal/store   internal/rules   internal/retrieval
+internal/protocol   internal/domain   internal/store   internal/retrieval
 ```
 
 `internal/core` 不得依赖 `internal/agents`、`bootstrap.ModelSet`、`agentcore`、`internal/llmcodex` 或任何模型提供方代码。
