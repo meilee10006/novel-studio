@@ -263,7 +263,7 @@ func blockedChapterProject(t *testing.T) (*Project, string, string, readyView, s
 	project, local, workspace, ready := acceptedFoundationProject(t)
 	artifacts := validChapterArtifacts(1)
 	artifacts["chapter_contract.json"] = []byte(`{"chapter":1,"declared_pov":"character-000001","hard_constraints":[{"id":"hc-a"}]}`)
-	artifacts["self_review.json"] = []byte(`{"author_decision_required":{"constraint_refs":["hc-a"],"conflict":"两个目标不能同时满足","options":["保留 A","保留 B"]}}`)
+	artifacts["self_review.json"] = []byte(`{"ok":false,"author_decision_required":{"constraint_refs":["hc-a"],"conflict":"两个目标不能同时满足","options":["保留 A","保留 B"]}}`)
 	writeSubmission(t, workspace, ready, artifacts, false)
 	project.submissionQuietPeriod = 0
 	_, _ = project.ScanActiveSubmission()

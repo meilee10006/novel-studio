@@ -276,8 +276,21 @@ func validateAndCanonicalizeChapter(files map[string][]byte, state *domain.CoreP
 	} else if _, ok := delta["changes"].([]any); !ok {
 		violations = append(violations, "state_delta.json.changes must be an array")
 	}
-	if _, ok := values["self_review.json"].(map[string]any); !ok {
+	review, ok := values["self_review.json"].(map[string]any)
+	if !ok {
 		violations = append(violations, "self_review.json must be an object")
+	} else {
+		rawOK, exists := review["ok"]
+		if !exists {
+			violations = append(violations, "self_review.ok is required")
+		} else if reviewOK, ok := rawOK.(bool); !ok {
+			violations = append(violations, "self_review.ok must be boolean")
+		} else if !reviewOK {
+			decision, exists := review["author_decision_required"]
+			if !exists || decision == nil {
+				violations = append(violations, "self_review.ok=false requires author_decision_required")
+			}
+		}
 	}
 	if len(violations) > 0 {
 		return nil, nil, violations, chapter, nil

@@ -104,7 +104,7 @@ func TestAuthorDecisionRequiredBlocksWithoutCanonAdvance(t *testing.T) {
 func TestUnknownHardConstraintReferenceIsRewriteNotBlocked(t *testing.T) {
 	project, _, workspace, ready := acceptedFoundationProject(t)
 	artifacts := blockedChapterArtifacts()
-	artifacts["self_review.json"] = []byte(`{"author_decision_required":{"constraint_refs":["missing"],"conflict":"二选一","options":["A","B"]}}`)
+	artifacts["self_review.json"] = []byte(`{"ok":false,"author_decision_required":{"constraint_refs":["missing"],"conflict":"二选一","options":["A","B"]}}`)
 	writeSubmission(t, workspace, ready, artifacts, false)
 	project.submissionQuietPeriod = 0
 	_, _ = project.ScanActiveSubmission()
@@ -126,6 +126,7 @@ func blockedChapterArtifacts() map[string][]byte {
 		"hard_constraints":[{"id":"hc-choice"}]
 	}`)
 	artifacts["self_review.json"] = []byte(`{
+		"ok":false,
 		"author_decision_required":{
 			"constraint_refs":["hc-choice"],
 			"conflict":"两个硬约束无法同时满足",
