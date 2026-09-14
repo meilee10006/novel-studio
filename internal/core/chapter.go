@@ -199,10 +199,28 @@ func validateAndCanonicalizeChapter(files map[string][]byte, state *domain.CoreP
 		if strings.TrimSpace(pov) == "" {
 			violations = append(violations, "chapter_contract.declared_pov is required")
 		}
-		for _, raw := range anySlice(contract["hard_constraints"]) {
-			item, _ := raw.(map[string]any)
-			if id := cleanString(item["id"]); id != "" {
-				knownConstraints[id] = true
+		if rawConstraints, exists := contract["hard_constraints"]; exists {
+			items, ok := rawConstraints.([]any)
+			if !ok {
+				violations = append(violations, "chapter_contract.hard_constraints must be an array")
+			} else {
+				for _, raw := range items {
+					item, ok := raw.(map[string]any)
+					if !ok {
+						violations = append(violations, "chapter_contract.hard_constraints item must be an object")
+						continue
+					}
+					id := cleanString(item["id"])
+					if id == "" {
+						violations = append(violations, "chapter_contract.hard_constraints id is required")
+						continue
+					}
+					if knownConstraints[id] {
+						violations = append(violations, "duplicate hard constraint id: "+id)
+						continue
+					}
+					knownConstraints[id] = true
+				}
 			}
 		}
 	}

@@ -139,6 +139,8 @@ chapter_contract.json：
 {"chapter":1,"declared_pov":"character-000001"}
 ~~~
 
+hard_constraints 可省略；hard_constraints 一旦出现必须是数组，每一项必须是对象并包含唯一非空 id。offscreen 事件和 author_decision_required.constraint_refs 只能引用这些 id，不要重复、留空或自行引用不存在的约束。
+
 events.json：
 
 ~~~json
