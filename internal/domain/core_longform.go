@@ -41,6 +41,10 @@ type CoreTravelConstraint struct {
 	MinTicks       int64  `json:"min_ticks"`
 }
 
+type CoreEndingState struct {
+	MainResolutionEventID string `json:"main_resolution_event_id"`
+}
+
 type CoreLongformState struct {
 	Events            map[string]CoreEventEvidence            `json:"events,omitempty"`
 	Knowledge         map[string]map[string]CoreKnowledgeFact `json:"knowledge,omitempty"`
@@ -50,4 +54,5 @@ type CoreLongformState struct {
 	Foreshadows       map[string]CoreForeshadowState          `json:"foreshadows,omitempty"`
 	ReaderPromises    map[string]CoreReaderPromiseState       `json:"reader_promises,omitempty"`
 	TravelConstraints []CoreTravelConstraint                  `json:"travel_constraints,omitempty"`
+	Ending            *CoreEndingState                        `json:"ending,omitempty"`
 }

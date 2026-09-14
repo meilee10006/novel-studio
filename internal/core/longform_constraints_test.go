@@ -6,6 +6,17 @@ import (
 	"testing"
 )
 
+func TestEndingResolutionRequiresAcceptedEvent(t *testing.T) {
+	project, _, workspace, ready := acceptedFoundationProject(t)
+	artifacts := longformChapterArtifacts(1, []map[string]any{{
+		"kind": "ending_resolution",
+	}})
+	settlement := submitAndSettleChapter(t, project, workspace, ready, artifacts)
+	if settlement.Result != "REWRITE" || !containsViolation(settlement.Violations, "ending") {
+		t.Fatalf("settlement=%+v", settlement)
+	}
+}
+
 func TestKnowledgeWithoutSourceIsRewrite(t *testing.T) {
 	project, _, workspace, ready := acceptedFoundationProject(t)
 	artifacts := longformChapterArtifacts(1, []map[string]any{{

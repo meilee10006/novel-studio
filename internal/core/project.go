@@ -112,6 +112,11 @@ func (p *Project) Status() (Status, error) {
 }
 
 func (p *Project) Verify() (Verification, error) {
+	release, err := p.acquireProjectReadLock()
+	if err != nil {
+		return Verification{}, err
+	}
+	defer release()
 	status, err := p.Status()
 	if err != nil {
 		return Verification{}, err
@@ -120,7 +125,64 @@ func (p *Project) Verify() (Verification, error) {
 	if status.Capability == "invalid" {
 		problems = append(problems, "capability check: "+status.CapabilityProblem)
 	}
+	head, err := p.store.LoadCoreCanonHead()
+	if err != nil {
+		problems = append(problems, "canon head: "+err.Error())
+	} else if head != nil {
+		recomputed, err := p.RecomputeCanonRoot()
+		if err != nil {
+			problems = append(problems, "canon root: "+err.Error())
+		} else if recomputed != head.Root {
+			problems = append(problems, fmt.Sprintf("canon root mismatch: recomputed %s, recorded %s", recomputed, head.Root))
+		}
+		problems = append(problems, p.verifyReceiptChain(head)...)
+	}
 	return Verification{Root: p.root, OK: len(problems) == 0, Problems: problems}, nil
+}
+
+func (p *Project) verifyReceiptChain(head *domain.CoreCanonHead) []string {
+	var problems []string
+	production, err := p.store.LoadCoreProductionState()
+	if err != nil {
+		problems = append(problems, "receipt chain production state: "+err.Error())
+	} else if production == nil {
+		problems = append(problems, "receipt chain production state is missing")
+	} else if production.CanonRoot != head.Root {
+		problems = append(problems, fmt.Sprintf("receipt chain active root mismatch: production %s, head %s", production.CanonRoot, head.Root))
+	}
+	receipts, err := p.store.ListCoreReceipts()
+	if err != nil {
+		return append(problems, "receipt chain: "+err.Error())
+	}
+	byRoot := map[string][]domain.CoreReceipt{}
+	for _, receipt := range receipts {
+		if receipt.Result != "ACCEPTED" || receipt.NewRoot == "" {
+			continue
+		}
+		byRoot[receipt.NewRoot] = append(byRoot[receipt.NewRoot], receipt)
+	}
+	seen := map[string]bool{}
+	current := head.Root
+	first := true
+	for current != "" {
+		if seen[current] {
+			problems = append(problems, "receipt chain contains a cycle at "+current)
+			break
+		}
+		seen[current] = true
+		candidates := byRoot[current]
+		if len(candidates) != 1 {
+			problems = append(problems, fmt.Sprintf("receipt chain root %s has %d accepted receipts", current, len(candidates)))
+			break
+		}
+		receipt := candidates[0]
+		if first && receipt.PreviousRoot != head.ParentRoot {
+			problems = append(problems, fmt.Sprintf("receipt chain head parent mismatch: receipt %s, head %s", receipt.PreviousRoot, head.ParentRoot))
+		}
+		current = receipt.PreviousRoot
+		first = false
+	}
+	return problems
 }
 
 type capabilityAck struct {

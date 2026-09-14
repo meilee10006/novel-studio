@@ -77,6 +77,8 @@ func applyLongformChange(state *domain.CoreLongformState, change map[string]any,
 		applyForeshadowChange(state, change, violations)
 	case "reader_promise":
 		applyReaderPromiseChange(state, change, chapter, violations)
+	case "ending_resolution":
+		applyEndingResolutionChange(state, change, violations)
 	}
 }
 func applyKnowledgeChange(state *domain.CoreLongformState, change map[string]any, violations *[]string) {
@@ -226,6 +228,13 @@ func applyReaderPromiseChange(state *domain.CoreLongformState, change map[string
 		deadline = int(v)
 	}
 	state.ReaderPromises[id] = domain.CoreReaderPromiseState{State: nextState, EvidenceEventID: evidenceID, DeadlineChapter: deadline}
+}
+
+func applyEndingResolutionChange(state *domain.CoreLongformState, change map[string]any, violations *[]string) {
+	if !requireEvidence(state, change, "ending resolution", violations) {
+		return
+	}
+	state.Ending = &domain.CoreEndingState{MainResolutionEventID: cleanString(change["event_canon_id"])}
 }
 
 func requireEvidence(state *domain.CoreLongformState, change map[string]any, label string, violations *[]string) bool {

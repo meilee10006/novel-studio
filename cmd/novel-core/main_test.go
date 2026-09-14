@@ -62,3 +62,16 @@ func TestInitNeedsNoModelCredentialsAndCreatesCapabilityChallenge(t *testing.T) 
 		t.Fatalf("READY must not exist before ack: %v", err)
 	}
 }
+
+func TestExportCommandIsAvailable(t *testing.T) {
+	for _, key := range []string{"OPENAI_API_KEY", "ANTHROPIC_API_KEY", "DEEPSEEK_API_KEY", "LITELLM_API_KEY"} {
+		t.Setenv(key, "")
+	}
+	root := t.TempDir()
+	out := filepath.Join(t.TempDir(), "book.md")
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"export", "--project", root, "--out", out}, &stdout, &stderr)
+	if code == 2 || strings.Contains(stderr.String(), "unknown command") {
+		t.Fatalf("export command not routed: code=%d stderr=%s", code, stderr.String())
+	}
+}
