@@ -120,3 +120,29 @@ func TestExpiredRuntimeDocumentationIsRemoved(t *testing.T) {
 		}
 	}
 }
+
+func TestProviderFreePlanAndSpecMatchImplementedCLIAndAuthority(t *testing.T) {
+	root := filepath.Clean(filepath.Join("..", ".."))
+	planRaw, err := os.ReadFile(filepath.Join(root, "docs", "superpowers", "plans", "2026-09-13-provider-free-novel-core.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan := string(planRaw)
+	if !strings.Contains(plan, "go run ./cmd/novel-core verify --project <fixture-local>") {
+		t.Error("provider-free plan does not show the implemented verify --project CLI")
+	}
+	if strings.Contains(plan, "verify --local <fixture-local> --workspace <fixture-workspace>") {
+		t.Error("provider-free plan still shows the retired verify --local/--workspace CLI")
+	}
+
+	specRaw, err := os.ReadFile(filepath.Join(root, "docs", "superpowers", "specs", "2026-09-13-provider-free-novel-core-design.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	spec := string(specRaw)
+	for _, stale := range []string{"检查点、本地索引", "本地索引和导出元数据"} {
+		if strings.Contains(spec, stale) {
+			t.Errorf("provider-free spec still describes retired authority state %q", stale)
+		}
+	}
+}

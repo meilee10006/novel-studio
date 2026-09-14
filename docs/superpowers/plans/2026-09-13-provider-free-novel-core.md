@@ -430,7 +430,7 @@ go list -deps ./cmd/novel-core | grep -E 'agentcore|litellm|internal/agents|inte
 go test ./...
 go vet ./...
 go list -deps ./cmd/novel-core
-go run ./cmd/novel-core verify --local <fixture-local> --workspace <fixture-workspace>
+go run ./cmd/novel-core verify --project <fixture-local>
 ```
 
 必须确认：

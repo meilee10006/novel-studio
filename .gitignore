@@ -37,9 +37,6 @@ dist/
 release-notes.md
 /novel-core
 
-tasks
-refer/
-output*
 workspace/
 
 # 长篇拆文工作区：保留说明和模板，忽略真实原文与拆解产物
@@ -48,9 +45,6 @@ workspace/
 deconstruction-library/*
 !deconstruction-library/README.md
 deconstruction-library.zip
-
-# 数据集(参考库/生成产物/运行工作区)不入库
-data/
 
 # Python 缓存
 __pycache__/

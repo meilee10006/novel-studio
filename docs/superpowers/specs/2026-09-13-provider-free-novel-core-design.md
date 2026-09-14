@@ -226,13 +226,13 @@ Core 为阻塞生成稳定 `block_id`。作者选择后，ChatGPT 通过控制�
 
 ### 9.1 本地权威目录
 
-默认位置：
+由 `novel-core init --project <local>` 显式指定。可以采用下面的目录约定，但 Core 不强制固定位置：
 
 ```text
 ~/.novel-core/projects/<project-id>/
 ```
 
-保存权威状态、已验收正文、回执、提交日志、检查点、本地索引和导出元数据。删除 Drive workspace 不得造成这些内容丢失。
+保存项目元数据、生产状态、Canon 状态与已验收产物、回执、提交日志、对账/控制记录和迁移记录。删除 Drive workspace 不得造成这些本地权威内容丢失。
 
 ### 9.2 Drive 工作区
 

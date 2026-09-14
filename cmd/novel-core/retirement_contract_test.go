@@ -193,7 +193,7 @@ func TestProviderFreeRepositoryHasNoOrphanLegacyScaffolding(t *testing.T) {
 	if !strings.Contains(text, "/novel-core") {
 		t.Error(".gitignore does not ignore the supported novel-core binary")
 	}
-	for _, forbidden := range []string{"/novel-studio", ".novel-studio/", "models/embedding", "Claude Code", ".claude/"} {
+	for _, forbidden := range []string{"/novel-studio", ".novel-studio/", "models/embedding", "Claude Code", ".claude/", "\ntasks\n", "\nrefer/\n", "\noutput*\n", "\ndata/\n"} {
 		if strings.Contains(text, forbidden) {
 			t.Errorf(".gitignore still contains retired scaffolding %q", forbidden)
 		}
