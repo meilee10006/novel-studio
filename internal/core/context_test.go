@@ -269,3 +269,41 @@ func TestContextCompilerBoundsActiveObligationsAndKeepsRelevantUrgentItems(t *te
 		}
 	}
 }
+
+func TestContextCompilerBoundsRelationshipInventoryAndKeepsRelevantRelationship(t *testing.T) {
+	const budget = 16 << 10
+	relationships := make(map[string]domain.CoreEvidenceState, 500)
+	events := make(map[string]domain.CoreEventEvidence, 500)
+	for i := 1; i <= 500; i++ {
+		eventID := fmt.Sprintf("story-event-%06d", i)
+		relationshipID := fmt.Sprintf("character-%06d|character-%06d", i, i+1000)
+		tags := []string{fmt.Sprintf("常规关系 %03d %s", i, strings.Repeat("关系", 30))}
+		if i == 13 {
+			relationshipID = "character-000013|character-001013"
+			tags = []string{"师徒决裂", "互不信任"}
+		}
+		events[eventID] = domain.CoreEventEvidence{EventID: eventID, Chapter: i}
+		relationships[relationshipID] = domain.CoreEvidenceState{Tags: tags, EvidenceEventID: eventID}
+	}
+	canon := domain.CoreCanonState{
+		SchemaVersion: 1, Revision: 500, ProjectID: "book", LatestChapter: 500,
+		Longform: domain.CoreLongformState{Events: events, Relationships: relationships},
+	}
+	out, err := compileTaskContext(contextCompilerInput{
+		Target: "chapter:501", CanonRoot: "root-500",
+		EndingContract: map[string]any{"main_resolution": "收束"}, BookPlan: map[string]any{"direction": "推进"},
+		Constraints: []domain.CoreTaskConstraint{{Instruction: "这一章必须处理师徒决裂"}}, CanonState: canon,
+	}, budget)
+	if err != nil {
+		t.Fatalf("relationship inventory should stay within fixed context budget: %v", err)
+	}
+	if out.TotalBytes > budget {
+		t.Fatalf("bytes=%d budget=%d", out.TotalBytes, budget)
+	}
+	text := string(out.CanonExcerptJSON)
+	for _, want := range []string{"character-000013|character-001013", "师徒决裂"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("relevant relationship missing %q: %s", want, text)
+		}
+	}
+}

@@ -202,16 +202,7 @@ func compactCanonStateForContext(state domain.CoreCanonState, query string, know
 		longform["resources"] = resources
 	}
 
-	relationships := map[string]any{}
-	for id, value := range state.Longform.Relationships {
-		tags := make([]string, 0, len(value.Tags))
-		for _, tag := range value.Tags {
-			if compact := compactContextString(tag); compact != "" {
-				tags = append(tags, compact)
-			}
-		}
-		relationships[compactContextString(id)] = map[string]any{"tags": tags}
-	}
+	relationships := compactRelationshipsForContext(state.Longform, query, knowledgeBudget/2)
 	if len(relationships) > 0 {
 		longform["relationships"] = relationships
 	}
@@ -420,6 +411,77 @@ func compactKnowledgeForContext(state domain.CoreLongformState, query string, ma
 			} else {
 				selected[characterID] = items
 			}
+		}
+	}
+	return selected
+}
+
+type contextRelationshipCandidate struct {
+	ID      string
+	Value   domain.CoreEvidenceState
+	Chapter int
+}
+
+func compactRelationshipsForContext(state domain.CoreLongformState, query string, maxBytes int) map[string]map[string]any {
+	if maxBytes <= 0 || len(state.Relationships) == 0 {
+		return nil
+	}
+	ids := make([]string, 0, len(state.Relationships))
+	for id := range state.Relationships {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	candidates := make([]contextRelationshipCandidate, 0, len(ids))
+	byID := map[string]contextRelationshipCandidate{}
+	docs := make([]retrieval.Document, 0, len(ids))
+	for _, id := range ids {
+		value := state.Relationships[id]
+		chapter := 0
+		if event, ok := state.Events[value.EvidenceEventID]; ok {
+			chapter = event.Chapter
+		}
+		candidate := contextRelationshipCandidate{ID: id, Value: value, Chapter: chapter}
+		candidates = append(candidates, candidate)
+		byID[id] = candidate
+		docs = append(docs, retrieval.Document{ID: id, Text: id + "\n" + strings.Join(value.Tags, "\n")})
+	}
+	ordered := make([]contextRelationshipCandidate, 0, len(candidates))
+	seen := map[string]bool{}
+	for _, hit := range retrieval.RankKeyword(docs, query, len(docs)) {
+		candidate := byID[hit.ID]
+		ordered = append(ordered, candidate)
+		seen[candidate.ID] = true
+	}
+	remaining := make([]contextRelationshipCandidate, 0, len(candidates)-len(ordered))
+	for _, candidate := range candidates {
+		if !seen[candidate.ID] {
+			remaining = append(remaining, candidate)
+		}
+	}
+	sort.SliceStable(remaining, func(i, j int) bool {
+		if remaining[i].Chapter != remaining[j].Chapter {
+			return remaining[i].Chapter > remaining[j].Chapter
+		}
+		return remaining[i].ID < remaining[j].ID
+	})
+	ordered = append(ordered, remaining...)
+
+	selected := map[string]map[string]any{}
+	for _, candidate := range ordered {
+		id := compactContextString(candidate.ID)
+		if id == "" {
+			continue
+		}
+		tags := make([]string, 0, len(candidate.Value.Tags))
+		for _, tag := range candidate.Value.Tags {
+			if compact := compactContextString(tag); compact != "" {
+				tags = append(tags, compact)
+			}
+		}
+		selected[id] = map[string]any{"tags": tags}
+		raw, err := json.Marshal(selected)
+		if err != nil || len(raw) > maxBytes {
+			delete(selected, id)
 		}
 	}
 	return selected
