@@ -71,3 +71,30 @@ func TestRetiredRuntimeHasNoExecutableReferences(t *testing.T) {
 		}
 	}
 }
+
+func TestExpiredLegacySubsystemsAreRemoved(t *testing.T) {
+	root := filepath.Clean(filepath.Join("..", ".."))
+	retired := []string{
+		"evals", "models", "quality", "services", "skills",
+		"internal/aigc", "internal/aitrace", "internal/editor/rules", "internal/logger",
+		"internal/models", "internal/notify", "internal/rag", "internal/reviewreport",
+		"internal/utils", "internal/version", "internal/writer/prompts",
+	}
+	for _, rel := range retired {
+		if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(rel))); !os.IsNotExist(err) {
+			t.Errorf("expired legacy subsystem still exists: %s", rel)
+		}
+	}
+	for _, rel := range []string{"Dockerfile", ".github/workflows/ci.yml"} {
+		raw, err := os.ReadFile(filepath.Join(root, rel))
+		if err != nil {
+			t.Fatal(err)
+		}
+		text := string(raw)
+		for _, forbidden := range []string{"third_party/litellm", "services/dashboard", "Dashboard tests", "Dashboard client tests"} {
+			if strings.Contains(text, forbidden) {
+				t.Errorf("%s still references expired subsystem %q", rel, forbidden)
+			}
+		}
+	}
+}

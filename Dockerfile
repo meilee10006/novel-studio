@@ -8,7 +8,6 @@ ARG GOPROXY=https://proxy.golang.org,direct
 ENV GOPROXY=$GOPROXY
 
 COPY go.mod go.sum ./
-COPY third_party/litellm/go.mod ./third_party/litellm/go.mod
 RUN go mod download
 COPY . .
 RUN GOOS=$TARGETOS GOARCH=$TARGETARCH \
