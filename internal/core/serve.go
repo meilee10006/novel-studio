@@ -43,6 +43,15 @@ func (p *Project) servePassLocked() error {
 	if err := p.reconcileLocked(); err != nil {
 		return err
 	}
+	production, err := p.store.LoadCoreProductionState()
+	if err != nil {
+		return err
+	}
+	// A successful reconcile with no active attempt is the capability-pending
+	// idle state. A later scan will create the first attempt after the ack lands.
+	if production == nil || production.ActiveTask == nil || production.ActiveAttempt == nil {
+		return nil
+	}
 	if err := p.serveControlsLocked(); err != nil {
 		return err
 	}

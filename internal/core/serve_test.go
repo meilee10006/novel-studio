@@ -145,3 +145,36 @@ func TestServePollsAndSettlesChapterWithoutFileEvent(t *testing.T) {
 	}
 	t.Fatal("serve did not settle chapter on a later polling scan")
 }
+
+func TestServeWaitsWhileCapabilityPending(t *testing.T) {
+	local := t.TempDir()
+	workspace := t.TempDir()
+	project, err := InitProject(InitOptions{ProjectID: "serve-capability-pending", LocalRoot: local, WorkspaceRoot: workspace})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- project.Serve(ctx, 10*time.Millisecond) }()
+
+	select {
+	case err := <-done:
+		t.Fatalf("Serve exited before capability ack: %v", err)
+	case <-time.After(75 * time.Millisecond):
+	}
+	if _, err := os.Stat(workspace + "/exchange/READY.json"); !os.IsNotExist(err) {
+		cancel()
+		<-done
+		t.Fatalf("READY exists before capability ack: %v", err)
+	}
+
+	cancel()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("Serve after cancel: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Serve did not stop after context cancellation")
+	}
+}
