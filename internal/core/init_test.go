@@ -176,3 +176,74 @@ func TestDriveWorkspaceCannotOverrideLocalProjectIdentity(t *testing.T) {
 		t.Fatalf("Drive changed local project identity: %+v", status)
 	}
 }
+
+func TestWorkspaceStatusTracksCapabilityAndActiveAuthority(t *testing.T) {
+	root := t.TempDir()
+	workspace := t.TempDir()
+	project, err := InitProject(InitOptions{ProjectID: "status-workspace", LocalRoot: root, WorkspaceRoot: workspace})
+	if err != nil {
+		t.Fatal(err)
+	}
+	statusPath := filepath.Join(workspace, "exchange", "STATUS.json")
+	var pending map[string]any
+	readJSONFile(t, statusPath, &pending)
+	if pending["project_id"] != "status-workspace" || pending["capability"] != "pending" {
+		t.Fatalf("initial workspace status=%+v", pending)
+	}
+
+	var challenge capabilityChallenge
+	readJSONFile(t, filepath.Join(workspace, "setup", "capability-challenge.json"), &challenge)
+	writeJSONFile(t, filepath.Join(workspace, "setup", "capability-ack.json"), map[string]any{
+		"project_id": challenge.ProjectID, "protocol_version": challenge.ProtocolVersion, "nonce": challenge.Nonce,
+		"capabilities": map[string]bool{"read": true, "write_utf8_json": true, "write_utf8_md": true},
+	})
+	if err := os.WriteFile(filepath.Join(workspace, "setup", "capability-write-test.md"), []byte(challenge.MarkdownProbe), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := project.Reconcile(); err != nil {
+		t.Fatal(err)
+	}
+	var readyStatus map[string]any
+	readJSONFile(t, statusPath, &readyStatus)
+	if readyStatus["capability"] != "passed" || readyStatus["active_task_kind"] != "foundation" || readyStatus["active_attempt_id"] == "" {
+		t.Fatalf("ready workspace status=%+v", readyStatus)
+	}
+
+	ready := readReady(t, workspace)
+	artifacts := validFoundationArtifacts()
+	settlement, err := project.SettleFoundation(FoundationSubmission{Manifest: manifestForReady(ready, artifacts), Artifacts: artifacts})
+	if err != nil || settlement.Result != "ACCEPTED" {
+		t.Fatalf("foundation=%+v err=%v", settlement, err)
+	}
+	var chapterStatus map[string]any
+	readJSONFile(t, statusPath, &chapterStatus)
+	if chapterStatus["canon_root"] != settlement.NewCanonRoot || chapterStatus["active_task_kind"] != "chapter" || chapterStatus["active_target"] != "chapter:1" {
+		t.Fatalf("chapter workspace status=%+v", chapterStatus)
+	}
+}
+
+func TestWorkspaceStatusReportsInvalidCapability(t *testing.T) {
+	root := t.TempDir()
+	workspace := t.TempDir()
+	project, err := InitProject(InitOptions{ProjectID: "status-invalid", LocalRoot: root, WorkspaceRoot: workspace})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var challenge capabilityChallenge
+	readJSONFile(t, filepath.Join(workspace, "setup", "capability-challenge.json"), &challenge)
+	writeJSONFile(t, filepath.Join(workspace, "setup", "capability-ack.json"), map[string]any{
+		"project_id": challenge.ProjectID, "protocol_version": challenge.ProtocolVersion, "nonce": "wrong-nonce",
+		"capabilities": map[string]bool{"read": true, "write_utf8_json": true, "write_utf8_md": true},
+	})
+	if err := os.WriteFile(filepath.Join(workspace, "setup", "capability-write-test.md"), []byte(challenge.MarkdownProbe), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := project.Reconcile(); err == nil {
+		t.Fatal("Reconcile unexpectedly accepted invalid capability")
+	}
+	var status map[string]any
+	readJSONFile(t, filepath.Join(workspace, "exchange", "STATUS.json"), &status)
+	if status["capability"] != "invalid" || status["capability_problem"] == "" {
+		t.Fatalf("workspace status did not expose invalid capability: %+v", status)
+	}
+}

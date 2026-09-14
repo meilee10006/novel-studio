@@ -42,6 +42,46 @@ type Verification struct {
 	Problems []string `json:"problems,omitempty"`
 }
 
+type workspaceStatus struct {
+	SchemaVersion     int    `json:"schema_version"`
+	ProjectID         string `json:"project_id"`
+	ProtocolVersion   string `json:"protocol_version"`
+	Capability        string `json:"capability"`
+	CapabilityProblem string `json:"capability_problem,omitempty"`
+	CanonRoot         string `json:"canon_root,omitempty"`
+	ActiveTaskKind    string `json:"active_task_kind,omitempty"`
+	ActiveTarget      string `json:"active_target,omitempty"`
+	ActiveAttemptID   string `json:"active_attempt_id,omitempty"`
+	BlockID           string `json:"block_id,omitempty"`
+	RevisionReplay    bool   `json:"revision_replay,omitempty"`
+}
+
+func (p *Project) writeWorkspaceStatus(project *domain.CoreProjectState, production *domain.CoreProductionState) error {
+	if project == nil {
+		return fmt.Errorf("project is not initialized")
+	}
+	capability, problem := capabilityStatus(project)
+	out := workspaceStatus{
+		SchemaVersion: coreSchemaVersion, ProjectID: project.ProjectID, ProtocolVersion: project.ProtocolVersion,
+		Capability: capability, CapabilityProblem: problem,
+	}
+	if production != nil {
+		out.CanonRoot = production.CanonRoot
+		if production.ActiveTask != nil {
+			out.ActiveTaskKind = production.ActiveTask.Kind
+			out.ActiveTarget = production.ActiveTask.Target
+		}
+		if production.ActiveAttempt != nil {
+			out.ActiveAttemptID = production.ActiveAttempt.AttemptID
+		}
+		if production.ActiveBlock != nil {
+			out.BlockID = production.ActiveBlock.BlockID
+		}
+		out.RevisionReplay = production.RevisionReplay != nil
+	}
+	return writeWorkspaceJSON(project.WorkspaceRoot, "exchange/STATUS.json", out)
+}
+
 func OpenProject(root string) (*Project, error) {
 	root = strings.TrimSpace(root)
 	if root == "" {

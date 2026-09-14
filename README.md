@@ -83,13 +83,13 @@ novel-core status --project "$HOME/novels/book-local"
 
 ### 5. 在 ChatGPT App 中逐任务创作
 
-以 Drive 中的 `exchange/READY.json` 为唯一当前任务指针。读取对应 `exchange/outbox/<task>/<attempt>/` 的任务、约束和上下文，然后把完整提交写到：
+以 Drive 中的 `exchange/READY.json` 为唯一当前任务指针；`exchange/STATUS.json` 提供当前权威 `canon_root`、capability、活动 task/attempt/block。读取对应 `exchange/outbox/<task>/<attempt>/` 的任务、约束和上下文，然后把完整提交写到：
 
 ```text
 exchange/inbox/<task-id>/<attempt-id>/
 ```
 
-正式提交遵循“先写全部 artifact，最后写 `manifest.json`”。Core 会把稳定字节锁成本地 snapshot，再产生 `ACCEPTED`、`REWRITE` 或 `BLOCKED`。
+正式提交遵循“先写全部 artifact，最后写 `manifest.json`”。Chapter/Revision 的 `context.json.foundation_reference` 会携带 Core 规范化后的 Foundation 资料与 canonical IDs，新 ChatGPT 对话不需要依赖旧聊天记录猜人物/地点 ID。Core 会把稳定字节锁成本地 snapshot，再产生 `ACCEPTED`、`REWRITE` 或 `BLOCKED`。
 
 - `ACCEPTED`：推进当前 Canon；
 - `REWRITE`：同一 task 创建新 attempt，按结构化反馈修改；
@@ -104,6 +104,8 @@ exchange/inbox/<task-id>/<attempt-id>/
 ```text
 exchange/control/inbox/<message-id>/
 ```
+
+control 的 `base_canon_root` 必须从当前 `exchange/STATUS.json.canon_root` 复制；历史 revision 的 READY 可能绑定较早父 root，不能拿它替代当前权威 root。
 
 首发支持：
 

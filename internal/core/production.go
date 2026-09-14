@@ -81,10 +81,17 @@ func (p *Project) reconcileLocked() error {
 		return fmt.Errorf("project is not initialized")
 	}
 	capability, problem := capabilityStatus(projectState)
-	if capability == "pending" {
-		return nil
-	}
 	if capability != "passed" {
+		production, err := p.store.LoadCoreProductionState()
+		if err != nil {
+			return err
+		}
+		if err := p.writeWorkspaceStatus(projectState, production); err != nil {
+			return err
+		}
+		if capability == "pending" {
+			return nil
+		}
 		return fmt.Errorf("capability check failed: %s", problem)
 	}
 
@@ -214,7 +221,7 @@ func (p *Project) writeActiveAttempt(projectState *domain.CoreProjectState, stat
 		status = "blocked"
 		blockID = state.ActiveBlock.BlockID
 	}
-	return writeWorkspaceJSON(projectState.WorkspaceRoot, filepath.Join("exchange", "READY.json"), readyDocument{
+	if err := writeWorkspaceJSON(projectState.WorkspaceRoot, filepath.Join("exchange", "READY.json"), readyDocument{
 		SchemaVersion:   protocol.MachineSchemaVersion,
 		ProjectID:       projectState.ProjectID,
 		TaskID:          task.TaskID,
@@ -228,7 +235,10 @@ func (p *Project) writeActiveAttempt(projectState *domain.CoreProjectState, stat
 		CompletionNonce: attempt.CompletionNonce,
 		Status:          status,
 		BlockID:         blockID,
-	})
+	}); err != nil {
+		return err
+	}
+	return p.writeWorkspaceStatus(projectState, state)
 }
 func (p *Project) SettleFoundation(sub FoundationSubmission) (FoundationSettlement, error) {
 	release, err := p.acquireProjectMutationLock()

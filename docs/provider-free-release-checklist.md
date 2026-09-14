@@ -11,6 +11,7 @@ This file records final release acceptance status only. It is not a design log o
 | `go list -deps ./cmd/novel-core` contains no AI runtime | PASS |
 | `novel-core` runs without model credentials | PASS |
 | Core capability/Foundation/chapter E2E tests | PASS |
+| Self-describing workspace file E2E | PASS |
 | REWRITE / new-attempt tests | PASS |
 | BLOCKED / block-resolution tests | PASS |
 | historical revision + downstream replay tests | PASS |

@@ -127,7 +127,18 @@ func InitProject(opts InitOptions) (*Project, error) {
 	if err := writeWorkspaceJSON(workspaceResolved, "setup/capability-challenge.json", challenge); err != nil {
 		return nil, err
 	}
-	return OpenProject(localResolved)
+	project, err := OpenProject(localResolved)
+	if err != nil {
+		return nil, err
+	}
+	production, err := st.LoadCoreProductionState()
+	if err != nil {
+		return nil, err
+	}
+	if err := project.writeWorkspaceStatus(state, production); err != nil {
+		return nil, err
+	}
+	return project, nil
 }
 
 func writeWorkspaceJSON(root, rel string, v any) error {

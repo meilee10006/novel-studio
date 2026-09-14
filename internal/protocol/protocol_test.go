@@ -1,6 +1,7 @@
 package protocol
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -70,5 +71,47 @@ func TestProtocolTextRejectsInvalidUTF8AndExcessiveJSONShape(t *testing.T) {
 	wide := "[" + strings.Repeat("0,", MaxJSONArrayLength) + "0]"
 	if err := DecodeJSON([]byte(wide), &value); err == nil {
 		t.Fatal("excessive JSON array unexpectedly accepted")
+	}
+}
+
+func TestChatGPTProtocolDescribesSubmissionAndControlSchemas(t *testing.T) {
+	text := RenderChatGPTProtocol("book-1")
+	for _, want := range []string{
+		"manifest.json", "schema_version", "project_id", "task_id", "attempt_id",
+		"base_canon_root", "protocol_version", "task_digest", "completion_nonce", "files",
+		"foundation.json", "title", "characters.json", "local_id", "world.json", "entity_type",
+		"book_plan.json", "direction", "ending_contract.json", "main_resolution",
+		"style_profile.json", "language", "platform_profile.json", "platform",
+		"chapter.md", "chapter_contract.json", "chapter", "declared_pov", "events.json",
+		"evidence_anchor", "state_delta.json", "event_ref", "self_review.json",
+		"foundation_reference", "block_resolution", "author_directive", "future_plan",
+		"historical_revision", "block_id", "choice", "instruction",
+		"hard_constraints", "author_decision_required", "constraint_refs", "conflict", "options",
+		"knowledge_add", "character_id", "fact_id", "source", "observed",
+		"resource_id", "delta", "location_id", "start_tick", "end_tick",
+		"relationship_id", "tags", "foreshadow_id", "payoff_ready", "paid_off", "closed",
+		"promise_id", "advanced", "fulfilled", "deferred", "deadline_chapter", "retired",
+		"ending_resolution", "travel_constraints", "min_ticks", "planning_patch.json", "next_arc",
+	} {
+		if !strings.Contains(text, want) {
+			t.Errorf("generated ChatGPT protocol missing %q", want)
+		}
+	}
+}
+
+func TestChatGPTProtocolJSONExamplesAreValid(t *testing.T) {
+	text := RenderChatGPTProtocol("book-1")
+	parts := strings.Split(text, "~~~json\n")
+	if len(parts) < 2 {
+		t.Fatal("generated ChatGPT protocol has no JSON examples")
+	}
+	for i, part := range parts[1:] {
+		block, _, ok := strings.Cut(part, "\n~~~")
+		if !ok {
+			t.Fatalf("JSON example %d is missing closing fence", i+1)
+		}
+		if !json.Valid([]byte(block)) {
+			t.Errorf("JSON example %d is not valid JSON: %s", i+1, block)
+		}
 	}
 }

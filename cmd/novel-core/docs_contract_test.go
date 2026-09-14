@@ -146,3 +146,26 @@ func TestProviderFreePlanAndSpecMatchImplementedCLIAndAuthority(t *testing.T) {
 		}
 	}
 }
+
+func TestDocumentationExplainsSelfDescribingWorkspaceRecovery(t *testing.T) {
+	root := filepath.Clean(filepath.Join("..", ".."))
+	for _, rel := range []string{"README.md", "README_EN.md", "README-TECHNICAL.md"} {
+		raw, err := os.ReadFile(filepath.Join(root, rel))
+		if err != nil {
+			t.Fatalf("read %s: %v", rel, err)
+		}
+		text := string(raw)
+		for _, want := range []string{"exchange/STATUS.json", "foundation_reference"} {
+			if !strings.Contains(text, want) {
+				t.Errorf("%s missing self-describing workspace recovery reference %q", rel, want)
+			}
+		}
+	}
+	checklist, err := os.ReadFile(filepath.Join(root, "docs", "provider-free-release-checklist.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(checklist), "Self-describing workspace file E2E") {
+		t.Error("release checklist does not record the self-describing workspace file E2E gate")
+	}
+}

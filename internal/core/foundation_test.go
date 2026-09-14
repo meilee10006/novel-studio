@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/chenhongyang/novel-studio/internal/protocol"
@@ -256,5 +257,35 @@ func writeJSONFile(t *testing.T, path string, value any) {
 	}
 	if err := os.WriteFile(path, raw, 0o644); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestChapterTaskContextCarriesCanonicalFoundationReference(t *testing.T) {
+	project, _, workspace := newCapabilityPassedProject(t)
+	if err := project.Reconcile(); err != nil {
+		t.Fatal(err)
+	}
+	ready := readReady(t, workspace)
+	artifacts := validFoundationArtifacts()
+	result, err := project.SettleFoundation(FoundationSubmission{Manifest: manifestForReady(ready, artifacts), Artifacts: artifacts})
+	if err != nil || result.Result != "ACCEPTED" {
+		t.Fatalf("foundation=%+v err=%v", result, err)
+	}
+	characterID := mappingID(result.IDMappings, "character", "same")
+	locationID := mappingID(result.IDMappings, "location", "same")
+	if characterID == "" || locationID == "" {
+		t.Fatalf("foundation mappings=%+v", result.IDMappings)
+	}
+	next := readReady(t, workspace)
+	contextPath := filepath.Join(workspace, "exchange", "outbox", next.TaskID, next.AttemptID, "context.json")
+	raw, err := os.ReadFile(contextPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(raw)
+	for _, want := range []string{"foundation_reference", characterID, locationID, "zh-CN", "fanqie", "主角", "起点"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("chapter context missing canonical foundation reference %q: %s", want, text)
+		}
 	}
 }

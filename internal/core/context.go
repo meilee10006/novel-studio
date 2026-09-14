@@ -23,14 +23,15 @@ type contextChapter struct {
 }
 
 type contextCompilerInput struct {
-	Target            string
-	CanonRoot         string
-	EndingContract    map[string]any
-	BookPlan          map[string]any
-	Constraints       []domain.CoreTaskConstraint
-	CanonState        domain.CoreCanonState
-	Chapters          []contextChapter
-	RevisionCandidate map[string]any
+	Target              string
+	CanonRoot           string
+	EndingContract      map[string]any
+	BookPlan            map[string]any
+	FoundationReference map[string]any
+	Constraints         []domain.CoreTaskConstraint
+	CanonState          domain.CoreCanonState
+	Chapters            []contextChapter
+	RevisionCandidate   map[string]any
 }
 type contextCompilerOutput struct {
 	ContextJSON      []byte
@@ -49,6 +50,9 @@ func compileTaskContext(input contextCompilerInput, budget int) (contextCompiler
 		"ending_contract":     input.EndingContract,
 		"control_constraints": input.Constraints,
 		"retrieved_old_prose": []map[string]any{},
+	}
+	if input.FoundationReference != nil {
+		contextDoc["foundation_reference"] = input.FoundationReference
 	}
 	if input.RevisionCandidate != nil {
 		contextDoc["revision_candidate"] = input.RevisionCandidate
@@ -220,6 +224,23 @@ func (p *Project) compileTaskPackContext(state *domain.CoreProductionState) (con
 	if err != nil {
 		return contextCompilerOutput{}, err
 	}
+	foundationReference := make(map[string]any, 5)
+	for _, item := range []struct {
+		Key  string
+		Name string
+	}{
+		{Key: "foundation", Name: "foundation.json"},
+		{Key: "characters", Name: "characters.json"},
+		{Key: "world", Name: "world.json"},
+		{Key: "style_profile", Name: "style_profile.json"},
+		{Key: "platform_profile", Name: "platform_profile.json"},
+	} {
+		value, err := readMap(item.Name)
+		if err != nil {
+			return contextCompilerOutput{}, err
+		}
+		foundationReference[item.Key] = value
+	}
 	chapters := make([]contextChapter, 0)
 	for name := range head.ArtifactDigests {
 		clean := filepath.ToSlash(name)
@@ -242,7 +263,7 @@ func (p *Project) compileTaskPackContext(state *domain.CoreProductionState) (con
 	}
 	input := contextCompilerInput{
 		Target: state.ActiveTask.Target, CanonRoot: state.ActiveTask.BaseCanonRoot,
-		EndingContract: ending, BookPlan: bookPlan,
+		EndingContract: ending, BookPlan: bookPlan, FoundationReference: foundationReference,
 		Constraints: state.ActiveTask.Constraints, CanonState: canon, Chapters: chapters,
 		RevisionCandidate: revisionCandidate,
 	}

@@ -287,7 +287,11 @@ func (p *Project) writeProtocolUpgradeWorkspace(state *domain.CoreProjectState) 
 			return err
 		}
 	}
-	return nil
+	production, err := p.store.LoadCoreProductionState()
+	if err != nil {
+		return err
+	}
+	return p.writeWorkspaceStatus(state, production)
 }
 
 func (p *Project) prepareMigrationBackup(state *domain.CoreProjectState, backupDestination string) (string, string, error) {

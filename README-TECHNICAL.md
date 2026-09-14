@@ -26,6 +26,7 @@ Key paths:
 ```text
 setup/                         capability challenge/ack
 exchange/READY.json            current task pointer
+exchange/STATUS.json           current authority/capability/task summary
 exchange/outbox/<task>/<try>/  Core-owned task/context
 exchange/inbox/<task>/<try>/   ChatGPT submission
 exchange/result/               settlement results
@@ -35,7 +36,7 @@ projection/notion.json         optional read-only projection
 backup/                        non-authoritative backup copies
 ```
 
-ChatGPT writes only allowed inbox/control/setup response files. Core-owned READY/outbox/result/published/projection data must not be edited by ChatGPT.
+ChatGPT writes only allowed inbox/control/setup response files. Core-owned READY/STATUS/outbox/result/published/projection data must not be edited by ChatGPT. `STATUS.json.canon_root` is the authority root to bind control messages; it is intentionally distinct from a revision task's historical `READY.base_canon_root`.
 
 A submission is considered only after its files and manifest are stable across scans. The local snapshot is then authoritative for validation; later Drive mutation becomes a conflict rather than silently changing the attempt.
 
@@ -57,7 +58,7 @@ Projection failure is non-authoritative and never rolls back a successful commit
 
 ## 4. Tasks and attempts
 
-A task is the semantic unit (Foundation, chapter, revision). An attempt is a versioned submission binding with protocol version, task digest, completion nonce, base Canon root, and an exact required artifact set.
+A task is the semantic unit (Foundation, chapter, revision). An attempt is a versioned submission binding with protocol version, task digest, completion nonce, base Canon root, and an exact required artifact set. Chapter/Revision `context.json` includes `foundation_reference`, a budgeted canonical Foundation reference containing normalized characters/world/style/platform data so a fresh chat can discover valid Canon IDs without historical conversation state.
 
 `REWRITE` preserves the task but creates a new attempt. Rejected/invalid attempts do not mint permanent Canon IDs.
 
