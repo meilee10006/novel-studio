@@ -39,7 +39,7 @@ Give `CHATGPT_PROTOCOL.md` and `setup/capability-challenge.json` to ChatGPT App.
 novel-core serve --project "$HOME/novels/book-local"
 ```
 
-Use `exchange/READY.json` as the only pointer to the current task. `exchange/STATUS.json` exposes the current authoritative `canon_root`, capability state, and active task/attempt/block. ChatGPT reads the matching outbox task/context and writes the submission to `exchange/inbox/<task-id>/<attempt-id>/`, with `manifest.json` written last.
+Use `exchange/READY.json` as the only pointer to the current task. `exchange/STATUS.json` exposes the current authoritative `canon_root`, capability state, and active task/attempt/block. Drive multi-file sync is not atomic: proceed only when `STATUS.active_attempt_id == READY.attempt_id` and `STATUS.active_target == READY.target`; otherwise wait for sync and reread both files. ChatGPT then reads the matching outbox task/context and writes the submission to `exchange/inbox/<task-id>/<attempt-id>/`, with `manifest.json` written last.
 
 For Chapter/Revision tasks, `context.json.foundation_reference` carries the normalized Foundation reference and canonical character/location IDs. A fresh ChatGPT conversation can therefore recover from Core-generated files instead of relying on prior chat history. Control messages must copy `base_canon_root` from the current `exchange/STATUS.json.canon_root`, not from a historical revision READY.
 

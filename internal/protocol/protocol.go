@@ -31,6 +31,7 @@ func RenderChatGPTProtocol(projectID string) string {
 - 不修改 Core 写入的文件，不使用 Google Docs/Sheets 代替协议文件。
 - 当前任务只以 exchange/READY.json 为准；没有 READY 时不要自行推进小说状态。
 - exchange/STATUS.json 给出当前权威 canon_root、capability、活动 task/attempt/block；control 的 base_canon_root 必须取 STATUS.json 的当前 canon_root，不要用历史 revision READY 的 base_canon_root 猜当前根。
+- Drive 多文件同步不是原子事务。每次读取 READY 与 STATUS 后，必须确认 STATUS.active_attempt_id == READY.attempt_id 且 STATUS.active_target == READY.target；如果不一致，说明文件仍在同步，等待后重新读取，不能据此提交或发 control。
 - 每次都先读取当前 READY 和对应 outbox/<task-id>/<attempt-id>/ 的 task.json、constraints.json、context.json、canon_excerpt.json、recent_prose.md。
 
 ## 能力检查
@@ -216,10 +217,10 @@ historical_revision：
 block_resolution：
 
 ~~~json
-{"schema_version":1,"project_id":"当前项目","message_id":"ctrl-003","kind":"block_resolution","base_canon_root":"从 STATUS.json 复制","block_id":"从 BLOCKED result/STATUS 复制","choice":"从 Core 给出的 options 中选择并说明作者裁决"}
+{"schema_version":1,"project_id":"当前项目","message_id":"ctrl-003","kind":"block_resolution","base_canon_root":"从 STATUS.json 复制","block_id":"从 BLOCKED result/STATUS 复制","choice":"从 BLOCKED result 的 options 中原样复制一个值"}
 ~~~
 
-control 也遵循“先 control.json，最后 manifest.json”。处理结果读取 exchange/control/result/<message_id>.json。historical_revision ACCEPTED 后按新的 revision READY 顺序重写；在 replay 追平原 head 前不要绕过 READY 自行跳章。
+block_resolution.choice 必须与 BLOCKED result 中某个 options 值完全相等，不要自行改写或追加解释。control 也遵循“先 control.json，最后 manifest.json”。处理结果读取 exchange/control/result/<message_id>.json。historical_revision ACCEPTED 后按新的 revision READY 顺序重写；在 replay 追平原 head 前不要绕过 READY 自行跳章。
 
 ## 新对话恢复
 

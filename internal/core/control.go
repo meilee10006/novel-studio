@@ -230,6 +230,9 @@ func (p *Project) processBlockResolution(project *domain.CoreProjectState, state
 	if choice == "" {
 		return p.settleInvalidControl(project, record, "block resolution choice is required")
 	}
+	if !containsString(state.ActiveBlock.Options, choice) {
+		return p.settleInvalidControl(project, record, "block resolution choice is not one of the offered options")
+	}
 	next := cloneProductionState(state)
 	next.ActiveTask.Constraints = append(next.ActiveTask.Constraints, domain.CoreTaskConstraint{
 		MessageID: message.MessageID, Kind: "block_resolution", BlockID: message.BlockID, Choice: choice,

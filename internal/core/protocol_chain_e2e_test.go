@@ -31,6 +31,7 @@ type protocolChainStatus struct {
 	ProtocolVersion string `json:"protocol_version"`
 	CanonRoot       string `json:"canon_root"`
 	ActiveTarget    string `json:"active_target"`
+	ActiveAttemptID string `json:"active_attempt_id"`
 	BlockID         string `json:"block_id"`
 	RevisionReplay  bool   `json:"revision_replay"`
 }
@@ -274,7 +275,11 @@ func waitProtocolReady(t *testing.T, workspace string, accept func(protocolChain
 	for time.Now().Before(deadline) {
 		var ready protocolChainReady
 		if readProtocolJSONIfExists(path, &ready) == nil && accept(ready) {
-			return ready
+			var status protocolChainStatus
+			statusPath := filepath.Join(workspace, "exchange", "STATUS.json")
+			if readProtocolJSONIfExists(statusPath, &status) == nil && status.ActiveAttemptID == ready.AttemptID && status.ActiveTarget == ready.Target {
+				return ready
+			}
 		}
 		time.Sleep(20 * time.Millisecond)
 	}

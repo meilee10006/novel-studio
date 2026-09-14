@@ -14,7 +14,7 @@ func TestBlockResolutionCreatesRewriteAttemptAndIsIdempotent(t *testing.T) {
 	msgID := "ctrl-block-1"
 	writeControlMessage(t, workspace, msgID, map[string]any{
 		"kind": "block_resolution", "base_canon_root": root,
-		"block_id": blocked.BlockID, "choice": "保留硬约束 A，调整冲突目标",
+		"block_id": blocked.BlockID, "choice": "保留 A",
 	})
 	project.submissionQuietPeriod = 0
 	mustReadyControl(t, project, msgID)
@@ -48,8 +48,33 @@ func TestBlockResolutionCreatesRewriteAttemptAndIsIdempotent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(constraints), msgID) || !strings.Contains(string(constraints), "保留硬约束 A") {
+	if !strings.Contains(string(constraints), msgID) || !strings.Contains(string(constraints), "保留 A") {
 		t.Fatalf("resolution missing from constraints: %s", constraints)
+	}
+}
+
+func TestBlockResolutionRejectsChoiceOutsideOfferedOptions(t *testing.T) {
+	project, _, workspace, blocked, root := blockedChapterProject(t)
+	msgID := "ctrl-block-invalid-choice"
+	writeControlMessage(t, workspace, msgID, map[string]any{
+		"kind": "block_resolution", "base_canon_root": root,
+		"block_id": blocked.BlockID, "choice": "不存在的第三种选择",
+	})
+	project.submissionQuietPeriod = 0
+	mustReadyControl(t, project, msgID)
+	result, err := project.ProcessControlMessage(msgID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Result != "INVALID" || !strings.Contains(result.Problem, "choice") {
+		t.Fatalf("result=%+v", result)
+	}
+	status, err := project.Status()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status.BlockID != blocked.BlockID || status.CanonRoot != root || status.ActiveAttemptID != blocked.AttemptID {
+		t.Fatalf("invalid block choice changed active state: status=%+v blocked=%+v", status, blocked)
 	}
 }
 
@@ -258,7 +283,7 @@ func TestControlApplyingRecoveryIsIdempotent(t *testing.T) {
 			msgID := "ctrl-recover-" + stage
 			writeControlMessage(t, workspace, msgID, map[string]any{
 				"kind": "block_resolution", "base_canon_root": root,
-				"block_id": blocked.BlockID, "choice": "采用方案 A",
+				"block_id": blocked.BlockID, "choice": "保留 A",
 			})
 			project.submissionQuietPeriod = 0
 			mustReadyControl(t, project, msgID)

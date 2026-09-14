@@ -83,7 +83,7 @@ novel-core status --project "$HOME/novels/book-local"
 
 ### 5. 在 ChatGPT App 中逐任务创作
 
-以 Drive 中的 `exchange/READY.json` 为唯一当前任务指针；`exchange/STATUS.json` 提供当前权威 `canon_root`、capability、活动 task/attempt/block。读取对应 `exchange/outbox/<task>/<attempt>/` 的任务、约束和上下文，然后把完整提交写到：
+以 Drive 中的 `exchange/READY.json` 为唯一当前任务指针；`exchange/STATUS.json` 提供当前权威 `canon_root`、capability、活动 task/attempt/block。Drive 多文件同步不是原子操作：只有当 `STATUS.active_attempt_id == READY.attempt_id` 且 `STATUS.active_target == READY.target` 时才继续；不一致就等待同步后重读。读取对应 `exchange/outbox/<task>/<attempt>/` 的任务、约束和上下文，然后把完整提交写到：
 
 ```text
 exchange/inbox/<task-id>/<attempt-id>/
