@@ -163,6 +163,100 @@ func truncateUTF8(data []byte, maxBytes int) []byte {
 	return data[:cut]
 }
 
+func (p *Project) compactFoundationReference(readMap func(string) (map[string]any, error)) (map[string]any, error) {
+	foundation, err := readMap("foundation.json")
+	if err != nil {
+		return nil, err
+	}
+	characters, err := readMap("characters.json")
+	if err != nil {
+		return nil, err
+	}
+	world, err := readMap("world.json")
+	if err != nil {
+		return nil, err
+	}
+	style, err := readMap("style_profile.json")
+	if err != nil {
+		return nil, err
+	}
+	platform, err := readMap("platform_profile.json")
+	if err != nil {
+		return nil, err
+	}
+
+	foundationOut := map[string]any{}
+	for _, key := range []string{"title", "protagonist", "opening_location"} {
+		if value, ok := foundation[key]; ok {
+			foundationOut[key] = compactFoundationValue(value)
+		}
+	}
+
+	characterItems := make([]any, 0)
+	if raw, ok := characters["characters"].([]any); ok {
+		for _, value := range raw {
+			if item, ok := value.(map[string]any); ok {
+				characterItems = append(characterItems, compactFoundationEntity(item, false))
+			}
+		}
+	}
+
+	worldItems := make([]any, 0)
+	if raw, ok := world["entities"].([]any); ok {
+		for _, value := range raw {
+			if item, ok := value.(map[string]any); ok {
+				worldItems = append(worldItems, compactFoundationEntity(item, true))
+			}
+		}
+	}
+
+	return map[string]any{
+		"foundation":       foundationOut,
+		"characters":       map[string]any{"characters": characterItems},
+		"world":            map[string]any{"entities": worldItems},
+		"style_profile":    map[string]any{"language": compactFoundationString(style["language"])},
+		"platform_profile": map[string]any{"platform": compactFoundationString(platform["platform"])},
+	}, nil
+}
+
+func compactFoundationEntity(item map[string]any, includeType bool) map[string]any {
+	out := map[string]any{}
+	if includeType {
+		if value := compactFoundationString(item["entity_type"]); value != "" {
+			out["entity_type"] = value
+		}
+	}
+	if value := compactFoundationString(item["canon_id"]); value != "" {
+		out["canon_id"] = value
+	}
+	if value := compactFoundationString(item["name"]); value != "" {
+		out["name"] = value
+	}
+	return out
+}
+
+func compactFoundationValue(value any) any {
+	switch x := value.(type) {
+	case string:
+		return compactFoundationString(x)
+	case map[string]any:
+		out := map[string]any{}
+		for _, key := range []string{"entity_type", "canon_id", "name"} {
+			if v := compactFoundationString(x[key]); v != "" {
+				out[key] = v
+			}
+		}
+		return out
+	default:
+		return nil
+	}
+}
+
+func compactFoundationString(value any) string {
+	s, _ := value.(string)
+	return string(truncateUTF8([]byte(strings.TrimSpace(s)), 256))
+}
+
 func (p *Project) compileTaskPackContext(state *domain.CoreProductionState) (contextCompilerOutput, error) {
 	raw, err := p.store.ReadCoreCanonStateBytes()
 	if err != nil {
@@ -224,22 +318,9 @@ func (p *Project) compileTaskPackContext(state *domain.CoreProductionState) (con
 	if err != nil {
 		return contextCompilerOutput{}, err
 	}
-	foundationReference := make(map[string]any, 5)
-	for _, item := range []struct {
-		Key  string
-		Name string
-	}{
-		{Key: "foundation", Name: "foundation.json"},
-		{Key: "characters", Name: "characters.json"},
-		{Key: "world", Name: "world.json"},
-		{Key: "style_profile", Name: "style_profile.json"},
-		{Key: "platform_profile", Name: "platform_profile.json"},
-	} {
-		value, err := readMap(item.Name)
-		if err != nil {
-			return contextCompilerOutput{}, err
-		}
-		foundationReference[item.Key] = value
+	foundationReference, err := p.compactFoundationReference(readMap)
+	if err != nil {
+		return contextCompilerOutput{}, err
 	}
 	chapters := make([]contextChapter, 0)
 	for name := range head.ArtifactDigests {

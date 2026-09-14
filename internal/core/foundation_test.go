@@ -289,3 +289,38 @@ func TestChapterTaskContextCarriesCanonicalFoundationReference(t *testing.T) {
 		}
 	}
 }
+
+func TestChapterFoundationReferenceDoesNotCopyUnboundedFoundationMetadata(t *testing.T) {
+	project, _, workspace := newCapabilityPassedProject(t)
+	if err := project.Reconcile(); err != nil {
+		t.Fatal(err)
+	}
+	ready := readReady(t, workspace)
+	artifacts := validFoundationArtifacts()
+	large := strings.Repeat("很长的非必要设定", 6000)
+	artifacts["characters.json"] = []byte(`{"characters":[{"local_id":"same","name":"主角","biography":"` + large + `"}]}`)
+	artifacts["world.json"] = []byte(`{"entities":[{"entity_type":"location","local_id":"same","name":"起点","lore":"` + large + `"}]}`)
+	artifacts["style_profile.json"] = []byte(`{"language":"zh-CN","notes":"` + large + `"}`)
+	artifacts["platform_profile.json"] = []byte(`{"platform":"fanqie","notes":"` + large + `"}`)
+	result, err := project.SettleFoundation(FoundationSubmission{Manifest: manifestForReady(ready, artifacts), Artifacts: artifacts})
+	if err != nil || result.Result != "ACCEPTED" {
+		t.Fatalf("large metadata foundation should still settle: result=%+v err=%v", result, err)
+	}
+	next := readReady(t, workspace)
+	contextPath := filepath.Join(workspace, "exchange", "outbox", next.TaskID, next.AttemptID, "context.json")
+	raw, err := os.ReadFile(contextPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(raw) >= taskContextBudget {
+		t.Fatalf("context bytes=%d budget=%d", len(raw), taskContextBudget)
+	}
+	if strings.Contains(string(raw), "很长的非必要设定") {
+		t.Fatal("foundation_reference copied unbounded descriptive metadata")
+	}
+	for _, want := range []string{"character-000001", "location-000002", "主角", "起点", "zh-CN", "fanqie"} {
+		if !strings.Contains(string(raw), want) {
+			t.Fatalf("compact foundation reference missing %q: %s", want, raw)
+		}
+	}
+}
