@@ -211,35 +211,12 @@ func compactCanonStateForContext(state domain.CoreCanonState, query string, know
 		longform["relationships"] = relationships
 	}
 
-	foreshadows := map[string]any{}
-	for id, value := range state.Longform.Foreshadows {
-		if value.State == "closed" || value.State == "retired" {
-			continue
-		}
-		item := map[string]any{"state": compactContextString(value.State)}
-		if description := compactContextString(value.Description); description != "" {
-			item["description"] = description
-		}
-		foreshadows[compactContextString(id)] = item
-	}
+	foreshadows := compactForeshadowsForContext(state.Longform, query, knowledgeBudget/2)
 	if len(foreshadows) > 0 {
 		longform["foreshadows"] = foreshadows
 	}
 
-	promises := map[string]any{}
-	for id, value := range state.Longform.ReaderPromises {
-		if value.State == "fulfilled" || value.State == "retired" {
-			continue
-		}
-		item := map[string]any{"state": compactContextString(value.State)}
-		if statement := compactContextString(value.Statement); statement != "" {
-			item["statement"] = statement
-		}
-		if value.DeadlineChapter > 0 {
-			item["deadline_chapter"] = value.DeadlineChapter
-		}
-		promises[compactContextString(id)] = item
-	}
+	promises := compactReaderPromisesForContext(state.Longform, query, knowledgeBudget/2)
 	if len(promises) > 0 {
 		longform["reader_promises"] = promises
 	}
@@ -361,6 +338,177 @@ func compactKnowledgeForContext(state domain.CoreLongformState, query string, ma
 			} else {
 				selected[characterID] = items
 			}
+		}
+	}
+	return selected
+}
+
+type contextForeshadowCandidate struct {
+	ID       string
+	Value    domain.CoreForeshadowState
+	Chapter  int
+	Priority int
+}
+
+func compactForeshadowsForContext(state domain.CoreLongformState, query string, maxBytes int) map[string]map[string]any {
+	if maxBytes <= 0 {
+		return nil
+	}
+	ids := make([]string, 0, len(state.Foreshadows))
+	for id, value := range state.Foreshadows {
+		if value.State != "closed" && value.State != "retired" {
+			ids = append(ids, id)
+		}
+	}
+	sort.Strings(ids)
+	candidates := make([]contextForeshadowCandidate, 0, len(ids))
+	byID := map[string]contextForeshadowCandidate{}
+	docs := make([]retrieval.Document, 0, len(ids))
+	for _, id := range ids {
+		value := state.Foreshadows[id]
+		chapter := 0
+		if event, ok := state.Events[value.EvidenceEventID]; ok {
+			chapter = event.Chapter
+		}
+		candidate := contextForeshadowCandidate{ID: id, Value: value, Chapter: chapter, Priority: foreshadowContextPriority(value.State)}
+		candidates = append(candidates, candidate)
+		byID[id] = candidate
+		docs = append(docs, retrieval.Document{ID: id, Text: id + "\n" + value.Description + "\n" + value.State})
+	}
+	ordered := make([]contextForeshadowCandidate, 0, len(candidates))
+	seen := map[string]bool{}
+	for _, hit := range retrieval.RankKeyword(docs, query, len(docs)) {
+		candidate := byID[hit.ID]
+		ordered = append(ordered, candidate)
+		seen[candidate.ID] = true
+	}
+	remaining := make([]contextForeshadowCandidate, 0, len(candidates)-len(ordered))
+	for _, candidate := range candidates {
+		if !seen[candidate.ID] {
+			remaining = append(remaining, candidate)
+		}
+	}
+	sort.SliceStable(remaining, func(i, j int) bool {
+		if remaining[i].Priority != remaining[j].Priority {
+			return remaining[i].Priority > remaining[j].Priority
+		}
+		if remaining[i].Chapter != remaining[j].Chapter {
+			return remaining[i].Chapter > remaining[j].Chapter
+		}
+		return remaining[i].ID < remaining[j].ID
+	})
+	ordered = append(ordered, remaining...)
+
+	selected := map[string]map[string]any{}
+	for _, candidate := range ordered {
+		id := compactContextString(candidate.ID)
+		if id == "" {
+			continue
+		}
+		item := map[string]any{"state": compactContextString(candidate.Value.State)}
+		if description := compactContextString(candidate.Value.Description); description != "" {
+			item["description"] = description
+		}
+		selected[id] = item
+		raw, err := json.Marshal(selected)
+		if err != nil || len(raw) > maxBytes {
+			delete(selected, id)
+		}
+	}
+	return selected
+}
+
+func foreshadowContextPriority(state string) int {
+	switch state {
+	case "paid_off":
+		return 6
+	case "payoff_ready":
+		return 5
+	case "reinforced":
+		return 4
+	case "misdirected":
+		return 3
+	case "seeded":
+		return 2
+	case "planned":
+		return 1
+	default:
+		return 0
+	}
+}
+
+type contextPromiseCandidate struct {
+	ID    string
+	Value domain.CoreReaderPromiseState
+}
+
+func compactReaderPromisesForContext(state domain.CoreLongformState, query string, maxBytes int) map[string]map[string]any {
+	if maxBytes <= 0 {
+		return nil
+	}
+	ids := make([]string, 0, len(state.ReaderPromises))
+	for id, value := range state.ReaderPromises {
+		if value.State != "fulfilled" && value.State != "retired" {
+			ids = append(ids, id)
+		}
+	}
+	sort.Strings(ids)
+	candidates := make([]contextPromiseCandidate, 0, len(ids))
+	byID := map[string]contextPromiseCandidate{}
+	docs := make([]retrieval.Document, 0, len(ids))
+	for _, id := range ids {
+		value := state.ReaderPromises[id]
+		candidate := contextPromiseCandidate{ID: id, Value: value}
+		candidates = append(candidates, candidate)
+		byID[id] = candidate
+		docs = append(docs, retrieval.Document{ID: id, Text: id + "\n" + value.Statement + "\n" + value.State})
+	}
+	ordered := make([]contextPromiseCandidate, 0, len(candidates))
+	seen := map[string]bool{}
+	for _, hit := range retrieval.RankKeyword(docs, query, len(docs)) {
+		candidate := byID[hit.ID]
+		ordered = append(ordered, candidate)
+		seen[candidate.ID] = true
+	}
+	remaining := make([]contextPromiseCandidate, 0, len(candidates)-len(ordered))
+	for _, candidate := range candidates {
+		if !seen[candidate.ID] {
+			remaining = append(remaining, candidate)
+		}
+	}
+	sort.SliceStable(remaining, func(i, j int) bool {
+		left := remaining[i].Value.DeadlineChapter
+		right := remaining[j].Value.DeadlineChapter
+		if left == 0 {
+			left = int(^uint(0) >> 1)
+		}
+		if right == 0 {
+			right = int(^uint(0) >> 1)
+		}
+		if left != right {
+			return left < right
+		}
+		return remaining[i].ID < remaining[j].ID
+	})
+	ordered = append(ordered, remaining...)
+
+	selected := map[string]map[string]any{}
+	for _, candidate := range ordered {
+		id := compactContextString(candidate.ID)
+		if id == "" {
+			continue
+		}
+		item := map[string]any{"state": compactContextString(candidate.Value.State)}
+		if statement := compactContextString(candidate.Value.Statement); statement != "" {
+			item["statement"] = statement
+		}
+		if candidate.Value.DeadlineChapter > 0 {
+			item["deadline_chapter"] = candidate.Value.DeadlineChapter
+		}
+		selected[id] = item
+		raw, err := json.Marshal(selected)
+		if err != nil || len(raw) > maxBytes {
+			delete(selected, id)
 		}
 	}
 	return selected

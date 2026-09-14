@@ -205,3 +205,52 @@ func TestContextCompilerBoundsKnowledgeInventoryAndKeepsRelevantFacts(t *testing
 		}
 	}
 }
+
+func TestContextCompilerBoundsActiveObligationsAndKeepsRelevantUrgentItems(t *testing.T) {
+	const budget = 16 << 10
+	foreshadows := make(map[string]domain.CoreForeshadowState, 240)
+	promises := make(map[string]domain.CoreReaderPromiseState, 240)
+	events := make(map[string]domain.CoreEventEvidence, 240)
+	for i := 1; i <= 240; i++ {
+		eventID := fmt.Sprintf("story-event-%06d", i)
+		fsID := fmt.Sprintf("fs-%03d", i)
+		description := fmt.Sprintf("常规伏笔 %03d：%s", i, strings.Repeat("伏笔", 40))
+		if i == 7 {
+			fsID = "fs-red-umbrella"
+			description = "红色纸伞与十年前旧案直接相关"
+		}
+		events[eventID] = domain.CoreEventEvidence{EventID: eventID, Chapter: i}
+		foreshadows[fsID] = domain.CoreForeshadowState{Description: description, State: "reinforced", EvidenceEventID: eventID}
+		promiseID := fmt.Sprintf("promise-%03d", i)
+		deadline := 900 + i
+		statement := fmt.Sprintf("常规读者承诺 %03d：%s", i, strings.Repeat("承诺", 40))
+		if i == 11 {
+			promiseID = "promise-urgent"
+			deadline = 601
+			statement = "下一章必须揭示匿名信的寄件人身份"
+		}
+		promises[promiseID] = domain.CoreReaderPromiseState{Statement: statement, State: "deferred", DeadlineChapter: deadline}
+	}
+	canon := domain.CoreCanonState{
+		SchemaVersion: 1, Revision: 600, ProjectID: "book", LatestChapter: 600,
+		Longform: domain.CoreLongformState{Events: events, Foreshadows: foreshadows, ReaderPromises: promises},
+	}
+	out, err := compileTaskContext(contextCompilerInput{
+		Target: "chapter:601", CanonRoot: "root-600",
+		EndingContract: map[string]any{"main_resolution": "收束"}, BookPlan: map[string]any{"direction": "推进"},
+		Constraints: []domain.CoreTaskConstraint{{Instruction: "这一章必须重新呼应红色纸伞"}},
+		CanonState:  canon,
+	}, budget)
+	if err != nil {
+		t.Fatalf("active obligations should stay within fixed context budget: %v", err)
+	}
+	if out.TotalBytes > budget {
+		t.Fatalf("bytes=%d budget=%d", out.TotalBytes, budget)
+	}
+	text := string(out.CanonExcerptJSON)
+	for _, want := range []string{"fs-red-umbrella", "红色纸伞与十年前旧案直接相关", "promise-urgent", "下一章必须揭示匿名信的寄件人身份"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("priority obligation missing %q: %s", want, text)
+		}
+	}
+}
