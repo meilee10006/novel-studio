@@ -268,8 +268,10 @@ func validateAndCanonicalizeChapter(files map[string][]byte, state *domain.CoreP
 			violations = append(violations, "visible story event evidence anchor is absent from chapter")
 		}
 	}
-	if _, ok := values["state_delta.json"].(map[string]any); !ok {
+	if delta, ok := values["state_delta.json"].(map[string]any); !ok {
 		violations = append(violations, "state_delta.json must be an object")
+	} else if _, ok := delta["changes"].([]any); !ok {
+		violations = append(violations, "state_delta.json.changes must be an array")
 	}
 	if _, ok := values["self_review.json"].(map[string]any); !ok {
 		violations = append(violations, "self_review.json must be an object")

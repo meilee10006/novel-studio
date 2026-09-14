@@ -523,6 +523,9 @@ func TestEvidenceRequiredForRelationshipForeshadowAndPromise(t *testing.T) {
 }
 
 func longformChapterArtifacts(chapter int, changes []map[string]any) map[string][]byte {
+	if changes == nil {
+		changes = []map[string]any{}
+	}
 	body := "章节正文。主角看见门口的灯。"
 	contract, _ := json.Marshal(map[string]any{"chapter": chapter, "declared_pov": "character-000001"})
 	events, _ := json.Marshal(map[string]any{"events": []map[string]any{{

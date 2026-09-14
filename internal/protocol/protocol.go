@@ -159,7 +159,7 @@ self_review.json：
 {"ok":true}
 ~~~
 
-events.json 的 local_id 只在本次提交中使用。kind 只支持 onscreen / offscreen。除 kind=offscreen 外，可见事件必须有 evidence_anchor，且 anchor 必须逐字出现在 chapter.md。离屏事件必须显式使用 kind=offscreen，并提供非空 constraint_refs；其中每个 ID 都必须逐项命中当前 chapter_contract.hard_constraints[].id，表示这个离屏事实已被本章硬约束明确允许。Core 只验证这些引用真实存在，不判断离屏剧情在文学上是否合理。state_delta 中要引用本章事件时使用 event_ref；Core ACCEPTED 时会把它改成 event_canon_id。没有结构化状态变化时可以使用 {"changes":[]}。
+events.json 的 local_id 只在本次提交中使用。kind 只支持 onscreen / offscreen。除 kind=offscreen 外，可见事件必须有 evidence_anchor，且 anchor 必须逐字出现在 chapter.md。离屏事件必须显式使用 kind=offscreen，并提供非空 constraint_refs；其中每个 ID 都必须逐项命中当前 chapter_contract.hard_constraints[].id，表示这个离屏事实已被本章硬约束明确允许。Core 只验证这些引用真实存在，不判断离屏剧情在文学上是否合理。state_delta 中要引用本章事件时使用 event_ref；Core ACCEPTED 时会把它改成 event_canon_id。state_delta.json.changes 必须是数组；没有结构化状态变化时也必须显式提交 {"changes":[]}。
 
 state_delta 支持的 change kind 包括 character_add、location_add、resource_add、knowledge_add、resource、location、relationship、foreshadow、conflict、reader_promise、ending_resolution；需要事件证据的 change 使用本章 event_ref。不要自行发明 canonical event ID。常用合法形状如下：
 
