@@ -160,6 +160,15 @@ func applyKnowledgeChange(state *domain.CoreLongformState, change map[string]any
 		*violations = append(*violations, "knowledge source kind is unsupported")
 		return
 	}
+	if existingFacts := state.Knowledge[characterID]; existingFacts != nil {
+		if existingFact, ok := existingFacts[factID]; ok && existingFact.Statement != "" {
+			if statement != "" && statement != existingFact.Statement {
+				*violations = append(*violations, "knowledge fact statement conflicts with existing fact")
+				return
+			}
+			statement = existingFact.Statement
+		}
+	}
 	if state.Knowledge[characterID] == nil {
 		state.Knowledge[characterID] = map[string]domain.CoreKnowledgeFact{}
 	}
