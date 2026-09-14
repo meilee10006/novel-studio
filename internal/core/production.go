@@ -489,14 +489,18 @@ func rewriteFoundationRefs(value any, lookup map[string]string, violations *[]st
 	switch x := value.(type) {
 	case map[string]any:
 		entityType, _ := x["entity_type"].(string)
-		localRef, hasRef := x["local_ref"].(string)
-		if hasRef {
-			key := strings.TrimSpace(entityType) + "\x00" + strings.TrimSpace(localRef)
-			if id := lookup[key]; id != "" {
-				x["canon_id"] = id
-				delete(x, "local_ref")
+		if rawRef, exists := x["local_ref"]; exists {
+			localRef, ok := rawRef.(string)
+			if !ok || strings.TrimSpace(localRef) == "" {
+				*violations = append(*violations, "local_ref must be a non-empty string")
 			} else {
-				*violations = append(*violations, "unknown local reference: "+strings.TrimSpace(entityType)+"/"+strings.TrimSpace(localRef))
+				key := strings.TrimSpace(entityType) + "\x00" + strings.TrimSpace(localRef)
+				if id := lookup[key]; id != "" {
+					x["canon_id"] = id
+					delete(x, "local_ref")
+				} else {
+					*violations = append(*violations, "unknown local reference: "+strings.TrimSpace(entityType)+"/"+strings.TrimSpace(localRef))
+				}
 			}
 		}
 		for _, child := range x {
