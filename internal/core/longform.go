@@ -66,7 +66,9 @@ func applyLongformChange(state *domain.CoreLongformState, change map[string]any,
 	kind, _ := change["kind"].(string)
 	switch strings.TrimSpace(kind) {
 	case "character_add":
-		applyCharacterAdd(state, change, violations)
+		applyEntityAdd(state, change, "character", violations)
+	case "location_add":
+		applyEntityAdd(state, change, "location", violations)
 	case "knowledge_add":
 		applyKnowledgeChange(state, change, violations)
 	case "resource":
@@ -83,22 +85,23 @@ func applyLongformChange(state *domain.CoreLongformState, change map[string]any,
 		applyEndingResolutionChange(state, change, violations)
 	}
 }
-func applyCharacterAdd(state *domain.CoreLongformState, change map[string]any, violations *[]string) {
+func applyEntityAdd(state *domain.CoreLongformState, change map[string]any, entityType string, violations *[]string) {
 	canonID := cleanString(change["canon_id"])
 	name := cleanString(change["name"])
+	label := entityType + "_add"
 	if canonID == "" || name == "" {
-		*violations = append(*violations, "character_add requires canon_id and name")
+		*violations = append(*violations, label+" requires canon_id and name")
 		return
 	}
-	if !requireEvidence(state, change, "character_add", violations) {
+	if !requireEvidence(state, change, label, violations) {
 		return
 	}
 	if _, exists := state.Entities[canonID]; exists {
-		*violations = append(*violations, "character_add canonical id already exists: "+canonID)
+		*violations = append(*violations, label+" canonical id already exists: "+canonID)
 		return
 	}
 	state.Entities[canonID] = domain.CoreEntityState{
-		EntityType: "character", Name: name, Description: cleanString(change["description"]),
+		EntityType: entityType, Name: name, Description: cleanString(change["description"]),
 		EvidenceEventID: cleanString(change["event_canon_id"]),
 	}
 }

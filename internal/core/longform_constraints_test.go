@@ -136,6 +136,47 @@ func TestResourceCannotGoNegative(t *testing.T) {
 	}
 }
 
+func TestChapterCanAddCanonicalLocationForLaterTasks(t *testing.T) {
+	project, _, workspace, ready := acceptedFoundationProject(t)
+	artifacts := longformChapterArtifacts(1, []map[string]any{
+		{"kind": "location_add", "local_id": "station", "name": "旧车站", "event_ref": "e1"},
+		{"kind": "location", "character_id": "character-000001", "location_id": "station", "start_tick": 0, "end_tick": 10, "event_ref": "e1"},
+	})
+	settled := submitAndSettleChapter(t, project, workspace, ready, artifacts)
+	if settled.Result != "ACCEPTED" {
+		t.Fatalf("chapter 1 settlement=%+v", settled)
+	}
+	locationID := mappingID(settled.IDMappings, "location", "station")
+	if locationID == "" {
+		t.Fatalf("location mapping missing: %+v", settled.IDMappings)
+	}
+	state := readCanonState(t, project)
+	entity, ok := state.Longform.Entities[locationID]
+	if !ok || entity.Name != "旧车站" || entity.EntityType != "location" {
+		t.Fatalf("dynamic entities=%+v", state.Longform.Entities)
+	}
+	if state.Longform.Locations["character-000001"].LocationID != locationID {
+		t.Fatalf("locations=%+v", state.Longform.Locations)
+	}
+
+	next := readReady(t, workspace)
+	canonPath := filepath.Join(workspace, "exchange", "outbox", next.TaskID, next.AttemptID, "canon_excerpt.json")
+	canonRaw, err := os.ReadFile(canonPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(canonRaw), locationID) || !strings.Contains(string(canonRaw), "旧车站") {
+		t.Fatalf("next task cannot discover dynamic location: %s", canonRaw)
+	}
+
+	second := longformChapterArtifacts(2, []map[string]any{{
+		"kind": "location", "character_id": "character-000001", "location_id": locationID, "start_tick": 10, "end_tick": 20, "event_ref": "e1",
+	}})
+	if got := submitAndSettleChapter(t, project, workspace, next, second); got.Result != "ACCEPTED" {
+		t.Fatalf("chapter 2 with dynamic location settlement=%+v", got)
+	}
+}
+
 func TestChapterCanAddCanonicalCharacterForLaterTasks(t *testing.T) {
 	project, _, workspace, ready := acceptedFoundationProject(t)
 	artifacts := longformChapterArtifacts(1, []map[string]any{
@@ -381,8 +422,11 @@ type CoreCanonStateView struct {
 			EntityType string `json:"entity_type"`
 			Name       string `json:"name"`
 		} `json:"entities"`
-		Knowledge      map[string]map[string]any `json:"knowledge"`
-		Resources      map[string]int64          `json:"resources"`
+		Knowledge map[string]map[string]any `json:"knowledge"`
+		Locations map[string]struct {
+			LocationID string `json:"location_id"`
+		} `json:"locations"`
+		Resources      map[string]int64 `json:"resources"`
 		ReaderPromises map[string]struct {
 			State string `json:"state"`
 		} `json:"reader_promises"`

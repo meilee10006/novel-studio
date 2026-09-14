@@ -239,8 +239,8 @@ func validateAndCanonicalizeChapter(files map[string][]byte, state *domain.CoreP
 		return nil, nil, violations, chapter, nil
 	}
 
-	entityMappings, characterLookup, seq := canonicalizeChapterCharacterAdds(values["state_delta.json"], state.NextEntitySeq, &violations)
-	rewriteChapterLocalCharacterRefs(values, characterLookup)
+	entityMappings, characterLookup, locationLookup, seq := canonicalizeChapterEntityAdds(values["state_delta.json"], state.NextEntitySeq, &violations)
+	rewriteChapterLocalEntityRefs(values, characterLookup, locationLookup)
 	if len(violations) > 0 {
 		return nil, nil, violations, chapter, nil
 	}
@@ -271,64 +271,81 @@ func validateAndCanonicalizeChapter(files map[string][]byte, state *domain.CoreP
 	}
 	return canonical, mappings, nil, chapter, nil
 }
-func canonicalizeChapterCharacterAdds(value any, seq int, violations *[]string) ([]IDMapping, map[string]string, int) {
+func canonicalizeChapterEntityAdds(value any, seq int, violations *[]string) ([]IDMapping, map[string]string, map[string]string, int) {
 	root, _ := value.(map[string]any)
 	changes, _ := root["changes"].([]any)
 	defs := map[string]map[string]any{}
+	types := map[string]string{}
 	for _, raw := range changes {
 		change, _ := raw.(map[string]any)
-		if cleanString(change["kind"]) != "character_add" {
+		kind := cleanString(change["kind"])
+		entityType := ""
+		switch kind {
+		case "character_add":
+			entityType = "character"
+		case "location_add":
+			entityType = "location"
+		default:
 			continue
 		}
 		localID := cleanString(change["local_id"])
 		name := cleanString(change["name"])
 		if localID == "" || name == "" {
-			*violations = append(*violations, "character_add requires local_id and name")
+			*violations = append(*violations, kind+" requires local_id and name")
 			continue
 		}
-		if _, exists := defs[localID]; exists {
-			*violations = append(*violations, "duplicate character_add local_id: "+localID)
+		key := entityType + "\x00" + localID
+		if _, exists := defs[key]; exists {
+			*violations = append(*violations, "duplicate "+kind+" local_id: "+localID)
 			continue
 		}
-		defs[localID] = change
+		defs[key] = change
+		types[key] = entityType
 	}
-	localIDs := make([]string, 0, len(defs))
-	for localID := range defs {
-		localIDs = append(localIDs, localID)
+	keys := make([]string, 0, len(defs))
+	for key := range defs {
+		keys = append(keys, key)
 	}
-	sort.Strings(localIDs)
-	mappings := make([]IDMapping, 0, len(localIDs))
-	lookup := make(map[string]string, len(localIDs))
-	for _, localID := range localIDs {
-		canonID := fmt.Sprintf("character-%06d", seq)
+	sort.Strings(keys)
+	mappings := make([]IDMapping, 0, len(keys))
+	characters := map[string]string{}
+	locations := map[string]string{}
+	for _, key := range keys {
+		entityType := types[key]
+		localID := strings.TrimPrefix(key, entityType+"\x00")
+		canonID := fmt.Sprintf("%s-%06d", entityType, seq)
 		seq++
-		lookup[localID] = canonID
-		change := defs[localID]
+		change := defs[key]
 		change["canon_id"] = canonID
 		delete(change, "local_id")
-		mappings = append(mappings, IDMapping{EntityType: "character", LocalID: localID, CanonID: canonID})
-	}
-	return mappings, lookup, seq
-}
-
-func rewriteChapterLocalCharacterRefs(values map[string]any, lookup map[string]string) {
-	if len(lookup) == 0 {
-		return
-	}
-	if contract, ok := values["chapter_contract.json"].(map[string]any); ok {
-		if local := cleanString(contract["declared_pov"]); lookup[local] != "" {
-			contract["declared_pov"] = lookup[local]
+		mappings = append(mappings, IDMapping{EntityType: entityType, LocalID: localID, CanonID: canonID})
+		switch entityType {
+		case "character":
+			characters[localID] = canonID
+		case "location":
+			locations[localID] = canonID
 		}
 	}
-	if eventsRoot, ok := values["events.json"].(map[string]any); ok {
-		for _, raw := range anySlice(eventsRoot["events"]) {
-			item, _ := raw.(map[string]any)
-			for _, field := range []string{"actors", "observers"} {
-				items, _ := item[field].([]any)
-				for i, value := range items {
-					local := cleanString(value)
-					if canonID := lookup[local]; canonID != "" {
-						items[i] = canonID
+	return mappings, characters, locations, seq
+}
+
+func rewriteChapterLocalEntityRefs(values map[string]any, characters, locations map[string]string) {
+	if len(characters) > 0 {
+		if contract, ok := values["chapter_contract.json"].(map[string]any); ok {
+			if local := cleanString(contract["declared_pov"]); characters[local] != "" {
+				contract["declared_pov"] = characters[local]
+			}
+		}
+		if eventsRoot, ok := values["events.json"].(map[string]any); ok {
+			for _, raw := range anySlice(eventsRoot["events"]) {
+				item, _ := raw.(map[string]any)
+				for _, field := range []string{"actors", "observers"} {
+					items, _ := item[field].([]any)
+					for i, value := range items {
+						local := cleanString(value)
+						if canonID := characters[local]; canonID != "" {
+							items[i] = canonID
+						}
 					}
 				}
 			}
@@ -337,24 +354,27 @@ func rewriteChapterLocalCharacterRefs(values map[string]any, lookup map[string]s
 	root, _ := values["state_delta.json"].(map[string]any)
 	for _, raw := range anySlice(root["changes"]) {
 		change, _ := raw.(map[string]any)
-		if local := cleanString(change["character_id"]); lookup[local] != "" {
-			change["character_id"] = lookup[local]
+		if local := cleanString(change["character_id"]); characters[local] != "" {
+			change["character_id"] = characters[local]
+		}
+		if local := cleanString(change["location_id"]); locations[local] != "" {
+			change["location_id"] = locations[local]
 		}
 		if cleanString(change["kind"]) == "relationship" {
 			left, right, ok := relationshipCharacterIDs(cleanString(change["relationship_id"]))
 			if ok {
-				if lookup[left] != "" {
-					left = lookup[left]
+				if characters[left] != "" {
+					left = characters[left]
 				}
-				if lookup[right] != "" {
-					right = lookup[right]
+				if characters[right] != "" {
+					right = characters[right]
 				}
 				change["relationship_id"] = left + "|" + right
 			}
 		}
 		if source, ok := change["source"].(map[string]any); ok {
-			if local := cleanString(source["from_character_id"]); lookup[local] != "" {
-				source["from_character_id"] = lookup[local]
+			if local := cleanString(source["from_character_id"]); characters[local] != "" {
+				source["from_character_id"] = characters[local]
 			}
 		}
 	}
@@ -446,9 +466,14 @@ func (p *Project) validateCanonicalEntityReferences(canonical map[string][]byte,
 	}
 	for _, raw := range anySlice(delta["changes"]) {
 		change, _ := raw.(map[string]any)
-		if cleanString(change["kind"]) == "character_add" {
+		switch cleanString(change["kind"]) {
+		case "character_add":
 			if id := cleanString(change["canon_id"]); id != "" {
 				ids[id] = true
+			}
+		case "location_add":
+			if id := cleanString(change["canon_id"]); id != "" {
+				locations[id] = true
 			}
 		}
 	}
