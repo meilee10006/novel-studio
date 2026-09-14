@@ -68,6 +68,39 @@ func TestConflictGetsCanonicalIDAndLifecycle(t *testing.T) {
 	}
 }
 
+func TestConflictDefinitionFieldsCannotChangeAfterCreation(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		field string
+		value string
+	}{
+		{"description", "description", "甲乙改为争夺另一把钥匙"},
+		{"escalation", "escalation_condition", "见面即升级"},
+		{"close condition", "close_condition", "任意一方离开即可关闭"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			project, workspace, firstID, secondID, _ := projectWithTwoCharacters(t)
+			ready := readReady(t, workspace)
+			first := longformChapterArtifacts(1, []map[string]any{{
+				"kind": "conflict", "local_id": "rivalry", "description": "甲乙争夺同一把钥匙",
+				"participants": []string{firstID, secondID}, "state": "open",
+				"escalation_condition": "双方公开争夺钥匙", "close_condition": "钥匙归属明确", "event_ref": "e1",
+			}})
+			settled := submitAndSettleChapter(t, project, workspace, ready, first)
+			if settled.Result != "ACCEPTED" {
+				t.Fatalf("create=%+v", settled)
+			}
+			conflictID := mappingID(settled.IDMappings, "conflict", "rivalry")
+			next := readReady(t, workspace)
+			change := map[string]any{"kind": "conflict", "conflict_id": conflictID, "state": "escalated", "event_ref": "e1", tc.field: tc.value}
+			got := submitAndSettleChapter(t, project, workspace, next, longformChapterArtifacts(2, []map[string]any{change}))
+			if got.Result != "REWRITE" || !containsViolation(got.Violations, "conflict") {
+				t.Fatalf("mutation=%+v", got)
+			}
+		})
+	}
+}
+
 func TestConflictRejectsUnknownParticipantAndIllegalTransition(t *testing.T) {
 	project, workspace, firstID, _, _ := projectWithTwoCharacters(t)
 	ready := readReady(t, workspace)

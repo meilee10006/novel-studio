@@ -304,6 +304,16 @@ func applyConflictChange(state *domain.CoreLongformState, change map[string]any,
 			return
 		}
 	}
+	for field, previousValue := range map[string]string{
+		"description":          previous.Description,
+		"escalation_condition": previous.EscalationCondition,
+		"close_condition":      previous.CloseCondition,
+	} {
+		if _, provided := change[field]; provided && cleanString(change[field]) != previousValue {
+			*violations = append(*violations, "conflict "+field+" is immutable after creation")
+			return
+		}
+	}
 	state.Conflicts[id] = domain.CoreConflictState{
 		Description: previous.Description, Participants: append([]string(nil), previous.Participants...), State: nextState,
 		EscalationCondition: previous.EscalationCondition, CloseCondition: previous.CloseCondition,
