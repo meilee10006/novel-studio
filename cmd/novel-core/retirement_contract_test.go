@@ -199,3 +199,41 @@ func TestProviderFreeRepositoryHasNoOrphanLegacyScaffolding(t *testing.T) {
 		}
 	}
 }
+
+func TestOptionalWritingReferencesDoNotContainRetiredRuntimeProtocol(t *testing.T) {
+	root := filepath.Clean(filepath.Join("..", ".."))
+	for _, rel := range []string{
+		"assets/references/anti-ai-tone.md",
+		"assets/references/web-reference-guidelines.md",
+	} {
+		if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(rel))); err == nil {
+			t.Errorf("retired runtime-bound writing reference remains: %s", rel)
+		} else if !os.IsNotExist(err) {
+			t.Fatal(err)
+		}
+	}
+	entries, err := os.ReadDir(filepath.Join(root, "assets", "references"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		raw, err := os.ReadFile(filepath.Join(root, "assets", "references", entry.Name()))
+		if err != nil {
+			t.Fatal(err)
+		}
+		text := strings.ToLower(string(raw))
+		for _, forbidden := range []string{
+			"aigc_report", "codex-local-aigc", "commit_chapter", "plan_chapter",
+			"drafter", "web_research", "craft_recall(", "novel_context",
+			"reference_pack.references", "causal_simulation.external_reference_plan",
+			"text_signals.py", "paragraph_dup.py", "typo_scan.py",
+		} {
+			if strings.Contains(text, forbidden) {
+				t.Errorf("%s still contains retired runtime marker %q", entry.Name(), forbidden)
+			}
+		}
+	}
+}
