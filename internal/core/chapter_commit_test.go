@@ -131,6 +131,34 @@ func TestSettledChapterCannotBeReclaimedByOldDriveAttempt(t *testing.T) {
 	}
 }
 
+func TestChapterRejectsUnknownDeclaredPOV(t *testing.T) {
+	project, _, workspace, ready := acceptedFoundationProject(t)
+	before, err := project.Status()
+	if err != nil {
+		t.Fatal(err)
+	}
+	artifacts := validChapterArtifacts(1)
+	artifacts["chapter_contract.json"] = []byte(`{"chapter":1,"declared_pov":"character-999999"}`)
+	writeSubmission(t, workspace, ready, artifacts, false)
+	project.submissionQuietPeriod = 0
+	_, _ = project.ScanActiveSubmission()
+	_, _ = project.ScanActiveSubmission()
+	result, err := project.SettleActiveSnapshot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Result != "REWRITE" {
+		t.Fatalf("unknown POV result=%+v", result)
+	}
+	after, err := project.Status()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.CanonRoot != before.CanonRoot || after.ActiveTarget != "chapter:1" || after.ActiveAttemptID == ready.AttemptID {
+		t.Fatalf("unknown POV changed authority incorrectly: before=%+v after=%+v", before, after)
+	}
+}
+
 func acceptedFoundationProject(t *testing.T) (*Project, string, string, readyView) {
 	t.Helper()
 	project, local, workspace := newChapterReadyProject(t)

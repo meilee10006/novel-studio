@@ -89,6 +89,13 @@ func (p *Project) settleActiveSnapshotLocked() (ChapterSettlement, error) {
 	if err != nil {
 		return ChapterSettlement{}, err
 	}
+	if len(violations) == 0 {
+		povViolations, err := p.validateDeclaredPOV(canonical["chapter_contract.json"])
+		if err != nil {
+			return ChapterSettlement{}, err
+		}
+		violations = append(violations, povViolations...)
+	}
 	if len(violations) > 0 {
 		return p.rejectChapter(project, state, task, attempt, record, files, violations)
 	}
@@ -279,6 +286,30 @@ func rewriteEventRefs(value any, lookup map[string]string, violations *[]string)
 			rewriteEventRefs(child, lookup, violations)
 		}
 	}
+}
+
+func (p *Project) validateDeclaredPOV(contractRaw []byte) ([]string, error) {
+	var contract map[string]any
+	if err := protocol.DecodeJSON(contractRaw, &contract); err != nil {
+		return nil, err
+	}
+	pov := cleanString(contract["declared_pov"])
+	charactersRaw, err := p.store.ReadCoreCanonArtifact("characters.json")
+	if err != nil {
+		return nil, err
+	}
+	var root map[string]any
+	if err := protocol.DecodeJSON(charactersRaw, &root); err != nil {
+		return nil, err
+	}
+	items, _ := root["characters"].([]any)
+	for _, raw := range items {
+		item, _ := raw.(map[string]any)
+		if cleanString(item["canon_id"]) == pov {
+			return nil, nil
+		}
+	}
+	return []string{"chapter_contract.declared_pov is not a canonical character"}, nil
 }
 
 func chapterNumberFromTarget(target string) (int, error) {
