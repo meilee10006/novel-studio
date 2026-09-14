@@ -28,9 +28,6 @@ go.work.sum
 # env file
 .env
 
-# 项目级配置 dotdir（镜像 ~/.novel-studio/）：config.json 含密钥，rules/ 为本地写作偏好
-.novel-studio/
-
 # Editor/IDE
 .idea/
 .vscode/
@@ -38,7 +35,7 @@ go.work.sum
 # GoReleaser artifacts
 dist/
 release-notes.md
-/novel-studio
+/novel-core
 
 tasks
 refer/
@@ -54,12 +51,6 @@ deconstruction-library.zip
 
 # 数据集(参考库/生成产物/运行工作区)不入库
 data/
-
-# 本地 embedding 模型权重(>100MB,下载方式见 models/embedding/README.md)
-models/embedding/*.gguf
-
-# Claude Code 本地会话配置
-.claude/settings.local.json
 
 # Python 缓存
 __pycache__/

@@ -177,3 +177,25 @@ func TestProviderFreeDomainContainsOnlyCoreTypes(t *testing.T) {
 		}
 	}
 }
+
+func TestProviderFreeRepositoryHasNoOrphanLegacyScaffolding(t *testing.T) {
+	root := filepath.Clean(filepath.Join("..", ".."))
+	if _, err := os.Stat(filepath.Join(root, "internal", "errs")); err == nil {
+		t.Error("orphan internal/errs package remains")
+	} else if !os.IsNotExist(err) {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(filepath.Join(root, ".gitignore"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(raw)
+	if !strings.Contains(text, "/novel-core") {
+		t.Error(".gitignore does not ignore the supported novel-core binary")
+	}
+	for _, forbidden := range []string{"/novel-studio", ".novel-studio/", "models/embedding", "Claude Code", ".claude/"} {
+		if strings.Contains(text, forbidden) {
+			t.Errorf(".gitignore still contains retired scaffolding %q", forbidden)
+		}
+	}
+}
