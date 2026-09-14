@@ -98,3 +98,20 @@ func TestExpiredLegacySubsystemsAreRemoved(t *testing.T) {
 		}
 	}
 }
+
+func TestProviderFreeCoreUsesDedicatedStore(t *testing.T) {
+	root := filepath.Clean(filepath.Join("..", ".."))
+	raw, err := os.ReadFile(filepath.Join(root, "internal", "core", "project.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(raw)
+	if !strings.Contains(text, "*store.CoreStore") {
+		t.Error("core Project does not use dedicated store.CoreStore")
+	}
+	for _, forbidden := range []string{"*store.Store", "store.NewStore", ".Progress", ".Checkpoints", ".CheckConsistency"} {
+		if strings.Contains(text, forbidden) {
+			t.Errorf("provider-free Core still depends on legacy Store surface %q", forbidden)
+		}
+	}
+}

@@ -191,13 +191,6 @@ func (p *Project) applyChapterCommit(project *domain.CoreProjectState, journal *
 		return ChapterSettlement{}, err
 	}
 	chapterLogical := filepath.ToSlash(filepath.Join("chapters", fmt.Sprintf("%06d", journal.Chapter), "chapter.md"))
-	if _, err := p.store.Checkpoints.Append(domain.ChapterScope(journal.Chapter), "commit", filepath.Join("meta", "core", "canon", "artifacts", filepath.FromSlash(chapterLogical)), "sha256:"+journal.CanonHead.ArtifactDigests[chapterLogical]); err != nil {
-		return ChapterSettlement{}, err
-	}
-	if err := p.maybeCommitFault("checkpoint"); err != nil {
-		return ChapterSettlement{}, err
-	}
-
 	body, err := p.store.ReadCorePreparedArtifact(journal.AttemptID, chapterLogical)
 	if err != nil {
 		return ChapterSettlement{}, err

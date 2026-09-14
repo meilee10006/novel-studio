@@ -8,10 +8,10 @@ import (
 	"github.com/chenhongyang/novel-studio/internal/domain"
 )
 
-func (s *Store) LoadCoreControlRecord(messageID string) (*domain.CoreControlRecord, error) {
+func (s *CoreStore) LoadCoreControlRecord(messageID string) (*domain.CoreControlRecord, error) {
 	var record domain.CoreControlRecord
 	rel := filepath.Join("meta", "core", "control", "reconcile", messageID+".json")
-	if err := s.Progress.io.ReadJSON(rel, &record); err != nil {
+	if err := s.io.ReadJSON(rel, &record); err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil
 		}
@@ -20,27 +20,27 @@ func (s *Store) LoadCoreControlRecord(messageID string) (*domain.CoreControlReco
 	return &record, nil
 }
 
-func (s *Store) SaveCoreControlRecord(record *domain.CoreControlRecord) error {
+func (s *CoreStore) SaveCoreControlRecord(record *domain.CoreControlRecord) error {
 	if record == nil || record.MessageID == "" {
 		return fmt.Errorf("control message id is required")
 	}
 	rel := filepath.Join("meta", "core", "control", "reconcile", record.MessageID+".json")
-	return s.Progress.io.WriteJSON(rel, record)
+	return s.io.WriteJSON(rel, record)
 }
-func (s *Store) SaveCoreControlSnapshot(messageID string, files map[string][]byte) error {
+func (s *CoreStore) SaveCoreControlSnapshot(messageID string, files map[string][]byte) error {
 	if messageID == "" {
 		return fmt.Errorf("control message id is required")
 	}
 	base := filepath.Join("meta", "core", "control", "snapshots", messageID)
-	if _, err := os.Stat(s.Progress.io.path(base)); err == nil {
-		return compareExistingSnapshot(s.Progress.io.path(base), files)
+	if _, err := os.Stat(s.io.path(base)); err == nil {
+		return compareExistingSnapshot(s.io.path(base), files)
 	} else if !os.IsNotExist(err) {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(s.Progress.io.path(base)), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(s.io.path(base)), 0o755); err != nil {
 		return err
 	}
-	tmp, err := os.MkdirTemp(filepath.Dir(s.Progress.io.path(base)), ".control-*")
+	tmp, err := os.MkdirTemp(filepath.Dir(s.io.path(base)), ".control-*")
 	if err != nil {
 		return err
 	}
@@ -53,12 +53,12 @@ func (s *Store) SaveCoreControlSnapshot(messageID string, files map[string][]byt
 			return err
 		}
 	}
-	return os.Rename(tmp, s.Progress.io.path(base))
+	return os.Rename(tmp, s.io.path(base))
 }
 
-func (s *Store) ReadCoreControlSnapshotFile(messageID, name string) ([]byte, error) {
+func (s *CoreStore) ReadCoreControlSnapshotFile(messageID, name string) ([]byte, error) {
 	if filepath.Base(name) != name {
 		return nil, fmt.Errorf("invalid control snapshot file %q", name)
 	}
-	return s.Progress.io.ReadFile(filepath.Join("meta", "core", "control", "snapshots", messageID, name))
+	return s.io.ReadFile(filepath.Join("meta", "core", "control", "snapshots", messageID, name))
 }

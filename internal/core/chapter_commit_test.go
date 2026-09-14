@@ -67,18 +67,8 @@ func TestChapterSnapshotAcceptedAdvancesCanonAndReady(t *testing.T) {
 	if raw, err := os.ReadFile(published); err != nil || string(raw) != string(artifacts["chapter.md"]) {
 		t.Fatalf("published chapter mismatch: err=%v body=%q", err, raw)
 	}
-	checkpoints, err := project.store.Checkpoints.AllStrict()
-	if err != nil {
-		t.Fatal(err)
-	}
-	found := false
-	for _, cp := range checkpoints {
-		if cp.Scope.Chapter == 1 && cp.Step == "commit" {
-			found = true
-		}
-	}
-	if !found {
-		t.Fatalf("chapter commit checkpoint missing: %+v", checkpoints)
+	if _, err := os.Stat(filepath.Join(local, "meta", "checkpoints.jsonl")); !os.IsNotExist(err) {
+		t.Fatalf("provider-free commit wrote legacy checkpoint journal: %v", err)
 	}
 }
 
@@ -148,7 +138,7 @@ func acceptedFoundationProject(t *testing.T) (*Project, string, string, readyVie
 }
 
 func TestChapterCommitCrashRecoveryCompletesAtomically(t *testing.T) {
-	stages := []string{"canon", "receipt", "checkpoint", "published", "production", "result", "ready"}
+	stages := []string{"canon", "receipt", "published", "production", "result", "ready"}
 	for _, stage := range stages {
 		t.Run(stage, func(t *testing.T) {
 			project, local, workspace, first := acceptedFoundationProject(t)
@@ -214,17 +204,7 @@ func TestChapterCommitRetryReusesPendingJournal(t *testing.T) {
 	if got := readReady(t, workspace); got.Target != "chapter:2" || got.BaseCanonRoot != settlement.NewCanonRoot {
 		t.Fatalf("next READY=%+v", got)
 	}
-	checkpoints, err := project.store.Checkpoints.AllStrict()
-	if err != nil {
-		t.Fatal(err)
-	}
-	count := 0
-	for _, cp := range checkpoints {
-		if cp.Scope.Chapter == 1 && cp.Step == "commit" {
-			count++
-		}
-	}
-	if count != 1 {
-		t.Fatalf("commit checkpoints=%d want 1", count)
+	if _, err := os.Stat(filepath.Join(project.root, "meta", "checkpoints.jsonl")); !os.IsNotExist(err) {
+		t.Fatalf("recovered provider-free commit wrote legacy checkpoint journal: %v", err)
 	}
 }

@@ -77,7 +77,7 @@ func InitProject(opts InitOptions) (*Project, error) {
 		return nil, fmt.Errorf("local authority and Drive workspace resolve to overlapping paths")
 	}
 
-	st := store.NewStore(localResolved)
+	st := store.NewCoreStore(localResolved)
 	state, err := st.LoadCoreProjectState()
 	if err != nil {
 		return nil, fmt.Errorf("load local project metadata: %w", err)

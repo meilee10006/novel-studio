@@ -15,7 +15,7 @@ import (
 
 type Project struct {
 	root                  string
-	store                 *store.Store
+	store                 *store.CoreStore
 	submissionQuietPeriod time.Duration
 	commitFault           func(string) error
 	controlFault          func(string) error
@@ -63,7 +63,7 @@ func OpenProject(root string) (*Project, error) {
 	if !info.IsDir() {
 		return nil, fmt.Errorf("project root %q is not a directory", abs)
 	}
-	st := store.NewStore(abs)
+	st := store.NewCoreStore(abs)
 	state, err := st.LoadCoreProjectState()
 	if err != nil {
 		return nil, fmt.Errorf("load core project metadata: %w", err)
@@ -78,11 +78,7 @@ func OpenProject(root string) (*Project, error) {
 }
 
 func (p *Project) Status() (Status, error) {
-	progress, err := p.store.Progress.Load()
-	if err != nil {
-		return Status{}, fmt.Errorf("load progress: %w", err)
-	}
-	out := Status{Root: p.root, Warnings: p.store.CheckConsistency()}
+	out := Status{Root: p.root}
 	state, err := p.store.LoadCoreProjectState()
 	if err != nil {
 		return Status{}, fmt.Errorf("load core project metadata: %w", err)
@@ -110,15 +106,6 @@ func (p *Project) Status() (Status, error) {
 			out.BlockID = production.ActiveBlock.BlockID
 		}
 	}
-	if progress == nil {
-		return out, nil
-	}
-	out.Initialized = true
-	out.NovelName = progress.NovelName
-	out.Phase = progress.Phase
-	out.CurrentChapter = progress.CurrentChapter
-	out.TotalChapters = progress.TotalChapters
-	out.CompletedChapters = len(progress.CompletedChapters)
 	return out, nil
 }
 

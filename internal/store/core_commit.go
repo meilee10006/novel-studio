@@ -9,16 +9,16 @@ import (
 	"github.com/chenhongyang/novel-studio/internal/domain"
 )
 
-func (s *Store) SaveCoreCommitJournal(j *domain.CoreCommitJournal) error {
+func (s *CoreStore) SaveCoreCommitJournal(j *domain.CoreCommitJournal) error {
 	if j == nil || j.AttemptID == "" {
 		return fmt.Errorf("commit journal attempt id is required")
 	}
-	return s.Progress.io.WriteJSON(filepath.Join("meta", "core", "commits", j.AttemptID+".json"), j)
+	return s.io.WriteJSON(filepath.Join("meta", "core", "commits", j.AttemptID+".json"), j)
 }
 
-func (s *Store) LoadCoreCommitJournal(attemptID string) (*domain.CoreCommitJournal, error) {
+func (s *CoreStore) LoadCoreCommitJournal(attemptID string) (*domain.CoreCommitJournal, error) {
 	var j domain.CoreCommitJournal
-	err := s.Progress.io.ReadJSON(filepath.Join("meta", "core", "commits", attemptID+".json"), &j)
+	err := s.io.ReadJSON(filepath.Join("meta", "core", "commits", attemptID+".json"), &j)
 	if os.IsNotExist(err) {
 		return nil, nil
 	}
@@ -28,8 +28,8 @@ func (s *Store) LoadCoreCommitJournal(attemptID string) (*domain.CoreCommitJourn
 	return &j, nil
 }
 
-func (s *Store) ListCoreCommitJournals() ([]domain.CoreCommitJournal, error) {
-	dir := s.Progress.io.path(filepath.Join("meta", "core", "commits"))
+func (s *CoreStore) ListCoreCommitJournals() ([]domain.CoreCommitJournal, error) {
+	dir := s.io.path(filepath.Join("meta", "core", "commits"))
 	entries, err := os.ReadDir(dir)
 	if os.IsNotExist(err) {
 		return nil, nil
@@ -43,7 +43,7 @@ func (s *Store) ListCoreCommitJournals() ([]domain.CoreCommitJournal, error) {
 			continue
 		}
 		var journal domain.CoreCommitJournal
-		if err := s.Progress.io.ReadJSON(filepath.Join("meta", "core", "commits", entry.Name()), &journal); err != nil {
+		if err := s.io.ReadJSON(filepath.Join("meta", "core", "commits", entry.Name()), &journal); err != nil {
 			return nil, err
 		}
 		out = append(out, journal)
@@ -52,14 +52,14 @@ func (s *Store) ListCoreCommitJournals() ([]domain.CoreCommitJournal, error) {
 	return out, nil
 }
 
-func (s *Store) SaveCorePreparedArtifacts(attemptID string, files map[string][]byte) error {
+func (s *CoreStore) SaveCorePreparedArtifacts(attemptID string, files map[string][]byte) error {
 	base := filepath.Join("meta", "core", "commits", attemptID, "artifacts")
-	if _, err := os.Stat(s.Progress.io.path(base)); err == nil {
+	if _, err := os.Stat(s.io.path(base)); err == nil {
 		return nil
 	} else if !os.IsNotExist(err) {
 		return err
 	}
-	parent := filepath.Dir(s.Progress.io.path(base))
+	parent := filepath.Dir(s.io.path(base))
 	if err := os.MkdirAll(parent, 0o755); err != nil {
 		return err
 	}
@@ -77,15 +77,15 @@ func (s *Store) SaveCorePreparedArtifacts(attemptID string, files map[string][]b
 			return err
 		}
 	}
-	return os.Rename(tmp, s.Progress.io.path(base))
+	return os.Rename(tmp, s.io.path(base))
 }
 
-func (s *Store) ReadCorePreparedArtifact(attemptID, name string) ([]byte, error) {
-	return s.Progress.io.ReadFile(filepath.Join("meta", "core", "commits", attemptID, "artifacts", filepath.FromSlash(name)))
+func (s *CoreStore) ReadCorePreparedArtifact(attemptID, name string) ([]byte, error) {
+	return s.io.ReadFile(filepath.Join("meta", "core", "commits", attemptID, "artifacts", filepath.FromSlash(name)))
 }
 
-func (s *Store) LoadPendingCoreCommitJournal() (*domain.CoreCommitJournal, error) {
-	dir := s.Progress.io.path(filepath.Join("meta", "core", "commits"))
+func (s *CoreStore) LoadPendingCoreCommitJournal() (*domain.CoreCommitJournal, error) {
+	dir := s.io.path(filepath.Join("meta", "core", "commits"))
 	entries, err := os.ReadDir(dir)
 	if os.IsNotExist(err) {
 		return nil, nil
@@ -99,7 +99,7 @@ func (s *Store) LoadPendingCoreCommitJournal() (*domain.CoreCommitJournal, error
 			continue
 		}
 		var j domain.CoreCommitJournal
-		if err := s.Progress.io.ReadJSON(filepath.Join("meta", "core", "commits", entry.Name()), &j); err != nil {
+		if err := s.io.ReadJSON(filepath.Join("meta", "core", "commits", entry.Name()), &j); err != nil {
 			return nil, err
 		}
 		if j.State == "committed" {

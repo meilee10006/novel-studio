@@ -13,9 +13,9 @@ import (
 
 const coreProductionStatePath = "meta/core/production.json"
 
-func (s *Store) LoadCoreProductionState() (*domain.CoreProductionState, error) {
+func (s *CoreStore) LoadCoreProductionState() (*domain.CoreProductionState, error) {
 	var state domain.CoreProductionState
-	if err := s.Progress.io.ReadJSON(coreProductionStatePath, &state); err != nil {
+	if err := s.io.ReadJSON(coreProductionStatePath, &state); err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil
 		}
@@ -24,21 +24,21 @@ func (s *Store) LoadCoreProductionState() (*domain.CoreProductionState, error) {
 	return &state, nil
 }
 
-func (s *Store) SaveCoreProductionState(state *domain.CoreProductionState) error {
+func (s *CoreStore) SaveCoreProductionState(state *domain.CoreProductionState) error {
 	if state == nil {
 		return fmt.Errorf("core production state is required")
 	}
-	return s.Progress.io.WriteJSON(coreProductionStatePath, state)
+	return s.io.WriteJSON(coreProductionStatePath, state)
 }
 
-func (s *Store) SaveCoreReceipt(receipt *domain.CoreReceipt) (string, error) {
+func (s *CoreStore) SaveCoreReceipt(receipt *domain.CoreReceipt) (string, error) {
 	if receipt == nil || receipt.AttemptID == "" {
 		return "", fmt.Errorf("receipt attempt id is required")
 	}
 	rel := filepath.Join("meta", "core", "receipts", receipt.AttemptID+".json")
-	if _, err := os.Stat(s.Progress.io.path(rel)); err == nil {
+	if _, err := os.Stat(s.io.path(rel)); err == nil {
 		var existing domain.CoreReceipt
-		if err := s.Progress.io.ReadJSON(rel, &existing); err != nil {
+		if err := s.io.ReadJSON(rel, &existing); err != nil {
 			return "", err
 		}
 		if reflect.DeepEqual(existing, *receipt) {
@@ -48,14 +48,14 @@ func (s *Store) SaveCoreReceipt(receipt *domain.CoreReceipt) (string, error) {
 	} else if !os.IsNotExist(err) {
 		return "", err
 	}
-	if err := s.Progress.io.WriteJSON(rel, receipt); err != nil {
+	if err := s.io.WriteJSON(rel, receipt); err != nil {
 		return "", err
 	}
 	return rel, nil
 }
 
-func (s *Store) ListCoreReceipts() ([]domain.CoreReceipt, error) {
-	dir := s.Progress.io.path(filepath.Join("meta", "core", "receipts"))
+func (s *CoreStore) ListCoreReceipts() ([]domain.CoreReceipt, error) {
+	dir := s.io.path(filepath.Join("meta", "core", "receipts"))
 	entries, err := os.ReadDir(dir)
 	if os.IsNotExist(err) {
 		return nil, nil
@@ -69,7 +69,7 @@ func (s *Store) ListCoreReceipts() ([]domain.CoreReceipt, error) {
 			continue
 		}
 		var receipt domain.CoreReceipt
-		if err := s.Progress.io.ReadJSON(filepath.Join("meta", "core", "receipts", entry.Name()), &receipt); err != nil {
+		if err := s.io.ReadJSON(filepath.Join("meta", "core", "receipts", entry.Name()), &receipt); err != nil {
 			return nil, err
 		}
 		out = append(out, receipt)
@@ -78,27 +78,27 @@ func (s *Store) ListCoreReceipts() ([]domain.CoreReceipt, error) {
 	return out, nil
 }
 
-func (s *Store) SaveCoreCanon(state *domain.CoreCanonState, head *domain.CoreCanonHead, artifacts map[string][]byte) error {
+func (s *CoreStore) SaveCoreCanon(state *domain.CoreCanonState, head *domain.CoreCanonHead, artifacts map[string][]byte) error {
 	if state == nil || head == nil {
 		return fmt.Errorf("canon state and head are required")
 	}
-	return s.Progress.io.WithWriteLock(func() error {
+	return s.io.WithWriteLock(func() error {
 		for name, data := range artifacts {
 			rel := filepath.Join("meta", "core", "canon", "artifacts", name)
-			if err := s.Progress.io.WriteFileUnlocked(rel, data); err != nil {
+			if err := s.io.WriteFileUnlocked(rel, data); err != nil {
 				return err
 			}
 		}
-		if err := s.Progress.io.WriteJSONUnlocked(filepath.Join("meta", "core", "canon", "state.json"), state); err != nil {
+		if err := s.io.WriteJSONUnlocked(filepath.Join("meta", "core", "canon", "state.json"), state); err != nil {
 			return err
 		}
-		return s.Progress.io.WriteJSONUnlocked(filepath.Join("meta", "core", "canon", "head.json"), head)
+		return s.io.WriteJSONUnlocked(filepath.Join("meta", "core", "canon", "head.json"), head)
 	})
 }
 
-func (s *Store) LoadCoreCanonHead() (*domain.CoreCanonHead, error) {
+func (s *CoreStore) LoadCoreCanonHead() (*domain.CoreCanonHead, error) {
 	var head domain.CoreCanonHead
-	if err := s.Progress.io.ReadJSON(filepath.Join("meta", "core", "canon", "head.json"), &head); err != nil {
+	if err := s.io.ReadJSON(filepath.Join("meta", "core", "canon", "head.json"), &head); err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil
 		}
@@ -107,12 +107,12 @@ func (s *Store) LoadCoreCanonHead() (*domain.CoreCanonHead, error) {
 	return &head, nil
 }
 
-func (s *Store) ReadCoreCanonStateBytes() ([]byte, error) {
-	return s.Progress.io.ReadFile(filepath.Join("meta", "core", "canon", "state.json"))
+func (s *CoreStore) ReadCoreCanonStateBytes() ([]byte, error) {
+	return s.io.ReadFile(filepath.Join("meta", "core", "canon", "state.json"))
 }
 
-func (s *Store) ReadCoreCanonArtifact(name string) ([]byte, error) {
-	return s.Progress.io.ReadFile(filepath.Join("meta", "core", "canon", "artifacts", name))
+func (s *CoreStore) ReadCoreCanonArtifact(name string) ([]byte, error) {
+	return s.io.ReadFile(filepath.Join("meta", "core", "canon", "artifacts", name))
 }
 
 func MarshalCoreJSON(v any) ([]byte, error) {
