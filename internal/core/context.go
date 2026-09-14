@@ -57,9 +57,10 @@ func compileTaskContext(input contextCompilerInput, budget int) (contextCompiler
 	if input.RevisionCandidate != nil {
 		contextDoc["revision_candidate"] = input.RevisionCandidate
 	}
+	query := contextQuery(input)
 	canonDoc := map[string]any{
 		"base_canon_root": input.CanonRoot,
-		"state":           compactCanonStateForContext(input.CanonState),
+		"state":           compactCanonStateForContext(input.CanonState, query, budget/4),
 	}
 	contextRaw, canonRaw, err := marshalContextDocs(contextDoc, canonDoc)
 	if err != nil {
@@ -74,7 +75,6 @@ func compileTaskContext(input contextCompilerInput, budget int) (contextCompiler
 	if len(contextRaw)+len(canonRaw)+len(recent) > budget {
 		recent = truncateUTF8(recent, budget-len(contextRaw)-len(canonRaw))
 	}
-	query := contextQuery(input)
 	docs := make([]retrieval.Document, 0, len(chapters))
 	for _, chapter := range chapters {
 		docs = append(docs, retrieval.Document{ID: chapter.Path, Text: chapter.Text})
@@ -163,7 +163,7 @@ func truncateUTF8(data []byte, maxBytes int) []byte {
 	return data[:cut]
 }
 
-func compactCanonStateForContext(state domain.CoreCanonState) map[string]any {
+func compactCanonStateForContext(state domain.CoreCanonState, query string, knowledgeBudget int) map[string]any {
 	out := map[string]any{
 		"schema_version": state.SchemaVersion,
 		"revision":       state.Revision,
@@ -172,29 +172,7 @@ func compactCanonStateForContext(state domain.CoreCanonState) map[string]any {
 	}
 	longform := map[string]any{}
 
-	knowledge := map[string][]map[string]string{}
-	for characterID, facts := range state.Longform.Knowledge {
-		factIDs := make([]string, 0, len(facts))
-		for factID := range facts {
-			factIDs = append(factIDs, factID)
-		}
-		sort.Strings(factIDs)
-		items := make([]map[string]string, 0, len(factIDs))
-		for _, factID := range factIDs {
-			id := compactContextString(factID)
-			if id == "" {
-				continue
-			}
-			item := map[string]string{"fact_id": id}
-			if statement := compactContextString(facts[factID].Statement); statement != "" {
-				item["statement"] = statement
-			}
-			items = append(items, item)
-		}
-		if len(items) > 0 {
-			knowledge[compactContextString(characterID)] = items
-		}
-	}
+	knowledge := compactKnowledgeForContext(state.Longform, query, knowledgeBudget)
 	if len(knowledge) > 0 {
 		longform["knowledge"] = knowledge
 	}
@@ -287,6 +265,98 @@ func compactCanonStateForContext(state domain.CoreCanonState) map[string]any {
 		out["planning"] = planning
 	}
 	return out
+}
+
+type contextKnowledgeCandidate struct {
+	ID          string
+	CharacterID string
+	FactID      string
+	Fact        domain.CoreKnowledgeFact
+	Chapter     int
+}
+
+func compactKnowledgeForContext(state domain.CoreLongformState, query string, maxBytes int) map[string][]map[string]string {
+	if maxBytes <= 0 || len(state.Knowledge) == 0 {
+		return nil
+	}
+	characterIDs := make([]string, 0, len(state.Knowledge))
+	for characterID := range state.Knowledge {
+		characterIDs = append(characterIDs, characterID)
+	}
+	sort.Strings(characterIDs)
+
+	candidates := make([]contextKnowledgeCandidate, 0)
+	byID := map[string]contextKnowledgeCandidate{}
+	docs := make([]retrieval.Document, 0)
+	for _, characterID := range characterIDs {
+		facts := state.Knowledge[characterID]
+		factIDs := make([]string, 0, len(facts))
+		for factID := range facts {
+			factIDs = append(factIDs, factID)
+		}
+		sort.Strings(factIDs)
+		for _, factID := range factIDs {
+			fact := facts[factID]
+			chapter := 0
+			if event, ok := state.Events[fact.EvidenceEventID]; ok {
+				chapter = event.Chapter
+			}
+			id := characterID + "\x00" + factID
+			candidate := contextKnowledgeCandidate{ID: id, CharacterID: characterID, FactID: factID, Fact: fact, Chapter: chapter}
+			candidates = append(candidates, candidate)
+			byID[id] = candidate
+			docs = append(docs, retrieval.Document{ID: id, Text: factID + "\n" + fact.Statement})
+		}
+	}
+
+	ordered := make([]contextKnowledgeCandidate, 0, len(candidates))
+	seen := map[string]bool{}
+	for _, hit := range retrieval.RankKeyword(docs, query, len(docs)) {
+		candidate := byID[hit.ID]
+		ordered = append(ordered, candidate)
+		seen[candidate.ID] = true
+	}
+	remaining := make([]contextKnowledgeCandidate, 0, len(candidates)-len(ordered))
+	for _, candidate := range candidates {
+		if !seen[candidate.ID] {
+			remaining = append(remaining, candidate)
+		}
+	}
+	sort.SliceStable(remaining, func(i, j int) bool {
+		if remaining[i].Chapter != remaining[j].Chapter {
+			return remaining[i].Chapter > remaining[j].Chapter
+		}
+		if remaining[i].CharacterID != remaining[j].CharacterID {
+			return remaining[i].CharacterID < remaining[j].CharacterID
+		}
+		return remaining[i].FactID < remaining[j].FactID
+	})
+	ordered = append(ordered, remaining...)
+
+	selected := map[string][]map[string]string{}
+	for _, candidate := range ordered {
+		characterID := compactContextString(candidate.CharacterID)
+		factID := compactContextString(candidate.FactID)
+		if characterID == "" || factID == "" {
+			continue
+		}
+		item := map[string]string{"fact_id": factID}
+		if statement := compactContextString(candidate.Fact.Statement); statement != "" {
+			item["statement"] = statement
+		}
+		selected[characterID] = append(selected[characterID], item)
+		raw, err := json.Marshal(selected)
+		if err != nil || len(raw) > maxBytes {
+			items := selected[characterID]
+			items = items[:len(items)-1]
+			if len(items) == 0 {
+				delete(selected, characterID)
+			} else {
+				selected[characterID] = items
+			}
+		}
+	}
+	return selected
 }
 
 func compactArcPlanForContext(arc domain.CoreArcPlan) map[string]any {

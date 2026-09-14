@@ -163,3 +163,45 @@ func TestContextCompilerDoesNotGrowWithHistoricalEventInventory(t *testing.T) {
 		}
 	}
 }
+
+func TestContextCompilerBoundsKnowledgeInventoryAndKeepsRelevantFacts(t *testing.T) {
+	const budget = 16 << 10
+	events := make(map[string]domain.CoreEventEvidence, 600)
+	facts := make(map[string]domain.CoreKnowledgeFact, 600)
+	for i := 1; i <= 600; i++ {
+		eventID := fmt.Sprintf("story-event-%06d", i)
+		factID := fmt.Sprintf("fact-%03d", i)
+		statement := fmt.Sprintf("常规背景事实 %03d：%s", i, strings.Repeat("背景", 40))
+		if i == 17 {
+			factID = "fact-red-umbrella"
+			statement = "主角知道红色纸伞藏在钟楼地下室"
+		}
+		events[eventID] = domain.CoreEventEvidence{EventID: eventID, Chapter: i, Observers: []string{"character-000001"}}
+		facts[factID] = domain.CoreKnowledgeFact{Statement: statement, SourceKind: "observed", EvidenceEventID: eventID}
+	}
+	canon := domain.CoreCanonState{
+		SchemaVersion: 1, Revision: 600, ProjectID: "book", LatestChapter: 600,
+		Longform: domain.CoreLongformState{
+			Events:    events,
+			Knowledge: map[string]map[string]domain.CoreKnowledgeFact{"character-000001": facts},
+		},
+	}
+	out, err := compileTaskContext(contextCompilerInput{
+		Target: "chapter:601", CanonRoot: "root-600",
+		EndingContract: map[string]any{"main_resolution": "收束"}, BookPlan: map[string]any{"direction": "推进"},
+		Constraints: []domain.CoreTaskConstraint{{Instruction: "这一章必须重新呼应红色纸伞"}},
+		CanonState:  canon,
+	}, budget)
+	if err != nil {
+		t.Fatalf("knowledge inventory should stay within fixed context budget: %v", err)
+	}
+	if out.TotalBytes > budget {
+		t.Fatalf("bytes=%d budget=%d", out.TotalBytes, budget)
+	}
+	text := string(out.CanonExcerptJSON)
+	for _, want := range []string{"fact-red-umbrella", "主角知道红色纸伞藏在钟楼地下室"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("relevant knowledge fact missing %q: %s", want, text)
+		}
+	}
+}
