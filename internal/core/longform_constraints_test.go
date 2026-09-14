@@ -62,10 +62,21 @@ func TestChapterRejectsUnknownCanonicalCharacterReferences(t *testing.T) {
 	}
 }
 
+func TestLocationChangeRejectsUnknownCanonicalLocation(t *testing.T) {
+	project, _, workspace, ready := acceptedFoundationProject(t)
+	artifacts := longformChapterArtifacts(1, []map[string]any{{
+		"kind": "location", "character_id": "character-000001", "location_id": "location-999999", "start_tick": 0, "end_tick": 1, "event_ref": "e1",
+	}})
+	got := submitAndSettleChapter(t, project, workspace, ready, artifacts)
+	if got.Result != "REWRITE" || !containsViolation(got.Violations, "location") {
+		t.Fatalf("settlement=%+v", got)
+	}
+}
+
 func TestLocationChangeRequiresCharacterID(t *testing.T) {
 	project, _, workspace, ready := acceptedFoundationProject(t)
 	artifacts := longformChapterArtifacts(1, []map[string]any{{
-		"kind": "location", "location_id": "location-a", "start_tick": 0, "end_tick": 1, "event_ref": "e1",
+		"kind": "location", "location_id": "location-000002", "start_tick": 0, "end_tick": 1, "event_ref": "e1",
 	}})
 	got := submitAndSettleChapter(t, project, workspace, ready, artifacts)
 	if got.Result != "REWRITE" || !containsViolation(got.Violations, "character_id") {
@@ -95,11 +106,12 @@ func TestResourceCannotGoNegative(t *testing.T) {
 	}
 }
 func TestEvidenceBackedLongformChangesPersist(t *testing.T) {
-	project, _, workspace, ready := acceptedFoundationProject(t)
+	project, workspace, characterID, locationID, _ := projectWithTravelConstraint(t, 0)
+	ready := readReady(t, workspace)
 	changes := []map[string]any{
-		{"kind": "knowledge_add", "character_id": "character-000001", "fact_id": "secret-a", "source": map[string]any{"kind": "observed", "event_ref": "e1"}},
+		{"kind": "knowledge_add", "character_id": characterID, "fact_id": "secret-a", "source": map[string]any{"kind": "observed", "event_ref": "e1"}},
 		{"kind": "resource", "resource_id": "cash", "delta": 3, "event_ref": "e1"},
-		{"kind": "location", "character_id": "character-000001", "location_id": "location-a", "start_tick": 0, "end_tick": 10, "event_ref": "e1"},
+		{"kind": "location", "character_id": characterID, "location_id": locationID, "start_tick": 0, "end_tick": 10, "event_ref": "e1"},
 		{"kind": "relationship", "relationship_id": "character-000001:character-000002", "tags": []string{"distrust"}, "event_ref": "e1"},
 		{"kind": "foreshadow", "foreshadow_id": "f-1", "state": "seeded", "event_ref": "e1"},
 		{"kind": "reader_promise", "promise_id": "p-1", "state": "fulfilled", "event_ref": "e1"},
@@ -113,7 +125,7 @@ func TestEvidenceBackedLongformChangesPersist(t *testing.T) {
 	if state.Longform.Resources["cash"] != 3 {
 		t.Fatalf("resources=%+v", state.Longform.Resources)
 	}
-	if _, ok := state.Longform.Knowledge["character-000001"]["secret-a"]; !ok {
+	if _, ok := state.Longform.Knowledge[characterID]["secret-a"]; !ok {
 		t.Fatalf("knowledge=%+v", state.Longform.Knowledge)
 	}
 	if state.Longform.ReaderPromises["p-1"].State != "fulfilled" {
@@ -122,16 +134,17 @@ func TestEvidenceBackedLongformChangesPersist(t *testing.T) {
 }
 
 func TestOverlappingDifferentLocationsIsRewrite(t *testing.T) {
-	project, _, workspace, ready := acceptedFoundationProject(t)
+	project, workspace, characterID, fromID, toID := projectWithTravelConstraint(t, 0)
+	ready := readReady(t, workspace)
 	first := longformChapterArtifacts(1, []map[string]any{{
-		"kind": "location", "character_id": "character-000001", "location_id": "location-a", "start_tick": 0, "end_tick": 10, "event_ref": "e1",
+		"kind": "location", "character_id": characterID, "location_id": fromID, "start_tick": 0, "end_tick": 10, "event_ref": "e1",
 	}})
 	if got := submitAndSettleChapter(t, project, workspace, ready, first); got.Result != "ACCEPTED" {
 		t.Fatalf("first=%+v", got)
 	}
 	secondReady := readReady(t, workspace)
 	second := longformChapterArtifacts(2, []map[string]any{{
-		"kind": "location", "character_id": "character-000001", "location_id": "location-b", "start_tick": 5, "end_tick": 15, "event_ref": "e1",
+		"kind": "location", "character_id": characterID, "location_id": toID, "start_tick": 5, "end_tick": 15, "event_ref": "e1",
 	}})
 	got := submitAndSettleChapter(t, project, workspace, secondReady, second)
 	if got.Result != "REWRITE" || !containsViolation(got.Violations, "location") {

@@ -90,7 +90,7 @@ func (p *Project) settleActiveSnapshotLocked() (ChapterSettlement, error) {
 		return ChapterSettlement{}, err
 	}
 	if len(violations) == 0 {
-		referenceViolations, err := p.validateCanonicalCharacterReferences(canonical)
+		referenceViolations, err := p.validateCanonicalEntityReferences(canonical)
 		if err != nil {
 			return ChapterSettlement{}, err
 		}
@@ -308,8 +308,34 @@ func (p *Project) canonicalCharacterIDs() (map[string]bool, error) {
 	return ids, nil
 }
 
-func (p *Project) validateCanonicalCharacterReferences(canonical map[string][]byte) ([]string, error) {
+func (p *Project) canonicalLocationIDs() (map[string]bool, error) {
+	worldRaw, err := p.store.ReadCoreCanonArtifact("world.json")
+	if err != nil {
+		return nil, err
+	}
+	var root map[string]any
+	if err := protocol.DecodeJSON(worldRaw, &root); err != nil {
+		return nil, err
+	}
+	ids := map[string]bool{}
+	for _, raw := range anySlice(root["entities"]) {
+		item, _ := raw.(map[string]any)
+		if cleanString(item["entity_type"]) != "location" {
+			continue
+		}
+		if id := cleanString(item["canon_id"]); id != "" {
+			ids[id] = true
+		}
+	}
+	return ids, nil
+}
+
+func (p *Project) validateCanonicalEntityReferences(canonical map[string][]byte) ([]string, error) {
 	ids, err := p.canonicalCharacterIDs()
+	if err != nil {
+		return nil, err
+	}
+	locations, err := p.canonicalLocationIDs()
 	if err != nil {
 		return nil, err
 	}
@@ -349,6 +375,14 @@ func (p *Project) validateCanonicalCharacterReferences(canonical map[string][]by
 			violations = append(violations, "location change requires character_id")
 		} else if characterID != "" && !ids[characterID] {
 			violations = append(violations, kind+" change references unknown canonical character: "+characterID)
+		}
+		if kind == "location" {
+			locationID := cleanString(change["location_id"])
+			if locationID == "" {
+				violations = append(violations, "location change requires location_id")
+			} else if !locations[locationID] {
+				violations = append(violations, "location change references unknown canonical location: "+locationID)
+			}
 		}
 		if source, ok := change["source"].(map[string]any); ok {
 			if from := cleanString(source["from_character_id"]); from != "" && !ids[from] {
