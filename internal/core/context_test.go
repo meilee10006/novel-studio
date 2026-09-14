@@ -2,6 +2,7 @@ package core
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -463,5 +464,53 @@ func TestContextCompilerBoundsFoundationReferenceAndKeepsRelevantEntities(t *tes
 		if !strings.Contains(text, want) {
 			t.Fatalf("foundation reference missing %q: %s", want, text)
 		}
+	}
+}
+
+func TestContextCompilerNeverDropsMandatoryFoundationReferences(t *testing.T) {
+	foundationReference := map[string]any{
+		"foundation": map[string]any{
+			"title":            "紧预算设定",
+			"protagonist":      map[string]any{"entity_type": "character", "canon_id": "character-mandatory"},
+			"opening_location": map[string]any{"entity_type": "location", "canon_id": "location-mandatory"},
+		},
+		"characters": map[string]any{"characters": []any{
+			map[string]any{"canon_id": "character-mandatory", "name": strings.Repeat("主角", 100)},
+		}},
+		"world": map[string]any{"entities": []any{
+			map[string]any{"entity_type": "location", "canon_id": "location-mandatory", "name": strings.Repeat("起点", 100)},
+		}},
+		"style_profile":    map[string]any{"language": "zh-CN"},
+		"platform_profile": map[string]any{"platform": "fanqie"},
+	}
+	out, err := compileTaskContext(contextCompilerInput{
+		Target: "chapter:2", CanonRoot: "root-1",
+		EndingContract: map[string]any{"main_resolution": "收束"}, BookPlan: map[string]any{"direction": "推进"},
+		FoundationReference: foundationReference, CanonState: domain.CoreCanonState{},
+	}, 1400)
+	if err != nil {
+		if !strings.Contains(err.Error(), "hard context") {
+			t.Fatalf("unexpected err=%v", err)
+		}
+		return
+	}
+	var contextDoc map[string]any
+	if err := json.Unmarshal(out.ContextJSON, &contextDoc); err != nil {
+		t.Fatal(err)
+	}
+	ref := contextDoc["foundation_reference"].(map[string]any)
+	characters := ref["characters"].(map[string]any)["characters"].([]any)
+	world := ref["world"].(map[string]any)["entities"].([]any)
+	hasID := func(items []any, want string) bool {
+		for _, raw := range items {
+			item, _ := raw.(map[string]any)
+			if item["canon_id"] == want {
+				return true
+			}
+		}
+		return false
+	}
+	if !hasID(characters, "character-mandatory") || !hasID(world, "location-mandatory") {
+		t.Fatalf("successful context dropped mandatory foundation entity entries: %s", out.ContextJSON)
 	}
 }

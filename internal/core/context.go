@@ -1139,7 +1139,7 @@ func compactFoundationReferenceForContext(reference map[string]any, query string
 		out["characters"] = map[string]any{"characters": characterItems}
 		out["world"] = map[string]any{"entities": worldItems}
 		raw, err := json.Marshal(out)
-		if err == nil && len(raw) <= maxBytes {
+		if err == nil && (len(raw) <= maxBytes || candidate.Mandatory) {
 			continue
 		}
 		if candidate.Collection == "characters" {
