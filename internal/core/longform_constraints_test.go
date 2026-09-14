@@ -29,7 +29,7 @@ func TestChapterRejectsUnknownCanonicalCharacterReferences(t *testing.T) {
 		{
 			name: "event observer",
 			events: map[string]any{"events": []any{map[string]any{
-				"local_id": "e1", "evidence_anchor": "主角看见门口的灯", "observers": []string{"character-999999"},
+				"local_id": "e1", "kind": "onscreen", "evidence_anchor": "主角看见门口的灯", "observers": []string{"character-999999"},
 			}}},
 		},
 		{
@@ -236,7 +236,7 @@ func TestChapterCanAddCanonicalCharacterForLaterTasks(t *testing.T) {
 		{"kind": "character_add", "local_id": "ally", "name": "新同伴", "event_ref": "e1"},
 		{"kind": "relationship", "relationship_id": "character-000001|ally", "tags": []string{"allies"}, "event_ref": "e1"},
 	})
-	artifacts["events.json"] = []byte(`{"events":[{"local_id":"e1","evidence_anchor":"主角看见门口的灯","actors":["ally"],"observers":["character-000001","ally"]}]}`)
+	artifacts["events.json"] = []byte(`{"events":[{"local_id":"e1","kind":"onscreen","evidence_anchor":"主角看见门口的灯","actors":["ally"],"observers":["character-000001","ally"]}]}`)
 	settled := submitAndSettleChapter(t, project, workspace, ready, artifacts)
 	if settled.Result != "ACCEPTED" {
 		t.Fatalf("chapter 1 settlement=%+v", settled)
@@ -263,7 +263,7 @@ func TestChapterCanAddCanonicalCharacterForLaterTasks(t *testing.T) {
 
 	second := validChapterArtifacts(2)
 	second["chapter_contract.json"] = []byte(fmt.Sprintf(`{"chapter":2,"declared_pov":%q}`, allyID))
-	second["events.json"] = []byte(fmt.Sprintf(`{"events":[{"local_id":"e1","evidence_anchor":"第一章正文","actors":[%q],"observers":[%q]}]}`, allyID, allyID))
+	second["events.json"] = []byte(fmt.Sprintf(`{"events":[{"local_id":"e1","kind":"onscreen","evidence_anchor":"第一章正文","actors":[%q],"observers":[%q]}]}`, allyID, allyID))
 	if got := submitAndSettleChapter(t, project, workspace, next, second); got.Result != "ACCEPTED" {
 		t.Fatalf("chapter 2 with dynamic POV settlement=%+v", got)
 	}
@@ -526,7 +526,7 @@ func longformChapterArtifacts(chapter int, changes []map[string]any) map[string]
 	body := "章节正文。主角看见门口的灯。"
 	contract, _ := json.Marshal(map[string]any{"chapter": chapter, "declared_pov": "character-000001"})
 	events, _ := json.Marshal(map[string]any{"events": []map[string]any{{
-		"local_id": "e1", "evidence_anchor": "主角看见门口的灯", "observers": []string{"character-000001"},
+		"local_id": "e1", "kind": "onscreen", "evidence_anchor": "主角看见门口的灯", "observers": []string{"character-000001"},
 	}}})
 	delta, _ := json.Marshal(map[string]any{"changes": changes})
 	return map[string][]byte{

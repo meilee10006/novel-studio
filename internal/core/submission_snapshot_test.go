@@ -161,7 +161,7 @@ func validChapterArtifacts(chapter int) map[string][]byte {
 	return map[string][]byte{
 		"chapter.md":            []byte("第一章正文。主角来到起点。"),
 		"chapter_contract.json": []byte(`{"chapter":1,"declared_pov":"character-000001"}`),
-		"events.json":           []byte(`{"events":[{"local_id":"e1","evidence_anchor":"主角来到起点"}]}`),
+		"events.json":           []byte(`{"events":[{"local_id":"e1","kind":"onscreen","evidence_anchor":"主角来到起点"}]}`),
 		"self_review.json":      []byte(`{"ok":true}`),
 		"state_delta.json":      []byte(`{"changes":[]}`),
 	}

@@ -231,6 +231,10 @@ func validateAndCanonicalizeChapter(files map[string][]byte, state *domain.CoreP
 		}
 		seen[localID] = true
 		kind := cleanString(m["kind"])
+		if kind != "onscreen" && kind != "offscreen" {
+			violations = append(violations, "story event kind must be onscreen or offscreen")
+			continue
+		}
 		anchor, _ := m["evidence_anchor"].(string)
 		if kind == "offscreen" {
 			refs := stringSlice(m["constraint_refs"])

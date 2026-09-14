@@ -127,7 +127,7 @@ func TestHistoricalRevisionRejectsSecondActiveRevision(t *testing.T) {
 func revisionChapterArtifacts(chapter int, marker string) map[string][]byte {
 	body := marker + "。主角看见门口的灯。"
 	contract, _ := json.Marshal(map[string]any{"chapter": chapter, "declared_pov": "character-000001"})
-	events, _ := json.Marshal(map[string]any{"events": []map[string]any{{"local_id": "e1", "evidence_anchor": "主角看见门口的灯"}}})
+	events, _ := json.Marshal(map[string]any{"events": []map[string]any{{"local_id": "e1", "kind": "onscreen", "evidence_anchor": "主角看见门口的灯"}}})
 	return map[string][]byte{
 		"chapter.md": []byte(body), "chapter_contract.json": contract,
 		"events.json": events, "self_review.json": []byte(`{"ok":true}`), "state_delta.json": []byte(`{"changes":[]}`),

@@ -76,7 +76,7 @@ func TestChapterSnapshotAcceptedAdvancesCanonAndReady(t *testing.T) {
 func TestChapterEvidenceAnchorFailureCreatesRewriteWithoutCanonAdvance(t *testing.T) {
 	project, _, workspace, first := acceptedFoundationProject(t)
 	artifacts := validChapterArtifacts(1)
-	artifacts["events.json"] = []byte(`{"events":[{"local_id":"evt-1","kind":"visible","evidence_anchor":"正文中不存在"}]}`)
+	artifacts["events.json"] = []byte(`{"events":[{"local_id":"evt-1","kind":"onscreen","evidence_anchor":"正文中不存在"}]}`)
 	writeSubmission(t, workspace, first, artifacts, false)
 	project.submissionQuietPeriod = 0
 	_, _ = project.ScanActiveSubmission()
