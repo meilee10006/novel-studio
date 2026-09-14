@@ -24,6 +24,7 @@ type protocolChainReady struct {
 	TaskDigest      string `json:"task_digest"`
 	CompletionNonce string `json:"completion_nonce"`
 	Status          string `json:"status"`
+	BlockID         string `json:"block_id"`
 }
 
 type protocolChainStatus struct {
@@ -141,6 +142,62 @@ func TestPublicFileProtocolFullChain(t *testing.T) {
 		if !strings.Contains(book, marker) {
 			t.Fatalf("export missing %q: %s", marker, book)
 		}
+	}
+}
+
+func TestPublicFileProtocolResumesAfterCoreRestart(t *testing.T) {
+	local := t.TempDir()
+	workspace := t.TempDir()
+	project, err := core.InitProject(core.InitOptions{ProjectID: "protocol-restart-test", LocalRoot: local, WorkspaceRoot: workspace})
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeProtocolCapabilityAck(t, workspace)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- project.Serve(ctx, 20*time.Millisecond) }()
+	ready := waitProtocolReady(t, workspace, func(r protocolChainReady) bool { return r.TaskKind == "foundation" })
+	writeProtocolFoundation(t, workspace, ready)
+	ready = waitProtocolReady(t, workspace, func(r protocolChainReady) bool { return r.Target == "chapter:1" })
+
+	cancel()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("first Serve: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("first Serve did not stop")
+	}
+
+	project, err = core.OpenProject(local)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel = context.WithCancel(context.Background())
+	done = make(chan error, 1)
+	go func() { done <- project.Serve(ctx, 20*time.Millisecond) }()
+	defer func() {
+		cancel()
+		select {
+		case err := <-done:
+			if err != nil {
+				t.Fatalf("second Serve: %v", err)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatal("second Serve did not stop")
+		}
+	}()
+
+	resumed := waitProtocolReady(t, workspace, func(r protocolChainReady) bool { return r.Target == "chapter:1" })
+	if resumed.AttemptID != ready.AttemptID || resumed.TaskID != ready.TaskID {
+		t.Fatalf("restart changed active attempt: before=%+v after=%+v", ready, resumed)
+	}
+	writeProtocolChapter(t, workspace, resumed, "normal")
+	next := waitProtocolReady(t, workspace, func(r protocolChainReady) bool { return r.Target == "chapter:2" })
+	if next.AttemptID == resumed.AttemptID || readProtocolStatus(t, workspace).CanonRoot == "" {
+		t.Fatalf("restart resume did not advance authority: resumed=%+v next=%+v status=%+v", resumed, next, readProtocolStatus(t, workspace))
 	}
 }
 
@@ -277,7 +334,7 @@ func waitProtocolReady(t *testing.T, workspace string, accept func(protocolChain
 		if readProtocolJSONIfExists(path, &ready) == nil && accept(ready) {
 			var status protocolChainStatus
 			statusPath := filepath.Join(workspace, "exchange", "STATUS.json")
-			if readProtocolJSONIfExists(statusPath, &status) == nil && status.ActiveAttemptID == ready.AttemptID && status.ActiveTarget == ready.Target {
+			if readProtocolJSONIfExists(statusPath, &status) == nil && status.ActiveAttemptID == ready.AttemptID && status.ActiveTarget == ready.Target && status.BlockID == ready.BlockID {
 				return ready
 			}
 		}

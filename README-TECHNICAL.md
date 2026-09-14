@@ -36,7 +36,7 @@ projection/notion.json         optional read-only projection
 backup/                        non-authoritative backup copies
 ```
 
-ChatGPT writes only allowed inbox/control/setup response files. Core-owned READY/STATUS/outbox/result/published/projection data must not be edited by ChatGPT. Drive does not make multi-file updates atomic, so consumers must require `STATUS.active_attempt_id == READY.attempt_id` and `STATUS.active_target == READY.target` before acting; a mismatch means the workspace is still converging. `STATUS.json.canon_root` is the authority root to bind control messages; it is intentionally distinct from a revision task's historical `READY.base_canon_root`.
+ChatGPT writes only allowed inbox/control/setup response files. Core-owned READY/STATUS/outbox/result/published/projection data must not be edited by ChatGPT. Drive does not make multi-file updates atomic, so consumers must require `STATUS.active_attempt_id == READY.attempt_id`, `STATUS.active_target == READY.target`, and `STATUS.block_id == READY.block_id` before acting; a mismatch means the workspace is still converging. `STATUS.json.canon_root` is the authority root to bind control messages; it is intentionally distinct from a revision task's historical `READY.base_canon_root`.
 
 A submission is considered only after its files and manifest are stable across scans. The local snapshot is then authoritative for validation; later Drive mutation becomes a conflict rather than silently changing the attempt.
 

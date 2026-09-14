@@ -86,7 +86,7 @@ func TestChatGPTProtocolDescribesSubmissionAndControlSchemas(t *testing.T) {
 		"evidence_anchor", "state_delta.json", "event_ref", "self_review.json",
 		"foundation_reference", "block_resolution", "author_directive", "future_plan",
 		"historical_revision", "block_id", "choice", "instruction",
-		"active_attempt_id", "active_target", "不一致",
+		"active_attempt_id", "active_target", "STATUS.block_id == READY.block_id", "不一致",
 		"hard_constraints", "author_decision_required", "constraint_refs", "conflict", "options",
 		"knowledge_add", "character_id", "fact_id", "source", "observed",
 		"resource_id", "delta", "location_id", "start_tick", "end_tick",
