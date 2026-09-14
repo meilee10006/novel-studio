@@ -95,3 +95,34 @@ func TestInstallerMatchesGoReleaserMatrix(t *testing.T) {
 		t.Error("release checklist does not record the GoReleaser snapshot artifact gate")
 	}
 }
+
+func TestContainerReleaseMatrixMatchesDockerfile(t *testing.T) {
+	root := filepath.Clean(filepath.Join("..", ".."))
+	dockerRaw, err := os.ReadFile(filepath.Join(root, "Dockerfile"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	workflowRaw, err := os.ReadFile(filepath.Join(root, ".github", "workflows", "release.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	dockerfile := string(dockerRaw)
+	workflow := string(workflowRaw)
+	for _, want := range []string{"FROM --platform=$BUILDPLATFORM", "ARG TARGETOS", "ARG TARGETARCH", "GOOS=$TARGETOS GOARCH=$TARGETARCH"} {
+		if !strings.Contains(dockerfile, want) {
+			t.Errorf("Dockerfile missing multi-platform build contract %q", want)
+		}
+	}
+	for _, want := range []string{"docker/setup-qemu-action", "docker/setup-buildx-action", "platforms: linux/amd64,linux/arm64"} {
+		if !strings.Contains(workflow, want) {
+			t.Errorf("release workflow missing multi-platform container contract %q", want)
+		}
+	}
+	checklistRaw, err := os.ReadFile(filepath.Join(root, "docs", "provider-free-release-checklist.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(checklistRaw), "Dockerfile arm64 cross-build") {
+		t.Error("release checklist does not record the Dockerfile arm64 cross-build gate")
+	}
+}
