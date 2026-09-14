@@ -216,7 +216,11 @@ func compactCanonStateForContext(state domain.CoreCanonState, query string, know
 		if value.State == "closed" || value.State == "retired" {
 			continue
 		}
-		foreshadows[compactContextString(id)] = map[string]any{"state": compactContextString(value.State)}
+		item := map[string]any{"state": compactContextString(value.State)}
+		if description := compactContextString(value.Description); description != "" {
+			item["description"] = description
+		}
+		foreshadows[compactContextString(id)] = item
 	}
 	if len(foreshadows) > 0 {
 		longform["foreshadows"] = foreshadows
@@ -228,6 +232,9 @@ func compactCanonStateForContext(state domain.CoreCanonState, query string, know
 			continue
 		}
 		item := map[string]any{"state": compactContextString(value.State)}
+		if statement := compactContextString(value.Statement); statement != "" {
+			item["statement"] = statement
+		}
 		if value.DeadlineChapter > 0 {
 			item["deadline_chapter"] = value.DeadlineChapter
 		}

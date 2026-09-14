@@ -90,8 +90,8 @@ func TestChatGPTProtocolDescribesSubmissionAndControlSchemas(t *testing.T) {
 		"hard_constraints", "author_decision_required", "constraint_refs", "conflict", "options",
 		"knowledge_add", "character_id", "fact_id", "statement", "source", "observed",
 		"resource_id", "delta", "location_id", "start_tick", "end_tick",
-		"relationship_id", "tags", "foreshadow_id", "payoff_ready", "paid_off", "closed",
-		"promise_id", "advanced", "fulfilled", "deferred", "deadline_chapter", "retired",
+		"relationship_id", "tags", "foreshadow_id", "foreshadow.description", "payoff_ready", "paid_off", "closed",
+		"promise_id", "reader_promise.statement", "advanced", "fulfilled", "deferred", "deadline_chapter", "retired",
 		"ending_resolution", "travel_constraints", "min_ticks", "planning_patch.json", "next_arc",
 	} {
 		if !strings.Contains(text, want) {

@@ -180,6 +180,38 @@ func TestOverlappingDifferentLocationsIsRewrite(t *testing.T) {
 		t.Fatalf("second=%+v", got)
 	}
 }
+func TestReadableObligationSemanticsPersistAcrossTransitions(t *testing.T) {
+	project, _, workspace, ready := acceptedFoundationProject(t)
+	foreshadowDescription := "红色纸伞与十年前旧案直接相关"
+	promiseStatement := "读者期待知道红色纸伞真正主人是谁"
+	first := longformChapterArtifacts(1, []map[string]any{
+		{"kind": "foreshadow", "foreshadow_id": "fs-umbrella", "state": "seeded", "description": foreshadowDescription, "event_ref": "e1"},
+		{"kind": "reader_promise", "promise_id": "promise-umbrella", "state": "advanced", "statement": promiseStatement},
+	})
+	if got := submitAndSettleChapter(t, project, workspace, ready, first); got.Result != "ACCEPTED" {
+		t.Fatalf("first=%+v", got)
+	}
+	secondReady := readReady(t, workspace)
+	second := longformChapterArtifacts(2, []map[string]any{
+		{"kind": "foreshadow", "foreshadow_id": "fs-umbrella", "state": "reinforced", "event_ref": "e1"},
+		{"kind": "reader_promise", "promise_id": "promise-umbrella", "state": "deferred", "deadline_chapter": 5},
+	})
+	if got := submitAndSettleChapter(t, project, workspace, secondReady, second); got.Result != "ACCEPTED" {
+		t.Fatalf("second=%+v", got)
+	}
+	next := readReady(t, workspace)
+	canonPath := filepath.Join(workspace, "exchange", "outbox", next.TaskID, next.AttemptID, "canon_excerpt.json")
+	raw, err := os.ReadFile(canonPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{foreshadowDescription, promiseStatement, "reinforced", "deferred"} {
+		if !strings.Contains(string(raw), want) {
+			t.Fatalf("next context lost obligation semantic %q: %s", want, raw)
+		}
+	}
+}
+
 func TestEvidenceRequiredForRelationshipForeshadowAndPromise(t *testing.T) {
 	for _, tc := range []struct {
 		name   string

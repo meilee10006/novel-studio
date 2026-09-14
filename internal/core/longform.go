@@ -198,12 +198,16 @@ func applyForeshadowChange(state *domain.CoreLongformState, change map[string]an
 	if !requireEvidence(state, change, "foreshadow", violations) {
 		return
 	}
-	prev := state.Foreshadows[id].State
-	if !validForeshadowTransition(prev, nextState) {
-		*violations = append(*violations, fmt.Sprintf("illegal foreshadow transition %q -> %q", prev, nextState))
+	previous := state.Foreshadows[id]
+	if !validForeshadowTransition(previous.State, nextState) {
+		*violations = append(*violations, fmt.Sprintf("illegal foreshadow transition %q -> %q", previous.State, nextState))
 		return
 	}
-	state.Foreshadows[id] = domain.CoreForeshadowState{State: nextState, EvidenceEventID: cleanString(change["event_canon_id"])}
+	description := cleanString(change["description"])
+	if description == "" {
+		description = previous.Description
+	}
+	state.Foreshadows[id] = domain.CoreForeshadowState{Description: description, State: nextState, EvidenceEventID: cleanString(change["event_canon_id"])}
 }
 func applyReaderPromiseChange(state *domain.CoreLongformState, change map[string]any, chapter int, violations *[]string) {
 	id := cleanString(change["promise_id"])
@@ -229,7 +233,11 @@ func applyReaderPromiseChange(state *domain.CoreLongformState, change map[string
 		}
 		deadline = int(v)
 	}
-	state.ReaderPromises[id] = domain.CoreReaderPromiseState{State: nextState, EvidenceEventID: evidenceID, DeadlineChapter: deadline}
+	statement := cleanString(change["statement"])
+	if statement == "" {
+		statement = state.ReaderPromises[id].Statement
+	}
+	state.ReaderPromises[id] = domain.CoreReaderPromiseState{Statement: statement, State: nextState, EvidenceEventID: evidenceID, DeadlineChapter: deadline}
 }
 
 func applyEndingResolutionChange(state *domain.CoreLongformState, change map[string]any, violations *[]string) {

@@ -26,11 +26,13 @@ type CoreEvidenceState struct {
 	EvidenceEventID string   `json:"evidence_event_id"`
 }
 type CoreForeshadowState struct {
+	Description     string `json:"description,omitempty"`
 	State           string `json:"state"`
 	EvidenceEventID string `json:"evidence_event_id,omitempty"`
 }
 
 type CoreReaderPromiseState struct {
+	Statement       string `json:"statement,omitempty"`
 	State           string `json:"state"`
 	EvidenceEventID string `json:"evidence_event_id,omitempty"`
 	DeadlineChapter int    `json:"deadline_chapter,omitempty"`
