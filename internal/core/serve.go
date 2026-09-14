@@ -1,0 +1,135 @@
+package core
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"path/filepath"
+	"sort"
+	"time"
+)
+
+func (p *Project) Serve(ctx context.Context, scanInterval time.Duration) error {
+	if ctx == nil {
+		return fmt.Errorf("serve context is required")
+	}
+	if scanInterval <= 0 {
+		return fmt.Errorf("serve scan interval must be positive")
+	}
+	release, err := p.acquireProjectMutationLock()
+	if err != nil {
+		return err
+	}
+	defer release()
+
+	if err := p.servePassLocked(); err != nil {
+		return err
+	}
+	ticker := time.NewTicker(scanInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-ticker.C:
+			if err := p.servePassLocked(); err != nil {
+				return err
+			}
+		}
+	}
+}
+
+func (p *Project) servePassLocked() error {
+	if err := p.reconcileLocked(); err != nil {
+		return err
+	}
+	if err := p.serveControlsLocked(); err != nil {
+		return err
+	}
+	return p.serveSubmissionLocked()
+}
+
+func (p *Project) serveControlsLocked() error {
+	project, err := p.store.LoadCoreProjectState()
+	if err != nil || project == nil {
+		if err == nil {
+			err = fmt.Errorf("project is not initialized")
+		}
+		return err
+	}
+	dir := filepath.Join(project.WorkspaceRoot, "exchange", "control", "inbox")
+	entries, err := os.ReadDir(dir)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	ids := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		if entry.Type()&os.ModeSymlink != 0 || !entry.IsDir() {
+			continue
+		}
+		if controlMessageIDPattern.MatchString(entry.Name()) {
+			ids = append(ids, entry.Name())
+		}
+	}
+	sort.Strings(ids)
+	for _, messageID := range ids {
+		status, err := p.scanControlMessageLocked(messageID)
+		if err != nil {
+			return err
+		}
+		if status.State == "READY_TO_VALIDATE" {
+			if _, err := p.processControlMessageLocked(messageID); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func (p *Project) serveSubmissionLocked() error {
+	_, state, err := p.activeProduction()
+	if err != nil {
+		return err
+	}
+	if state.ActiveBlock != nil {
+		return nil
+	}
+	status, err := p.scanActiveSubmissionLocked()
+	if err != nil {
+		return err
+	}
+	switch status.State {
+	case "PENDING", "SETTLED":
+		return nil
+	case "INVALID":
+		if status.Result != "" {
+			return nil
+		}
+		_, err := p.retryInvalidSubmissionLocked()
+		return err
+	case "READY_TO_VALIDATE":
+		_, state, err = p.activeProduction()
+		if err != nil {
+			return err
+		}
+		switch state.ActiveTask.Kind {
+		case "foundation":
+			files, manifest, err := p.readSnapshot(state.ActiveAttempt)
+			if err != nil {
+				return err
+			}
+			_, err = p.settleFoundationLocked(FoundationSubmission{Manifest: manifest, Artifacts: files})
+			return err
+		case "chapter", "revision":
+			_, err := p.settleActiveSnapshotLocked()
+			return err
+		default:
+			return fmt.Errorf("serve does not support active task kind %q", state.ActiveTask.Kind)
+		}
+	default:
+		return fmt.Errorf("serve encountered unknown submission state %q", status.State)
+	}
+}

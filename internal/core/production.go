@@ -66,6 +66,10 @@ func (p *Project) Reconcile() error {
 		return err
 	}
 	defer release()
+	return p.reconcileLocked()
+}
+
+func (p *Project) reconcileLocked() error {
 	if err := p.recoverPendingCommit(); err != nil {
 		return err
 	}
@@ -232,6 +236,10 @@ func (p *Project) SettleFoundation(sub FoundationSubmission) (FoundationSettleme
 		return FoundationSettlement{}, err
 	}
 	defer release()
+	return p.settleFoundationLocked(sub)
+}
+
+func (p *Project) settleFoundationLocked(sub FoundationSubmission) (FoundationSettlement, error) {
 	projectState, err := p.store.LoadCoreProjectState()
 	if err != nil || projectState == nil {
 		if err == nil {

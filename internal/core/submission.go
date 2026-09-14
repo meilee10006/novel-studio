@@ -21,6 +21,10 @@ func (p *Project) ScanActiveSubmission() (SubmissionStatus, error) {
 		return SubmissionStatus{}, err
 	}
 	defer release()
+	return p.scanActiveSubmissionLocked()
+}
+
+func (p *Project) scanActiveSubmissionLocked() (SubmissionStatus, error) {
 	project, production, err := p.activeProduction()
 	if err != nil {
 		return SubmissionStatus{}, err

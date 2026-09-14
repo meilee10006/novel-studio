@@ -1,11 +1,15 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"github.com/chenhongyang/novel-studio/internal/core"
 )
@@ -14,7 +18,7 @@ func main() { os.Exit(run(os.Args[1:], os.Stdout, os.Stderr)) }
 
 func run(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "usage: novel-core <init|status|verify|export|restore|migrate> [options]")
+		fmt.Fprintln(stderr, "usage: novel-core <init|serve|status|verify|export|restore|migrate> [options]")
 		return 2
 	}
 	switch args[0] {
@@ -38,6 +42,26 @@ func run(args []string, stdout, stderr io.Writer) int {
 			return 1
 		}
 		if err := json.NewEncoder(stdout).Encode(status); err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
+		return 0
+	case "serve":
+		fs := flag.NewFlagSet("serve", flag.ContinueOnError)
+		fs.SetOutput(stderr)
+		projectRoot := fs.String("project", ".", "local project root")
+		scanInterval := fs.Duration("scan-interval", 2*time.Second, "low-frequency correctness scan interval")
+		if err := fs.Parse(args[1:]); err != nil || fs.NArg() != 0 {
+			return 2
+		}
+		project, err := core.OpenProject(*projectRoot)
+		if err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer stop()
+		if err := project.Serve(ctx, *scanInterval); err != nil {
 			fmt.Fprintln(stderr, err)
 			return 1
 		}

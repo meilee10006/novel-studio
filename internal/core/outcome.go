@@ -24,6 +24,10 @@ func (p *Project) RetryInvalidSubmission() (ProtocolRetryResult, error) {
 		return ProtocolRetryResult{}, err
 	}
 	defer release()
+	return p.retryInvalidSubmissionLocked()
+}
+
+func (p *Project) retryInvalidSubmissionLocked() (ProtocolRetryResult, error) {
 	project, state, err := p.activeProduction()
 	if err != nil {
 		return ProtocolRetryResult{}, err

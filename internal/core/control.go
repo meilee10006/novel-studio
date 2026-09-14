@@ -31,6 +31,10 @@ func (p *Project) ScanControlMessage(messageID string) (ControlStatus, error) {
 		return ControlStatus{}, err
 	}
 	defer release()
+	return p.scanControlMessageLocked(messageID)
+}
+
+func (p *Project) scanControlMessageLocked(messageID string) (ControlStatus, error) {
 	if !controlMessageIDPattern.MatchString(messageID) {
 		return ControlStatus{}, fmt.Errorf("invalid control message id %q", messageID)
 	}
@@ -153,6 +157,10 @@ func (p *Project) ProcessControlMessage(messageID string) (ControlResult, error)
 		return ControlResult{}, err
 	}
 	defer release()
+	return p.processControlMessageLocked(messageID)
+}
+
+func (p *Project) processControlMessageLocked(messageID string) (ControlResult, error) {
 	project, state, err := p.activeProduction()
 	if err != nil {
 		return ControlResult{}, err

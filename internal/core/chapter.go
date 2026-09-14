@@ -29,6 +29,10 @@ func (p *Project) SettleActiveSnapshot() (ChapterSettlement, error) {
 		return ChapterSettlement{}, err
 	}
 	defer release()
+	return p.settleActiveSnapshotLocked()
+}
+
+func (p *Project) settleActiveSnapshotLocked() (ChapterSettlement, error) {
 	project, state, err := p.activeProduction()
 	if err != nil {
 		return ChapterSettlement{}, err

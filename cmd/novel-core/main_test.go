@@ -98,3 +98,15 @@ func TestMigrateCommandIsAvailable(t *testing.T) {
 		t.Fatalf("migrate command not routed: code=%d stderr=%s", code, stderr.String())
 	}
 }
+
+func TestServeCommandIsAvailableAndNeedsNoModelCredentials(t *testing.T) {
+	for _, key := range []string{"OPENAI_API_KEY", "ANTHROPIC_API_KEY", "DEEPSEEK_API_KEY", "LITELLM_API_KEY"} {
+		t.Setenv(key, "")
+	}
+	root := t.TempDir()
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"serve", "--project", root, "--scan-interval", "10ms"}, &stdout, &stderr)
+	if code == 2 || strings.Contains(stderr.String(), "unknown command") {
+		t.Fatalf("serve command not routed: code=%d stderr=%s", code, stderr.String())
+	}
+}
