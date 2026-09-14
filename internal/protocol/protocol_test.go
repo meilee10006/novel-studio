@@ -90,7 +90,7 @@ func TestChatGPTProtocolDescribesSubmissionAndControlSchemas(t *testing.T) {
 		"hard_constraints", "hard_constraints 一旦出现必须是数组", "唯一非空 id", "author_decision_required", "constraint_refs", "constraint_refs 必须是非空字符串数组", "conflict", "options",
 		"character_add", "location_add", "resource_add", "同一提交", "id_mappings",
 		"knowledge_add", "character_id", "fact_id", "statement", "source", "observed", "transmitted", "from_character_id 必须出现在 event actors", "transmitted 不得改写来源 fact 的 statement", "同一角色已有非空 statement 时不得改写",
-		"resource_id", "delta", "location_id", "start_tick", "end_tick",
+		"resource_id", "delta", "location_id", "start_tick", "end_tick", "location.start_tick 不得早于该角色前态 end_tick",
 		"relationship_id", "tags", "tags 一旦出现必须是唯一非空字符串数组", "change kind 必须来自支持列表", "foreshadow_id", "foreshadow.description", "首次创建伏笔使用 local_id", "永久 foreshadow ID", "payoff_ready", "paid_off", "closed",
 		"promise_id", "reader_promise.statement", "首次创建读者承诺使用 local_id", "永久 reader promise ID", "advanced", "fulfilled", "deferred", "deadline_chapter", "retired",
 		"conflict_id", "首次创建冲突使用 local_id", "永久 conflict ID", "participants", "participants 必须是唯一非空字符串数组", "escalation_condition", "close_condition", "open → escalated → resolved",

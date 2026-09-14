@@ -360,6 +360,34 @@ func TestOverlappingDifferentLocationsIsRewrite(t *testing.T) {
 		t.Fatalf("second=%+v", got)
 	}
 }
+func TestSameLocationCannotMoveBackwardInStoryTime(t *testing.T) {
+	project, workspace, characterID, locationID, _ := projectWithTravelConstraint(t, 0)
+	ready := readReady(t, workspace)
+	first := longformChapterArtifacts(1, []map[string]any{{
+		"kind": "location", "character_id": characterID, "location_id": locationID, "start_tick": 0, "end_tick": 10, "event_ref": "e1",
+	}})
+	if got := submitAndSettleChapter(t, project, workspace, ready, first); got.Result != "ACCEPTED" {
+		t.Fatalf("first=%+v", got)
+	}
+
+	secondReady := readReady(t, workspace)
+	backward := longformChapterArtifacts(2, []map[string]any{{
+		"kind": "location", "character_id": characterID, "location_id": locationID, "start_tick": 5, "end_tick": 15, "event_ref": "e1",
+	}})
+	got := submitAndSettleChapter(t, project, workspace, secondReady, backward)
+	if got.Result != "REWRITE" || !containsViolation(got.Violations, "overlap") {
+		t.Fatalf("backward=%+v", got)
+	}
+
+	retry := readReady(t, workspace)
+	contiguous := longformChapterArtifacts(2, []map[string]any{{
+		"kind": "location", "character_id": characterID, "location_id": locationID, "start_tick": 10, "end_tick": 20, "event_ref": "e1",
+	}})
+	if got := submitAndSettleChapter(t, project, workspace, retry, contiguous); got.Result != "ACCEPTED" {
+		t.Fatalf("contiguous=%+v", got)
+	}
+}
+
 func TestForeshadowGetsCanonicalIDAndRejectsUnknownCreation(t *testing.T) {
 	project, _, workspace, ready := acceptedFoundationProject(t)
 	first := longformChapterArtifacts(1, []map[string]any{{

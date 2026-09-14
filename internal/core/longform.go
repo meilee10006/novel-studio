@@ -211,11 +211,11 @@ func applyLocationChange(state *domain.CoreLongformState, change map[string]any,
 		return
 	}
 	prev, exists := state.Locations[characterID]
+	if exists && start < prev.EndTick {
+		*violations = append(*violations, "location intervals overlap for character: "+characterID)
+		return
+	}
 	if exists && prev.LocationID != locationID {
-		if start < prev.EndTick {
-			*violations = append(*violations, "location intervals overlap for character: "+characterID)
-			return
-		}
 		if minTicks, modeled := modeledTravelMinTicks(state, prev.LocationID, locationID); modeled && start-prev.EndTick < minTicks {
 			*violations = append(*violations, fmt.Sprintf("modeled travel constraint requires at least %d ticks: %s -> %s", minTicks, prev.LocationID, locationID))
 			return
