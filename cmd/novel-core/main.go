@@ -14,7 +14,7 @@ func main() { os.Exit(run(os.Args[1:], os.Stdout, os.Stderr)) }
 
 func run(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "usage: novel-core <init|status|verify|export> [options]")
+		fmt.Fprintln(stderr, "usage: novel-core <init|status|verify|export|restore> [options]")
 		return 2
 	}
 	switch args[0] {
@@ -72,6 +72,29 @@ func run(args []string, stdout, stderr io.Writer) int {
 			return 1
 		}
 		if !result.OK {
+			return 1
+		}
+		return 0
+	case "restore":
+		fs := flag.NewFlagSet("restore", flag.ContinueOnError)
+		fs.SetOutput(stderr)
+		backup := fs.String("backup", "", "verified backup directory")
+		projectRoot := fs.String("project", "", "new local project root")
+		if err := fs.Parse(args[1:]); err != nil || fs.NArg() != 0 {
+			return 2
+		}
+		project, err := core.RestoreBackup(*backup, *projectRoot)
+		if err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
+		status, err := project.Status()
+		if err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
+		if err := json.NewEncoder(stdout).Encode(status); err != nil {
+			fmt.Fprintln(stderr, err)
 			return 1
 		}
 		return 0
