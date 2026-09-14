@@ -222,15 +222,8 @@ func compactCanonStateForContext(state domain.CoreCanonState, query string, know
 		longform["conflicts"] = conflicts
 	}
 
-	if len(state.Longform.TravelConstraints) > 0 {
-		travel := make([]map[string]any, 0, len(state.Longform.TravelConstraints))
-		for _, value := range state.Longform.TravelConstraints {
-			travel = append(travel, map[string]any{
-				"from_location_id": compactContextString(value.FromLocationID),
-				"to_location_id":   compactContextString(value.ToLocationID),
-				"min_ticks":        value.MinTicks,
-			})
-		}
+	travel := compactTravelConstraintsForContext(state.Longform, query, knowledgeBudget/2)
+	if len(travel) > 0 {
 		longform["travel_constraints"] = travel
 	}
 	if state.Longform.Ending != nil {
@@ -748,6 +741,87 @@ func compactConflictsForContext(state domain.CoreLongformState, query string, ma
 		if err != nil || len(raw) > maxBytes {
 			delete(selected, id)
 		}
+	}
+	return selected
+}
+
+type contextTravelCandidate struct {
+	Key     string
+	Value   domain.CoreTravelConstraint
+	Current bool
+}
+
+func compactTravelConstraintsForContext(state domain.CoreLongformState, query string, maxBytes int) []map[string]any {
+	if maxBytes <= 0 || len(state.TravelConstraints) == 0 {
+		return nil
+	}
+	currentLocations := map[string]bool{}
+	for _, location := range state.Locations {
+		if id := compactContextString(location.LocationID); id != "" {
+			currentLocations[id] = true
+		}
+	}
+	candidates := make([]contextTravelCandidate, 0, len(state.TravelConstraints))
+	for _, value := range state.TravelConstraints {
+		from := compactContextString(value.FromLocationID)
+		to := compactContextString(value.ToLocationID)
+		if from == "" || to == "" {
+			continue
+		}
+		candidates = append(candidates, contextTravelCandidate{
+			Key: from + "→" + to, Value: domain.CoreTravelConstraint{FromLocationID: from, ToLocationID: to, MinTicks: value.MinTicks},
+			Current: currentLocations[from] || currentLocations[to],
+		})
+	}
+	sort.SliceStable(candidates, func(i, j int) bool {
+		if candidates[i].Value.FromLocationID != candidates[j].Value.FromLocationID {
+			return candidates[i].Value.FromLocationID < candidates[j].Value.FromLocationID
+		}
+		if candidates[i].Value.ToLocationID != candidates[j].Value.ToLocationID {
+			return candidates[i].Value.ToLocationID < candidates[j].Value.ToLocationID
+		}
+		return candidates[i].Value.MinTicks < candidates[j].Value.MinTicks
+	})
+	byKey := map[string]contextTravelCandidate{}
+	docs := make([]retrieval.Document, 0, len(candidates))
+	for _, candidate := range candidates {
+		byKey[candidate.Key] = candidate
+		docs = append(docs, retrieval.Document{ID: candidate.Key, Text: candidate.Value.FromLocationID + "\n" + candidate.Value.ToLocationID})
+	}
+	ordered := make([]contextTravelCandidate, 0, len(candidates))
+	seen := map[string]bool{}
+	for _, hit := range retrieval.RankKeyword(docs, query, len(docs)) {
+		candidate := byKey[hit.ID]
+		ordered = append(ordered, candidate)
+		seen[candidate.Key] = true
+	}
+	remaining := make([]contextTravelCandidate, 0, len(candidates)-len(ordered))
+	for _, candidate := range candidates {
+		if !seen[candidate.Key] {
+			remaining = append(remaining, candidate)
+		}
+	}
+	sort.SliceStable(remaining, func(i, j int) bool {
+		if remaining[i].Current != remaining[j].Current {
+			return remaining[i].Current
+		}
+		return remaining[i].Key < remaining[j].Key
+	})
+	ordered = append(ordered, remaining...)
+
+	selected := make([]map[string]any, 0, len(ordered))
+	for _, candidate := range ordered {
+		item := map[string]any{
+			"from_location_id": candidate.Value.FromLocationID,
+			"to_location_id":   candidate.Value.ToLocationID,
+			"min_ticks":        candidate.Value.MinTicks,
+		}
+		candidateList := append(selected, item)
+		raw, err := json.Marshal(candidateList)
+		if err != nil || len(raw) > maxBytes {
+			continue
+		}
+		selected = candidateList
 	}
 	return selected
 }

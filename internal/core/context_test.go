@@ -307,3 +307,41 @@ func TestContextCompilerBoundsRelationshipInventoryAndKeepsRelevantRelationship(
 		}
 	}
 }
+
+func TestContextCompilerBoundsTravelConstraintsAndKeepsRelevantRoute(t *testing.T) {
+	const budget = 16 << 10
+	travel := make([]domain.CoreTravelConstraint, 0, 600)
+	for i := 1; i <= 600; i++ {
+		from := fmt.Sprintf("location-%06d", i)
+		to := fmt.Sprintf("location-%06d", i+1000)
+		if i == 17 {
+			from = "location-current"
+			to = "location-red-umbrella"
+		}
+		travel = append(travel, domain.CoreTravelConstraint{FromLocationID: from, ToLocationID: to, MinTicks: int64(i + 1)})
+	}
+	canon := domain.CoreCanonState{
+		SchemaVersion: 1, Revision: 600, ProjectID: "book", LatestChapter: 600,
+		Longform: domain.CoreLongformState{
+			Locations:         map[string]domain.CoreLocationState{"character-000001": {LocationID: "location-current", StartTick: 600, EndTick: 600}},
+			TravelConstraints: travel,
+		},
+	}
+	out, err := compileTaskContext(contextCompilerInput{
+		Target: "chapter:601", CanonRoot: "root-600",
+		EndingContract: map[string]any{"main_resolution": "收束"}, BookPlan: map[string]any{"direction": "推进"},
+		Constraints: []domain.CoreTaskConstraint{{Instruction: "本章准备前往 location-red-umbrella"}}, CanonState: canon,
+	}, budget)
+	if err != nil {
+		t.Fatalf("travel constraints should stay within fixed context budget: %v", err)
+	}
+	if out.TotalBytes > budget {
+		t.Fatalf("bytes=%d budget=%d", out.TotalBytes, budget)
+	}
+	text := string(out.CanonExcerptJSON)
+	for _, want := range []string{"location-current", "location-red-umbrella"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("relevant travel route missing %q: %s", want, text)
+		}
+	}
+}
