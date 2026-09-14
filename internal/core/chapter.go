@@ -32,8 +32,8 @@ func (p *Project) SettleActiveSnapshot() (ChapterSettlement, error) {
 	if state.ActiveBlock != nil && state.ActiveBlock.AttemptID == attempt.AttemptID {
 		return ChapterSettlement{Result: "BLOCKED", BlockID: state.ActiveBlock.BlockID}, nil
 	}
-	if task.Kind != "chapter" {
-		return ChapterSettlement{}, fmt.Errorf("active task is %q, not chapter", task.Kind)
+	if task.Kind != "chapter" && task.Kind != "revision" {
+		return ChapterSettlement{}, fmt.Errorf("active task is %q, not chapter or revision", task.Kind)
 	}
 	journal, err := p.store.LoadCoreCommitJournal(attempt.AttemptID)
 	if err != nil {
@@ -91,14 +91,22 @@ func (p *Project) SettleActiveSnapshot() (ChapterSettlement, error) {
 	if err := protocol.DecodeJSON(canonRaw, &canonState); err != nil {
 		return ChapterSettlement{}, err
 	}
-	nextLongform, longformViolations, err := validateLongformState(canonState.Longform, canonical, chapter)
+	validationCanon := canonState
+	if task.Kind == "revision" {
+		baseCanon, _, err := p.loadCanonSnapshotAtRoot(task.BaseCanonRoot)
+		if err != nil {
+			return ChapterSettlement{}, err
+		}
+		validationCanon = baseCanon
+	}
+	nextLongform, longformViolations, err := validateLongformState(validationCanon.Longform, canonical, chapter)
 	if err != nil {
 		return ChapterSettlement{}, err
 	}
 	if len(longformViolations) > 0 {
 		return p.rejectChapter(project, state, task, attempt, record, files, longformViolations)
 	}
-	planningStatus, nextPlanning, planningCanonical, planningRepair, planningViolations, err := validateChapterPlanning(files, canonState.Planning, chapter, requiresArtifact(attempt, "planning_patch.json"))
+	planningStatus, nextPlanning, planningCanonical, planningRepair, planningViolations, err := validateChapterPlanning(files, validationCanon.Planning, chapter, requiresArtifact(attempt, "planning_patch.json"))
 	if err != nil {
 		return ChapterSettlement{}, err
 	}

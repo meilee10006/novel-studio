@@ -23,13 +23,14 @@ type contextChapter struct {
 }
 
 type contextCompilerInput struct {
-	Target         string
-	CanonRoot      string
-	EndingContract map[string]any
-	BookPlan       map[string]any
-	Constraints    []domain.CoreTaskConstraint
-	CanonState     domain.CoreCanonState
-	Chapters       []contextChapter
+	Target            string
+	CanonRoot         string
+	EndingContract    map[string]any
+	BookPlan          map[string]any
+	Constraints       []domain.CoreTaskConstraint
+	CanonState        domain.CoreCanonState
+	Chapters          []contextChapter
+	RevisionCandidate map[string]any
 }
 type contextCompilerOutput struct {
 	ContextJSON      []byte
@@ -48,6 +49,9 @@ func compileTaskContext(input contextCompilerInput, budget int) (contextCompiler
 		"ending_contract":     input.EndingContract,
 		"control_constraints": input.Constraints,
 		"retrieved_old_prose": []map[string]any{},
+	}
+	if input.RevisionCandidate != nil {
+		contextDoc["revision_candidate"] = input.RevisionCandidate
 	}
 	canonDoc := map[string]any{
 		"base_canon_root": input.CanonRoot,
@@ -164,6 +168,31 @@ func (p *Project) compileTaskPackContext(state *domain.CoreProductionState) (con
 	if err := protocol.DecodeJSON(raw, &canon); err != nil {
 		return contextCompilerOutput{}, err
 	}
+	head, err := p.store.LoadCoreCanonHead()
+	if err != nil || head == nil {
+		if err == nil {
+			err = fmt.Errorf("canon head does not exist")
+		}
+		return contextCompilerOutput{}, err
+	}
+	var revisionCandidate map[string]any
+	if state.ActiveTask != nil && state.ActiveTask.Kind == "revision" {
+		baseCanon, baseHead, err := p.loadCanonSnapshotAtRoot(state.ActiveTask.BaseCanonRoot)
+		if err != nil {
+			return contextCompilerOutput{}, err
+		}
+		canon = baseCanon
+		head = &baseHead
+		chapter, err := chapterNumberFromTarget(state.ActiveTask.Target)
+		if err != nil {
+			return contextCompilerOutput{}, err
+		}
+		candidate, err := p.revisionCandidate(state, chapter)
+		if err != nil {
+			return contextCompilerOutput{}, err
+		}
+		revisionCandidate = map[string]any{"chapter": chapter, "chapter_md": string(candidate)}
+	}
 	readMap := func(name string) (map[string]any, error) {
 		data, err := p.store.ReadCoreCanonArtifact(name)
 		if err != nil {
@@ -191,13 +220,6 @@ func (p *Project) compileTaskPackContext(state *domain.CoreProductionState) (con
 	if err != nil {
 		return contextCompilerOutput{}, err
 	}
-	head, err := p.store.LoadCoreCanonHead()
-	if err != nil || head == nil {
-		if err == nil {
-			err = fmt.Errorf("canon head does not exist")
-		}
-		return contextCompilerOutput{}, err
-	}
 	chapters := make([]contextChapter, 0)
 	for name := range head.ArtifactDigests {
 		clean := filepath.ToSlash(name)
@@ -219,9 +241,10 @@ func (p *Project) compileTaskPackContext(state *domain.CoreProductionState) (con
 		chapters = append(chapters, contextChapter{Chapter: n, Path: clean, Text: string(data)})
 	}
 	input := contextCompilerInput{
-		Target: state.ActiveTask.Target, CanonRoot: state.CanonRoot,
+		Target: state.ActiveTask.Target, CanonRoot: state.ActiveTask.BaseCanonRoot,
 		EndingContract: ending, BookPlan: bookPlan,
 		Constraints: state.ActiveTask.Constraints, CanonState: canon, Chapters: chapters,
+		RevisionCandidate: revisionCandidate,
 	}
 	return compileTaskContext(input, taskContextBudget)
 }

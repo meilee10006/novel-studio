@@ -34,16 +34,27 @@ func (p *Project) recoverPendingCommit() error {
 }
 
 func (p *Project) prepareChapterCommit(project *domain.CoreProjectState, state *domain.CoreProductionState, task *domain.CoreTask, attempt *domain.CoreAttempt, record *domain.CoreSubmissionRecord, received, canonical map[string][]byte, mappings []IDMapping, chapter int, longform domain.CoreLongformState, planning domain.CorePlanningState, planningStatus string, planningRepair bool) (*domain.CoreCommitJournal, error) {
-	head, err := p.store.LoadCoreCanonHead()
-	if err != nil || head == nil {
+	currentHead, err := p.store.LoadCoreCanonHead()
+	if err != nil || currentHead == nil {
 		if err == nil {
 			err = fmt.Errorf("canon head does not exist")
 		}
 		return nil, err
 	}
+	parentRoot := state.CanonRoot
+	baseHead := currentHead
+	if task.Kind == "revision" {
+		_, historicalHead, err := p.loadCanonSnapshotAtRoot(task.BaseCanonRoot)
+		if err != nil {
+			return nil, err
+		}
+		parentRoot = task.BaseCanonRoot
+		baseHead = &historicalHead
+	}
+
 	logicalArtifacts := make(map[string][]byte, len(canonical))
-	artifactDigests := make(map[string]string, len(head.ArtifactDigests)+len(canonical))
-	for name, digest := range head.ArtifactDigests {
+	artifactDigests := make(map[string]string, len(baseHead.ArtifactDigests)+len(canonical))
+	for name, digest := range baseHead.ArtifactDigests {
 		artifactDigests[name] = digest
 	}
 	prefix := fmt.Sprintf("chapters/%06d", chapter)
@@ -70,13 +81,13 @@ func (p *Project) prepareChapterCommit(project *domain.CoreProjectState, state *
 	if err != nil {
 		return nil, err
 	}
-	newRoot, err := computeCanonRoot(newRevision, state.CanonRoot, stateDigest, artifactDigests)
+	newRoot, err := computeCanonRoot(newRevision, parentRoot, stateDigest, artifactDigests)
 	if err != nil {
 		return nil, err
 	}
 	canonHead := domain.CoreCanonHead{
 		SchemaVersion: coreSchemaVersion, Revision: newRevision,
-		ParentRoot: state.CanonRoot, Root: newRoot,
+		ParentRoot: parentRoot, Root: newRoot,
 		StateDigest: stateDigest, ArtifactDigests: artifactDigests,
 	}
 	validationDigest, err := digestJSON(map[string]any{"result": "ACCEPTED", "violations": []string{}, "planning_status": planningStatus})
@@ -86,7 +97,7 @@ func (p *Project) prepareChapterCommit(project *domain.CoreProjectState, state *
 	receipt := domain.CoreReceipt{
 		SchemaVersion: coreSchemaVersion, ProjectID: project.ProjectID,
 		TaskID: task.TaskID, AttemptID: attempt.AttemptID,
-		PreviousRoot: state.CanonRoot, TaskDigest: attempt.TaskDigest,
+		PreviousRoot: parentRoot, TaskDigest: attempt.TaskDigest,
 		SubmissionDigest: record.SnapshotDigest, ArtifactDigests: digestArtifacts(received),
 		ValidationDigest: validationDigest, Result: "ACCEPTED", PlanningStatus: planningStatus, NewRoot: newRoot,
 		IDMappings: mappings, CommittedAt: time.Now().UTC().Format(time.RFC3339Nano),
@@ -96,13 +107,38 @@ func (p *Project) prepareChapterCommit(project *domain.CoreProjectState, state *
 	next.Revision = newRevision
 	next.CanonRoot = newRoot
 	next.NextEntitySeq += len(mappings)
-	nextTask := newTask(&next, "chapter", fmt.Sprintf("chapter:%d", chapter+1), newRoot)
+	if task.Kind == "revision" && state.RevisionReplay != nil && chapter == state.RevisionReplay.StartChapter {
+		next.SupersededChapters = mergeSuperseded(state.SupersededChapters, state.RevisionReplay.Superseded)
+	}
+
 	required := append([]string(nil), chapterArtifactNames...)
+	var nextTask *domain.CoreTask
+	nextReason := "initial"
+	switch task.Kind {
+	case "chapter":
+		nextTask = newTask(&next, "chapter", fmt.Sprintf("chapter:%d", chapter+1), newRoot)
+	case "revision":
+		if state.RevisionReplay == nil {
+			return nil, fmt.Errorf("revision task has no active replay state")
+		}
+		switch {
+		case chapter < state.RevisionReplay.OriginalHeadChapter:
+			nextTask = newTaskPreservingPending(&next, "revision", fmt.Sprintf("chapter:%d", chapter+1), newRoot)
+			nextReason = "rebase"
+		case chapter == state.RevisionReplay.OriginalHeadChapter:
+			next.RevisionReplay = nil
+			nextTask = newTask(&next, "chapter", fmt.Sprintf("chapter:%d", chapter+1), newRoot)
+		default:
+			return nil, fmt.Errorf("revision chapter %d is past original head %d", chapter, state.RevisionReplay.OriginalHeadChapter)
+		}
+	default:
+		return nil, fmt.Errorf("unsupported commit task kind %q", task.Kind)
+	}
 	if planningRepair {
 		required = append(required, "planning_patch.json")
 		nextTask.Constraints = append(nextTask.Constraints, domain.CoreTaskConstraint{Kind: "planning_repair_required", Instruction: "Provide a valid next Arc plan before this chapter can be accepted."})
 	}
-	nextAttempt, err := newAttempt(&next, nextTask, "initial", required, project.ProtocolVersion)
+	nextAttempt, err := newAttempt(&next, nextTask, nextReason, required, project.ProtocolVersion)
 	if err != nil {
 		return nil, err
 	}
@@ -111,7 +147,7 @@ func (p *Project) prepareChapterCommit(project *domain.CoreProjectState, state *
 	journal := &domain.CoreCommitJournal{
 		SchemaVersion: coreSchemaVersion, State: "prepared",
 		TaskID: task.TaskID, AttemptID: attempt.AttemptID, Chapter: chapter,
-		PreviousRoot: state.CanonRoot, NewRoot: newRoot,
+		PreviousRoot: parentRoot, NewRoot: newRoot,
 		ArtifactNames: artifactNames, CanonState: canonState, CanonHead: canonHead,
 		Receipt: receipt, NextState: next,
 	}

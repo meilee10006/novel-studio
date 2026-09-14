@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 
 	"github.com/chenhongyang/novel-studio/internal/domain"
 )
@@ -25,6 +26,30 @@ func (s *Store) LoadCoreCommitJournal(attemptID string) (*domain.CoreCommitJourn
 		return nil, err
 	}
 	return &j, nil
+}
+
+func (s *Store) ListCoreCommitJournals() ([]domain.CoreCommitJournal, error) {
+	dir := s.Progress.io.path(filepath.Join("meta", "core", "commits"))
+	entries, err := os.ReadDir(dir)
+	if os.IsNotExist(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	out := make([]domain.CoreCommitJournal, 0, len(entries))
+	for _, entry := range entries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
+			continue
+		}
+		var journal domain.CoreCommitJournal
+		if err := s.Progress.io.ReadJSON(filepath.Join("meta", "core", "commits", entry.Name()), &journal); err != nil {
+			return nil, err
+		}
+		out = append(out, journal)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].AttemptID < out[j].AttemptID })
+	return out, nil
 }
 
 func (s *Store) SaveCorePreparedArtifacts(attemptID string, files map[string][]byte) error {

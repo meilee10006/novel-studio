@@ -251,6 +251,9 @@ func (p *Project) prepareHistoricalRevision(project *domain.CoreProjectState, re
 	if message.Chapter <= 0 {
 		return p.settleInvalidControl(project, record, "historical revision chapter must be positive")
 	}
+	if next.RevisionReplay != nil || next.ActiveTask != nil && next.ActiveTask.Kind == "revision" {
+		return p.settleInvalidControl(project, record, "historical revision is already active")
+	}
 	raw, err := p.store.ReadCoreCanonStateBytes()
 	if err != nil {
 		return ControlResult{}, err
@@ -262,10 +265,12 @@ func (p *Project) prepareHistoricalRevision(project *domain.CoreProjectState, re
 	if message.Chapter > canon.LatestChapter {
 		return p.settleInvalidControl(project, record, "historical revision chapter is not accepted canon")
 	}
-	pending := append([]domain.CoreTaskConstraint(nil), next.PendingControls...)
-	next.PendingControls = nil
-	task := newTask(next, "revision", fmt.Sprintf("chapter:%d", message.Chapter), next.CanonRoot)
-	next.PendingControls = pending
+	replay, baseRoot, err := p.buildRevisionReplay(next.CanonRoot, message.Chapter, canon.LatestChapter)
+	if err != nil {
+		return ControlResult{}, err
+	}
+	next.RevisionReplay = replay
+	task := newTaskPreservingPending(next, "revision", fmt.Sprintf("chapter:%d", message.Chapter), baseRoot)
 	task.Constraints = append(task.Constraints, constraint)
 	attempt, err := newAttempt(next, task, "initial", chapterArtifactNames, project.ProtocolVersion)
 	if err != nil {
@@ -344,6 +349,12 @@ func cloneProductionState(state *domain.CoreProductionState) *domain.CoreProduct
 		block.Options = append([]string(nil), state.ActiveBlock.Options...)
 		clone.ActiveBlock = &block
 	}
+	if state.RevisionReplay != nil {
+		replay := *state.RevisionReplay
+		replay.Superseded = append([]domain.CoreSupersededChapter(nil), state.RevisionReplay.Superseded...)
+		clone.RevisionReplay = &replay
+	}
+	clone.SupersededChapters = append([]domain.CoreSupersededChapter(nil), state.SupersededChapters...)
 	clone.PendingControls = append([]domain.CoreTaskConstraint(nil), state.PendingControls...)
 	return &clone
 }

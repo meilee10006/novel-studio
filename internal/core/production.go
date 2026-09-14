@@ -283,7 +283,7 @@ func validateSubmissionIdentity(project *domain.CoreProjectState, task *domain.C
 		required[name] = true
 		allowed[name] = true
 	}
-	if task.Kind == "chapter" {
+	if task.Kind == "chapter" || task.Kind == "revision" {
 		allowed["planning_patch.json"] = true
 	}
 	seen := make(map[string]bool, len(manifest.Files))

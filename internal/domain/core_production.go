@@ -36,17 +36,33 @@ type CoreBlock struct {
 	Options        []string `json:"options"`
 }
 
+type CoreSupersededChapter struct {
+	Chapter   int    `json:"chapter"`
+	AttemptID string `json:"attempt_id"`
+	CanonRoot string `json:"canon_root"`
+	Status    string `json:"status"`
+}
+
+type CoreRevisionReplay struct {
+	StartChapter        int                     `json:"start_chapter"`
+	OriginalHeadChapter int                     `json:"original_head_chapter"`
+	OriginalHeadRoot    string                  `json:"original_head_root"`
+	Superseded          []CoreSupersededChapter `json:"superseded"`
+}
+
 type CoreProductionState struct {
-	SchemaVersion   int                  `json:"schema_version"`
-	Revision        int                  `json:"revision"`
-	CanonRoot       string               `json:"canon_root,omitempty"`
-	ActiveTask      *CoreTask            `json:"active_task,omitempty"`
-	ActiveAttempt   *CoreAttempt         `json:"active_attempt,omitempty"`
-	ActiveBlock     *CoreBlock           `json:"active_block,omitempty"`
-	PendingControls []CoreTaskConstraint `json:"pending_controls,omitempty"`
-	NextTaskSeq     int                  `json:"next_task_seq"`
-	NextAttemptSeq  int                  `json:"next_attempt_seq"`
-	NextEntitySeq   int                  `json:"next_entity_seq"`
+	SchemaVersion      int                     `json:"schema_version"`
+	Revision           int                     `json:"revision"`
+	CanonRoot          string                  `json:"canon_root,omitempty"`
+	ActiveTask         *CoreTask               `json:"active_task,omitempty"`
+	ActiveAttempt      *CoreAttempt            `json:"active_attempt,omitempty"`
+	ActiveBlock        *CoreBlock              `json:"active_block,omitempty"`
+	RevisionReplay     *CoreRevisionReplay     `json:"revision_replay,omitempty"`
+	SupersededChapters []CoreSupersededChapter `json:"superseded_chapters,omitempty"`
+	PendingControls    []CoreTaskConstraint    `json:"pending_controls,omitempty"`
+	NextTaskSeq        int                     `json:"next_task_seq"`
+	NextAttemptSeq     int                     `json:"next_attempt_seq"`
+	NextEntitySeq      int                     `json:"next_entity_seq"`
 }
 
 type CoreIDMapping struct {

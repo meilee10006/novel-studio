@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"sort"
 
 	"github.com/chenhongyang/novel-studio/internal/domain"
 )
@@ -51,6 +52,30 @@ func (s *Store) SaveCoreReceipt(receipt *domain.CoreReceipt) (string, error) {
 		return "", err
 	}
 	return rel, nil
+}
+
+func (s *Store) ListCoreReceipts() ([]domain.CoreReceipt, error) {
+	dir := s.Progress.io.path(filepath.Join("meta", "core", "receipts"))
+	entries, err := os.ReadDir(dir)
+	if os.IsNotExist(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	out := make([]domain.CoreReceipt, 0, len(entries))
+	for _, entry := range entries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
+			continue
+		}
+		var receipt domain.CoreReceipt
+		if err := s.Progress.io.ReadJSON(filepath.Join("meta", "core", "receipts", entry.Name()), &receipt); err != nil {
+			return nil, err
+		}
+		out = append(out, receipt)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].AttemptID < out[j].AttemptID })
+	return out, nil
 }
 
 func (s *Store) SaveCoreCanon(state *domain.CoreCanonState, head *domain.CoreCanonHead, artifacts map[string][]byte) error {
