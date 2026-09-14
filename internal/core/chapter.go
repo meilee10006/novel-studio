@@ -243,11 +243,14 @@ func validateAndCanonicalizeChapter(files map[string][]byte, state *domain.CoreP
 	rewriteChapterLocalEntityRefs(values, characterLookup, locationLookup, resourceLookup)
 	foreshadowMappings, foreshadowLookup, seq := canonicalizeChapterForeshadows(values["state_delta.json"], seq, &violations)
 	rewriteChapterLocalForeshadowRefs(values["state_delta.json"], foreshadowLookup)
+	promiseMappings, promiseLookup, seq := canonicalizeChapterReaderPromises(values["state_delta.json"], seq, &violations)
+	rewriteChapterLocalReaderPromiseRefs(values["state_delta.json"], promiseLookup)
 	if len(violations) > 0 {
 		return nil, nil, violations, chapter, nil
 	}
 	mappings := append([]IDMapping(nil), entityMappings...)
 	mappings = append(mappings, foreshadowMappings...)
+	mappings = append(mappings, promiseMappings...)
 	lookup := make(map[string]string, len(events))
 	for _, item := range events {
 		m := item.(map[string]any)
@@ -391,6 +394,64 @@ func rewriteChapterLocalForeshadowRefs(value any, lookup map[string]string) {
 		}
 		if local := cleanString(change["foreshadow_id"]); lookup[local] != "" {
 			change["foreshadow_id"] = lookup[local]
+		}
+	}
+}
+
+func canonicalizeChapterReaderPromises(value any, seq int, violations *[]string) ([]IDMapping, map[string]string, int) {
+	root, _ := value.(map[string]any)
+	changes, _ := root["changes"].([]any)
+	defs := map[string]map[string]any{}
+	for _, raw := range changes {
+		change, _ := raw.(map[string]any)
+		if cleanString(change["kind"]) != "reader_promise" {
+			continue
+		}
+		localID := cleanString(change["local_id"])
+		if localID == "" {
+			continue
+		}
+		if cleanString(change["statement"]) == "" {
+			*violations = append(*violations, "new reader promise requires local_id and statement")
+			continue
+		}
+		if _, exists := defs[localID]; exists {
+			*violations = append(*violations, "duplicate reader promise local_id: "+localID)
+			continue
+		}
+		defs[localID] = change
+	}
+	localIDs := make([]string, 0, len(defs))
+	for localID := range defs {
+		localIDs = append(localIDs, localID)
+	}
+	sort.Strings(localIDs)
+	mappings := make([]IDMapping, 0, len(localIDs))
+	lookup := make(map[string]string, len(localIDs))
+	for _, localID := range localIDs {
+		canonID := fmt.Sprintf("reader-promise-%06d", seq)
+		seq++
+		lookup[localID] = canonID
+		change := defs[localID]
+		change["promise_id"] = canonID
+		delete(change, "local_id")
+		mappings = append(mappings, IDMapping{EntityType: "reader_promise", LocalID: localID, CanonID: canonID})
+	}
+	return mappings, lookup, seq
+}
+
+func rewriteChapterLocalReaderPromiseRefs(value any, lookup map[string]string) {
+	if len(lookup) == 0 {
+		return
+	}
+	root, _ := value.(map[string]any)
+	for _, raw := range anySlice(root["changes"]) {
+		change, _ := raw.(map[string]any)
+		if cleanString(change["kind"]) != "reader_promise" {
+			continue
+		}
+		if local := cleanString(change["promise_id"]); lookup[local] != "" {
+			change["promise_id"] = lookup[local]
 		}
 	}
 }
@@ -559,6 +620,15 @@ func (p *Project) validateCanonicalEntityReferences(canonical map[string][]byte,
 			foreshadows[mapping.CanonID] = true
 		}
 	}
+	readerPromises := map[string]bool{}
+	for id := range longform.ReaderPromises {
+		readerPromises[id] = true
+	}
+	for _, mapping := range mappings {
+		if mapping.EntityType == "reader_promise" && mapping.CanonID != "" {
+			readerPromises[mapping.CanonID] = true
+		}
+	}
 	for id, entity := range longform.Entities {
 		switch entity.EntityType {
 		case "character":
@@ -643,6 +713,12 @@ func (p *Project) validateCanonicalEntityReferences(canonical map[string][]byte,
 			foreshadowID := cleanString(change["foreshadow_id"])
 			if foreshadowID != "" && !foreshadows[foreshadowID] {
 				violations = append(violations, "foreshadow change references unknown canonical foreshadow: "+foreshadowID)
+			}
+		}
+		if kind == "reader_promise" {
+			promiseID := cleanString(change["promise_id"])
+			if promiseID != "" && !readerPromises[promiseID] {
+				violations = append(violations, "reader promise change references unknown canonical promise: "+promiseID)
 			}
 		}
 		if kind == "relationship" {

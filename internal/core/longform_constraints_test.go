@@ -321,7 +321,7 @@ func TestEvidenceBackedLongformChangesPersist(t *testing.T) {
 		{"kind": "location", "character_id": characterID, "location_id": locationID, "start_tick": 0, "end_tick": 10, "event_ref": "e1"},
 		{"kind": "relationship", "relationship_id": characterID + "|" + secondID, "tags": []string{"distrust"}, "event_ref": "e1"},
 		{"kind": "foreshadow", "local_id": "f-1", "description": "测试伏笔", "state": "seeded", "event_ref": "e1"},
-		{"kind": "reader_promise", "promise_id": "p-1", "state": "fulfilled", "event_ref": "e1"},
+		{"kind": "reader_promise", "local_id": "p-1", "statement": "测试读者承诺", "state": "fulfilled", "event_ref": "e1"},
 	}
 	artifacts := longformChapterArtifacts(1, changes)
 	settlement := submitAndSettleChapter(t, project, workspace, ready, artifacts)
@@ -336,8 +336,9 @@ func TestEvidenceBackedLongformChangesPersist(t *testing.T) {
 	if _, ok := state.Longform.Knowledge[characterID]["secret-a"]; !ok {
 		t.Fatalf("knowledge=%+v", state.Longform.Knowledge)
 	}
-	if state.Longform.ReaderPromises["p-1"].State != "fulfilled" {
-		t.Fatalf("promises=%+v", state.Longform.ReaderPromises)
+	promiseID := mappingID(settlement.IDMappings, "reader_promise", "p-1")
+	if promiseID == "" || state.Longform.ReaderPromises[promiseID].State != "fulfilled" {
+		t.Fatalf("promise mapping=%q promises=%+v", promiseID, state.Longform.ReaderPromises)
 	}
 }
 
@@ -404,26 +405,72 @@ func TestForeshadowGetsCanonicalIDAndRejectsUnknownCreation(t *testing.T) {
 	}
 }
 
+func TestReaderPromiseGetsCanonicalIDAndRejectsUnknownCreation(t *testing.T) {
+	project, _, workspace, ready := acceptedFoundationProject(t)
+	first := longformChapterArtifacts(1, []map[string]any{{
+		"kind": "reader_promise", "local_id": "umbrella-promise", "statement": "读者期待知道纸伞主人", "state": "advanced",
+	}})
+	settled := submitAndSettleChapter(t, project, workspace, ready, first)
+	if settled.Result != "ACCEPTED" {
+		t.Fatalf("reader promise create settlement=%+v", settled)
+	}
+	promiseID := mappingID(settled.IDMappings, "reader_promise", "umbrella-promise")
+	if promiseID == "" {
+		t.Fatalf("reader promise mapping missing: %+v", settled.IDMappings)
+	}
+	state := readCanonState(t, project)
+	if state.Longform.ReaderPromises[promiseID].State != "advanced" {
+		t.Fatalf("reader promises=%+v", state.Longform.ReaderPromises)
+	}
+
+	next := readReady(t, workspace)
+	canonPath := filepath.Join(workspace, "exchange", "outbox", next.TaskID, next.AttemptID, "canon_excerpt.json")
+	canonRaw, err := os.ReadFile(canonPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(canonRaw), promiseID) || !strings.Contains(string(canonRaw), "读者期待知道纸伞主人") {
+		t.Fatalf("next task cannot discover canonical reader promise: %s", canonRaw)
+	}
+
+	second := longformChapterArtifacts(2, []map[string]any{{
+		"kind": "reader_promise", "promise_id": promiseID, "state": "deferred", "deadline_chapter": 5,
+	}})
+	if got := submitAndSettleChapter(t, project, workspace, next, second); got.Result != "ACCEPTED" {
+		t.Fatalf("canonical reader promise transition=%+v", got)
+	}
+
+	next = readReady(t, workspace)
+	rogue := longformChapterArtifacts(3, []map[string]any{{
+		"kind": "reader_promise", "promise_id": "reader-promise-999999", "statement": "凭空承诺", "state": "advanced",
+	}})
+	got := submitAndSettleChapter(t, project, workspace, next, rogue)
+	if got.Result != "REWRITE" || !containsViolation(got.Violations, "promise") {
+		t.Fatalf("unknown reader promise creation=%+v", got)
+	}
+}
+
 func TestReadableObligationSemanticsPersistAcrossTransitions(t *testing.T) {
 	project, _, workspace, ready := acceptedFoundationProject(t)
 	foreshadowDescription := "红色纸伞与十年前旧案直接相关"
 	promiseStatement := "读者期待知道红色纸伞真正主人是谁"
 	first := longformChapterArtifacts(1, []map[string]any{
 		{"kind": "foreshadow", "local_id": "fs-umbrella", "state": "seeded", "description": foreshadowDescription, "event_ref": "e1"},
-		{"kind": "reader_promise", "promise_id": "promise-umbrella", "state": "advanced", "statement": promiseStatement},
+		{"kind": "reader_promise", "local_id": "promise-umbrella", "state": "advanced", "statement": promiseStatement},
 	})
 	settled := submitAndSettleChapter(t, project, workspace, ready, first)
 	if settled.Result != "ACCEPTED" {
 		t.Fatalf("first=%+v", settled)
 	}
 	foreshadowID := mappingID(settled.IDMappings, "foreshadow", "fs-umbrella")
-	if foreshadowID == "" {
-		t.Fatalf("foreshadow mapping missing: %+v", settled.IDMappings)
+	promiseID := mappingID(settled.IDMappings, "reader_promise", "promise-umbrella")
+	if foreshadowID == "" || promiseID == "" {
+		t.Fatalf("obligation mappings missing: %+v", settled.IDMappings)
 	}
 	secondReady := readReady(t, workspace)
 	second := longformChapterArtifacts(2, []map[string]any{
 		{"kind": "foreshadow", "foreshadow_id": foreshadowID, "state": "reinforced", "event_ref": "e1"},
-		{"kind": "reader_promise", "promise_id": "promise-umbrella", "state": "deferred", "deadline_chapter": 5},
+		{"kind": "reader_promise", "promise_id": promiseID, "state": "deferred", "deadline_chapter": 5},
 	})
 	if got := submitAndSettleChapter(t, project, workspace, secondReady, second); got.Result != "ACCEPTED" {
 		t.Fatalf("second=%+v", got)
@@ -448,7 +495,7 @@ func TestEvidenceRequiredForRelationshipForeshadowAndPromise(t *testing.T) {
 	}{
 		{"relationship", map[string]any{"kind": "relationship", "relationship_id": "a:b", "tags": []string{"trust"}}},
 		{"foreshadow", map[string]any{"kind": "foreshadow", "local_id": "f-1", "description": "缺证据伏笔", "state": "seeded"}},
-		{"promise", map[string]any{"kind": "reader_promise", "promise_id": "p-1", "state": "fulfilled"}},
+		{"promise", map[string]any{"kind": "reader_promise", "local_id": "p-1", "statement": "缺证据承诺", "state": "fulfilled"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			change := make(map[string]any, len(tc.change))
