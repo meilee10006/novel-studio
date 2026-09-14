@@ -107,6 +107,8 @@ exchange/control/inbox/<message-id>/
 
 control 的 `base_canon_root` 必须从当前 `exchange/STATUS.json.canon_root` 复制；历史 revision 的 READY 可能绑定较早父 root，不能拿它替代当前权威 root。
 
+章节中首次正式出现的新人物可通过 `state_delta.character_add` 使用本次 attempt 的 `local_id` 声明；同一提交可引用这个 local ID。只有 ACCEPTED 后 Core 才分配永久 character ID，并在 result 的 `id_mappings` 中返回；后续章节必须使用 canonical ID。
+
 首发支持：
 
 - `future_plan`：只改变未来规划，不重写已发生事实；

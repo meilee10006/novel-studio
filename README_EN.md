@@ -43,6 +43,8 @@ Use `exchange/READY.json` as the only pointer to the current task. `exchange/STA
 
 For Chapter/Revision tasks, `context.json.foundation_reference` carries the normalized Foundation reference and canonical character/location IDs. A fresh ChatGPT conversation can therefore recover from Core-generated files instead of relying on prior chat history. Control messages must copy `base_canon_root` from the current `exchange/STATUS.json.canon_root`, not from a historical revision READY.
 
+A chapter may introduce a new character with `state_delta.character_add` using an attempt-local `local_id`. Same-submission character references may use that local ID; only an ACCEPTED settlement allocates the permanent character ID and returns it in `id_mappings`. Later tasks use the canonical ID.
+
 Core snapshots stable bytes locally, validates them, and returns one of `ACCEPTED`, `REWRITE`, or `BLOCKED`. A rewrite keeps the task but creates a fresh attempt. Author directives and block decisions travel through `exchange/control/inbox/`.
 
 ## Revision and replay

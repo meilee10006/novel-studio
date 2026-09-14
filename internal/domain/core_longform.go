@@ -7,6 +7,13 @@ type CoreEventEvidence struct {
 	Actors    []string `json:"actors,omitempty"`
 }
 
+type CoreEntityState struct {
+	EntityType      string `json:"entity_type"`
+	Name            string `json:"name"`
+	Description     string `json:"description,omitempty"`
+	EvidenceEventID string `json:"evidence_event_id,omitempty"`
+}
+
 type CoreKnowledgeFact struct {
 	Statement       string `json:"statement,omitempty"`
 	SourceKind      string `json:"source_kind"`
@@ -49,6 +56,7 @@ type CoreEndingState struct {
 }
 
 type CoreLongformState struct {
+	Entities          map[string]CoreEntityState              `json:"entities,omitempty"`
 	Events            map[string]CoreEventEvidence            `json:"events,omitempty"`
 	Knowledge         map[string]map[string]CoreKnowledgeFact `json:"knowledge,omitempty"`
 	Locations         map[string]CoreLocationState            `json:"locations,omitempty"`

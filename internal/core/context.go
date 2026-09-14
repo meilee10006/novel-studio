@@ -172,6 +172,11 @@ func compactCanonStateForContext(state domain.CoreCanonState, query string, know
 	}
 	longform := map[string]any{}
 
+	entities := compactEntitiesForContext(state.Longform, query, knowledgeBudget/2)
+	if len(entities) > 0 {
+		longform["entities"] = entities
+	}
+
 	knowledge := compactKnowledgeForContext(state.Longform, query, knowledgeBudget)
 	if len(knowledge) > 0 {
 		longform["knowledge"] = knowledge
@@ -249,6 +254,78 @@ func compactCanonStateForContext(state domain.CoreCanonState, query string, know
 		out["planning"] = planning
 	}
 	return out
+}
+
+type contextEntityCandidate struct {
+	ID      string
+	Entity  domain.CoreEntityState
+	Chapter int
+}
+
+func compactEntitiesForContext(state domain.CoreLongformState, query string, maxBytes int) map[string]map[string]string {
+	if maxBytes <= 0 || len(state.Entities) == 0 {
+		return nil
+	}
+	ids := make([]string, 0, len(state.Entities))
+	for id := range state.Entities {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	candidates := make([]contextEntityCandidate, 0, len(ids))
+	byID := map[string]contextEntityCandidate{}
+	docs := make([]retrieval.Document, 0, len(ids))
+	for _, id := range ids {
+		entity := state.Entities[id]
+		chapter := 0
+		if event, ok := state.Events[entity.EvidenceEventID]; ok {
+			chapter = event.Chapter
+		}
+		candidate := contextEntityCandidate{ID: id, Entity: entity, Chapter: chapter}
+		candidates = append(candidates, candidate)
+		byID[id] = candidate
+		docs = append(docs, retrieval.Document{ID: id, Text: id + "\n" + entity.Name + "\n" + entity.Description})
+	}
+	ordered := make([]contextEntityCandidate, 0, len(candidates))
+	seen := map[string]bool{}
+	for _, hit := range retrieval.RankKeyword(docs, query, len(docs)) {
+		candidate := byID[hit.ID]
+		ordered = append(ordered, candidate)
+		seen[candidate.ID] = true
+	}
+	remaining := make([]contextEntityCandidate, 0, len(candidates)-len(ordered))
+	for _, candidate := range candidates {
+		if !seen[candidate.ID] {
+			remaining = append(remaining, candidate)
+		}
+	}
+	sort.SliceStable(remaining, func(i, j int) bool {
+		if remaining[i].Chapter != remaining[j].Chapter {
+			return remaining[i].Chapter > remaining[j].Chapter
+		}
+		return remaining[i].ID < remaining[j].ID
+	})
+	ordered = append(ordered, remaining...)
+
+	selected := map[string]map[string]string{}
+	for _, candidate := range ordered {
+		id := compactContextString(candidate.ID)
+		if id == "" {
+			continue
+		}
+		item := map[string]string{
+			"entity_type": compactContextString(candidate.Entity.EntityType),
+			"name":        compactContextString(candidate.Entity.Name),
+		}
+		if description := compactContextString(candidate.Entity.Description); description != "" {
+			item["description"] = description
+		}
+		selected[id] = item
+		raw, err := json.Marshal(selected)
+		if err != nil || len(raw) > maxBytes {
+			delete(selected, id)
+		}
+	}
+	return selected
 }
 
 type contextKnowledgeCandidate struct {

@@ -159,10 +159,11 @@ self_review.json：
 
 events.json 的 local_id 只在本次提交中使用。除 kind=offscreen 外，可见事件必须有 evidence_anchor，且 anchor 必须逐字出现在 chapter.md。state_delta 中要引用本章事件时使用 event_ref；Core ACCEPTED 时会把它改成 event_canon_id。没有结构化状态变化时可以使用 {"changes":[]}。
 
-state_delta 支持的 change kind 包括 knowledge_add、resource、location、relationship、foreshadow、reader_promise、ending_resolution；需要事件证据的 change 使用本章 event_ref。不要自行发明 canonical event ID。常用合法形状如下：
+state_delta 支持的 change kind 包括 character_add、knowledge_add、resource、location、relationship、foreshadow、reader_promise、ending_resolution；需要事件证据的 change 使用本章 event_ref。不要自行发明 canonical event ID。常用合法形状如下：
 
 ~~~json
 {"changes":[
+  {"kind":"character_add","local_id":"ally","name":"新同伴","description":"本章首次正式出场的人物","event_ref":"e1"},
   {"kind":"knowledge_add","character_id":"character-000001","fact_id":"fact-secret","statement":"主角知道密室钥匙在管家手中","source":{"kind":"observed","event_ref":"e1"}},
   {"kind":"resource","resource_id":"money","delta":10,"event_ref":"e1"},
   {"kind":"location","character_id":"character-000001","location_id":"location-000002","start_tick":1,"end_tick":2,"event_ref":"e1"},
@@ -172,6 +173,8 @@ state_delta 支持的 change kind 包括 knowledge_add、resource、location、r
   {"kind":"ending_resolution","event_ref":"e1"}
 ]}
 ~~~
+
+character_add 用本次尝试内的 local_id 声明新人物，并用 event_ref 证明其在本章进入故事。**同一提交**中，chapter_contract.declared_pov、events.json 的 actors/observers、state_delta 的 character_id、relationship_id 两端以及 knowledge source.from_character_id 都可以先引用这个 local_id；Core ACCEPTED 时会统一改写成 canonical character ID。处理结果的 id_mappings 给出 local_id → canon_id；后续任务只能使用 canonical ID，动态人物也会出现在后续 canon_excerpt 的 entities 中。
 
 knowledge_add 的 fact_id 是稳定标识，statement 是后续新对话可直接理解的事实文本；新增知识应同时提供两者。observed source 要求对应 events.json 事件把该角色列在 observers 中，例如 {"local_id":"e1","evidence_anchor":"...","observers":["character-000001"]}。旧 Canon 中没有 statement 的知识仍按 fact_id 兼容读取。resource、location、relationship、foreshadow、ending_resolution 需要事件证据。
 

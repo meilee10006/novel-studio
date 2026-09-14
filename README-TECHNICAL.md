@@ -79,6 +79,8 @@ Core validates only facts it can mechanically prove, including:
 - rolling arc planning contracts;
 - ending-resolution evidence.
 
+Chapter submissions may introduce new characters with `state_delta.character_add`. Core allocates the permanent character ID only on ACCEPTED, rewrites same-attempt local character references to that canonical ID, records the mapping in the result/receipt, and carries the dynamic entity in Canon for later task contexts and historical revision snapshots.
+
 Core does not score prose quality, emotional strength, pacing, commercial potential, or “AI-ness”. Those are creative/editorial decisions for the author and ChatGPT App.
 
 ## 6. Rolling planning

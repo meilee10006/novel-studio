@@ -65,6 +65,8 @@ func decodeCurrentEvents(raw []byte, chapter int) (map[string]domain.CoreEventEv
 func applyLongformChange(state *domain.CoreLongformState, change map[string]any, chapter int, violations *[]string) {
 	kind, _ := change["kind"].(string)
 	switch strings.TrimSpace(kind) {
+	case "character_add":
+		applyCharacterAdd(state, change, violations)
 	case "knowledge_add":
 		applyKnowledgeChange(state, change, violations)
 	case "resource":
@@ -81,6 +83,26 @@ func applyLongformChange(state *domain.CoreLongformState, change map[string]any,
 		applyEndingResolutionChange(state, change, violations)
 	}
 }
+func applyCharacterAdd(state *domain.CoreLongformState, change map[string]any, violations *[]string) {
+	canonID := cleanString(change["canon_id"])
+	name := cleanString(change["name"])
+	if canonID == "" || name == "" {
+		*violations = append(*violations, "character_add requires canon_id and name")
+		return
+	}
+	if !requireEvidence(state, change, "character_add", violations) {
+		return
+	}
+	if _, exists := state.Entities[canonID]; exists {
+		*violations = append(*violations, "character_add canonical id already exists: "+canonID)
+		return
+	}
+	state.Entities[canonID] = domain.CoreEntityState{
+		EntityType: "character", Name: name, Description: cleanString(change["description"]),
+		EvidenceEventID: cleanString(change["event_canon_id"]),
+	}
+}
+
 func applyKnowledgeChange(state *domain.CoreLongformState, change map[string]any, violations *[]string) {
 	characterID := cleanString(change["character_id"])
 	factID := cleanString(change["fact_id"])
@@ -319,6 +341,9 @@ func cloneLongformState(in domain.CoreLongformState) domain.CoreLongformState {
 }
 
 func ensureLongformMaps(state *domain.CoreLongformState) {
+	if state.Entities == nil {
+		state.Entities = map[string]domain.CoreEntityState{}
+	}
 	if state.Events == nil {
 		state.Events = map[string]domain.CoreEventEvidence{}
 	}

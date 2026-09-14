@@ -2,6 +2,7 @@ package core
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -132,6 +133,45 @@ func TestResourceCannotGoNegative(t *testing.T) {
 	settlement := submitAndSettleChapter(t, project, workspace, ready, artifacts)
 	if settlement.Result != "REWRITE" || !containsViolation(settlement.Violations, "resource") {
 		t.Fatalf("settlement=%+v", settlement)
+	}
+}
+
+func TestChapterCanAddCanonicalCharacterForLaterTasks(t *testing.T) {
+	project, _, workspace, ready := acceptedFoundationProject(t)
+	artifacts := longformChapterArtifacts(1, []map[string]any{
+		{"kind": "character_add", "local_id": "ally", "name": "新同伴", "event_ref": "e1"},
+		{"kind": "relationship", "relationship_id": "character-000001|ally", "tags": []string{"allies"}, "event_ref": "e1"},
+	})
+	artifacts["events.json"] = []byte(`{"events":[{"local_id":"e1","evidence_anchor":"主角看见门口的灯","actors":["ally"],"observers":["character-000001","ally"]}]}`)
+	settled := submitAndSettleChapter(t, project, workspace, ready, artifacts)
+	if settled.Result != "ACCEPTED" {
+		t.Fatalf("chapter 1 settlement=%+v", settled)
+	}
+	allyID := mappingID(settled.IDMappings, "character", "ally")
+	if allyID == "" {
+		t.Fatalf("character mapping missing: %+v", settled.IDMappings)
+	}
+	state := readCanonState(t, project)
+	entity, ok := state.Longform.Entities[allyID]
+	if !ok || entity.Name != "新同伴" || entity.EntityType != "character" {
+		t.Fatalf("dynamic entities=%+v", state.Longform.Entities)
+	}
+
+	next := readReady(t, workspace)
+	contextPath := filepath.Join(workspace, "exchange", "outbox", next.TaskID, next.AttemptID, "canon_excerpt.json")
+	contextRaw, err := os.ReadFile(contextPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(contextRaw), allyID) || !strings.Contains(string(contextRaw), "新同伴") {
+		t.Fatalf("next task cannot discover dynamic character: %s", contextRaw)
+	}
+
+	second := validChapterArtifacts(2)
+	second["chapter_contract.json"] = []byte(fmt.Sprintf(`{"chapter":2,"declared_pov":%q}`, allyID))
+	second["events.json"] = []byte(fmt.Sprintf(`{"events":[{"local_id":"e1","evidence_anchor":"第一章正文","actors":[%q],"observers":[%q]}]}`, allyID, allyID))
+	if got := submitAndSettleChapter(t, project, workspace, next, second); got.Result != "ACCEPTED" {
+		t.Fatalf("chapter 2 with dynamic POV settlement=%+v", got)
 	}
 }
 
@@ -337,6 +377,10 @@ func readCanonState(t *testing.T, project *Project) CoreCanonStateView {
 
 type CoreCanonStateView struct {
 	Longform struct {
+		Entities map[string]struct {
+			EntityType string `json:"entity_type"`
+			Name       string `json:"name"`
+		} `json:"entities"`
 		Knowledge      map[string]map[string]any `json:"knowledge"`
 		Resources      map[string]int64          `json:"resources"`
 		ReaderPromises map[string]struct {
