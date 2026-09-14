@@ -257,6 +257,7 @@ func validateAndCanonicalizeChapter(files map[string][]byte, state *domain.CoreP
 		validateOptionalStoryEventStringArray(m, "observers", &violations)
 		anchor, _ := m["evidence_anchor"].(string)
 		if kind == "offscreen" {
+			validateOptionalStoryEventStringArray(m, "constraint_refs", &violations)
 			refs := stringSlice(m["constraint_refs"])
 			if len(refs) == 0 {
 				violations = append(violations, "offscreen story event requires constraint_refs")
