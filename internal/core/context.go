@@ -59,7 +59,7 @@ func compileTaskContext(input contextCompilerInput, budget int) (contextCompiler
 	}
 	canonDoc := map[string]any{
 		"base_canon_root": input.CanonRoot,
-		"state":           input.CanonState,
+		"state":           compactCanonStateForContext(input.CanonState),
 	}
 	contextRaw, canonRaw, err := marshalContextDocs(contextDoc, canonDoc)
 	if err != nil {
@@ -163,6 +163,135 @@ func truncateUTF8(data []byte, maxBytes int) []byte {
 	return data[:cut]
 }
 
+func compactCanonStateForContext(state domain.CoreCanonState) map[string]any {
+	out := map[string]any{
+		"schema_version": state.SchemaVersion,
+		"revision":       state.Revision,
+		"project_id":     state.ProjectID,
+		"latest_chapter": state.LatestChapter,
+	}
+	longform := map[string]any{}
+
+	knowledge := map[string][]string{}
+	for characterID, facts := range state.Longform.Knowledge {
+		ids := make([]string, 0, len(facts))
+		for factID := range facts {
+			if id := compactContextString(factID); id != "" {
+				ids = append(ids, id)
+			}
+		}
+		sort.Strings(ids)
+		if len(ids) > 0 {
+			knowledge[compactContextString(characterID)] = ids
+		}
+	}
+	if len(knowledge) > 0 {
+		longform["knowledge"] = knowledge
+	}
+
+	locations := map[string]any{}
+	for characterID, value := range state.Longform.Locations {
+		locations[compactContextString(characterID)] = map[string]any{
+			"location_id": compactContextString(value.LocationID),
+			"start_tick":  value.StartTick,
+			"end_tick":    value.EndTick,
+		}
+	}
+	if len(locations) > 0 {
+		longform["locations"] = locations
+	}
+
+	if len(state.Longform.Resources) > 0 {
+		resources := map[string]int64{}
+		for id, value := range state.Longform.Resources {
+			resources[compactContextString(id)] = value
+		}
+		longform["resources"] = resources
+	}
+
+	relationships := map[string]any{}
+	for id, value := range state.Longform.Relationships {
+		tags := make([]string, 0, len(value.Tags))
+		for _, tag := range value.Tags {
+			if compact := compactContextString(tag); compact != "" {
+				tags = append(tags, compact)
+			}
+		}
+		relationships[compactContextString(id)] = map[string]any{"tags": tags}
+	}
+	if len(relationships) > 0 {
+		longform["relationships"] = relationships
+	}
+
+	foreshadows := map[string]any{}
+	for id, value := range state.Longform.Foreshadows {
+		if value.State == "closed" || value.State == "retired" {
+			continue
+		}
+		foreshadows[compactContextString(id)] = map[string]any{"state": compactContextString(value.State)}
+	}
+	if len(foreshadows) > 0 {
+		longform["foreshadows"] = foreshadows
+	}
+
+	promises := map[string]any{}
+	for id, value := range state.Longform.ReaderPromises {
+		if value.State == "fulfilled" || value.State == "retired" {
+			continue
+		}
+		item := map[string]any{"state": compactContextString(value.State)}
+		if value.DeadlineChapter > 0 {
+			item["deadline_chapter"] = value.DeadlineChapter
+		}
+		promises[compactContextString(id)] = item
+	}
+	if len(promises) > 0 {
+		longform["reader_promises"] = promises
+	}
+
+	if len(state.Longform.TravelConstraints) > 0 {
+		travel := make([]map[string]any, 0, len(state.Longform.TravelConstraints))
+		for _, value := range state.Longform.TravelConstraints {
+			travel = append(travel, map[string]any{
+				"from_location_id": compactContextString(value.FromLocationID),
+				"to_location_id":   compactContextString(value.ToLocationID),
+				"min_ticks":        value.MinTicks,
+			})
+		}
+		longform["travel_constraints"] = travel
+	}
+	if state.Longform.Ending != nil {
+		longform["ending"] = map[string]any{"main_resolution_event_id": compactContextString(state.Longform.Ending.MainResolutionEventID)}
+	}
+	if len(longform) > 0 {
+		out["longform"] = longform
+	}
+	if state.Planning.CurrentArc.ID != "" || state.Planning.NextArc != nil {
+		planning := map[string]any{}
+		if state.Planning.CurrentArc.ID != "" {
+			planning["current_arc"] = compactArcPlanForContext(state.Planning.CurrentArc)
+		}
+		if state.Planning.NextArc != nil {
+			planning["next_arc"] = compactArcPlanForContext(*state.Planning.NextArc)
+		}
+		out["planning"] = planning
+	}
+	return out
+}
+
+func compactArcPlanForContext(arc domain.CoreArcPlan) map[string]any {
+	out := map[string]any{
+		"id":            compactContextString(arc.ID),
+		"start_chapter": arc.StartChapter,
+		"end_chapter":   arc.EndChapter,
+		"goal":          compactContextString(arc.Goal),
+	}
+	if arc.PlanningLeadChapters > 0 {
+		out["planning_lead_chapters"] = arc.PlanningLeadChapters
+	}
+	return out
+}
+
 func (p *Project) compactFoundationReference(readMap func(string) (map[string]any, error)) (map[string]any, error) {
 	foundation, err := readMap("foundation.json")
 	if err != nil {
@@ -214,22 +343,22 @@ func (p *Project) compactFoundationReference(readMap func(string) (map[string]an
 		"foundation":       foundationOut,
 		"characters":       map[string]any{"characters": characterItems},
 		"world":            map[string]any{"entities": worldItems},
-		"style_profile":    map[string]any{"language": compactFoundationString(style["language"])},
-		"platform_profile": map[string]any{"platform": compactFoundationString(platform["platform"])},
+		"style_profile":    map[string]any{"language": compactContextString(style["language"])},
+		"platform_profile": map[string]any{"platform": compactContextString(platform["platform"])},
 	}, nil
 }
 
 func compactFoundationEntity(item map[string]any, includeType bool) map[string]any {
 	out := map[string]any{}
 	if includeType {
-		if value := compactFoundationString(item["entity_type"]); value != "" {
+		if value := compactContextString(item["entity_type"]); value != "" {
 			out["entity_type"] = value
 		}
 	}
-	if value := compactFoundationString(item["canon_id"]); value != "" {
+	if value := compactContextString(item["canon_id"]); value != "" {
 		out["canon_id"] = value
 	}
-	if value := compactFoundationString(item["name"]); value != "" {
+	if value := compactContextString(item["name"]); value != "" {
 		out["name"] = value
 	}
 	return out
@@ -238,11 +367,11 @@ func compactFoundationEntity(item map[string]any, includeType bool) map[string]a
 func compactFoundationValue(value any) any {
 	switch x := value.(type) {
 	case string:
-		return compactFoundationString(x)
+		return compactContextString(x)
 	case map[string]any:
 		out := map[string]any{}
 		for _, key := range []string{"entity_type", "canon_id", "name"} {
-			if v := compactFoundationString(x[key]); v != "" {
+			if v := compactContextString(x[key]); v != "" {
 				out[key] = v
 			}
 		}
@@ -252,7 +381,7 @@ func compactFoundationValue(value any) any {
 	}
 }
 
-func compactFoundationString(value any) string {
+func compactContextString(value any) string {
 	s, _ := value.(string)
 	return string(truncateUTF8([]byte(strings.TrimSpace(s)), 256))
 }
