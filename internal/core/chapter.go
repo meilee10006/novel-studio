@@ -658,12 +658,18 @@ func rewriteChapterLocalEntityRefs(values map[string]any, characters, locations,
 func rewriteEventRefs(value any, lookup map[string]string, violations *[]string) {
 	switch x := value.(type) {
 	case map[string]any:
-		if local, ok := x["event_ref"].(string); ok {
+		if rawRef, exists := x["event_ref"]; exists {
+			local, ok := rawRef.(string)
+			local = strings.TrimSpace(local)
+			if !ok || local == "" {
+				*violations = append(*violations, "event_ref must be a non-empty string")
+				return
+			}
 			if cleanString(x["event_canon_id"]) != "" {
 				*violations = append(*violations, "current event_ref must not include a predeclared canonical event id")
 				return
 			}
-			if canonID := lookup[strings.TrimSpace(local)]; canonID != "" {
+			if canonID := lookup[local]; canonID != "" {
 				x["event_canon_id"] = canonID
 				delete(x, "event_ref")
 			} else {

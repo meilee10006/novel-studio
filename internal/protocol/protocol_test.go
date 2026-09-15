@@ -83,7 +83,7 @@ func TestChatGPTProtocolDescribesSubmissionAndControlSchemas(t *testing.T) {
 		"book_plan.json", "direction", "ending_contract.json", "main_resolution",
 		"style_profile.json", "language", "platform_profile.json", "platform",
 		"chapter.md", "chapter_contract.json", "chapter", "declared_pov", "events.json",
-		"evidence_anchor", "kind 只支持 onscreen / offscreen", "events.json 不得自行提供 canon_id", "event_ref 与 event_canon_id 不得同时提供", "actors/observers 一旦出现必须是字符串数组", "actors/observers 数组内不得重复人物引用", "kind=offscreen", "离屏事件", "hard_constraints[].id", "state_delta.json", "state_delta.json.changes 必须是数组", "event_ref", "self_review.json", "self_review.ok 必须是 boolean", "ok:false 必须同时提供 author_decision_required", "ok:true 不得同时提供 author_decision_required",
+		"evidence_anchor", "kind 只支持 onscreen / offscreen", "events.json 不得自行提供 canon_id", "event_ref 与 event_canon_id 不得同时提供", "actors/observers 一旦出现必须是字符串数组", "actors/observers 数组内不得重复人物引用", "kind=offscreen", "离屏事件", "hard_constraints[].id", "state_delta.json", "state_delta.json.changes 必须是数组", "event_ref", "event_ref 一旦出现必须是非空字符串", "self_review.json", "self_review.ok 必须是 boolean", "ok:false 必须同时提供 author_decision_required", "ok:true 不得同时提供 author_decision_required",
 		"foundation_reference", "block_resolution", "author_directive", "future_plan",
 		"historical_revision", "block_id", "choice", "instruction",
 		"active_attempt_id", "active_target", "STATUS.block_id == READY.block_id", "export_ready", "export_problems", "不一致",
