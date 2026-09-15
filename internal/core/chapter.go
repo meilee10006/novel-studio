@@ -368,6 +368,12 @@ func canonicalizeChapterEntityAdds(value any, seq int, violations *[]string) ([]
 			*violations = append(*violations, kind+" requires local_id and name")
 			continue
 		}
+		if rawDescription, exists := change["description"]; exists {
+			if _, ok := rawDescription.(string); !ok {
+				*violations = append(*violations, kind+" description must be a string")
+				continue
+			}
+		}
 		if cleanString(change["canon_id"]) != "" {
 			*violations = append(*violations, kind+" must not predeclare canonical id")
 			continue
