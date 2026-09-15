@@ -1,8 +1,10 @@
 package protocol
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 )
 
 const (
@@ -26,6 +28,7 @@ func RenderChatGPTProtocol(projectID string) string {
 ## 基本规则
 
 - 只处理普通 UTF-8 .json、.md、.txt 文件。
+- JSON 对象中的键不得重复；重复键会被 Core 拒绝。
 - Core 写 project.json、CHATGPT_PROTOCOL.md、exchange/READY.json、exchange/STATUS.json、outbox、result、published、projection、backup。
 - ChatGPT 只写 exchange/inbox、exchange/control/inbox，以及能力检查要求的 setup 回执文件。
 - 不修改 Core 写入的文件，不使用 Google Docs/Sheets 代替协议文件。
@@ -245,6 +248,9 @@ block_resolution.choice 必须与 BLOCKED result 中某个 options 值完全相�
 }
 
 func DecodeJSON(data []byte, dst any) error {
+	if err := rejectDuplicateJSONKeys(data); err != nil {
+		return fmt.Errorf("decode json: %w", err)
+	}
 	var shape any
 	if err := json.Unmarshal(data, &shape); err != nil {
 		return fmt.Errorf("decode json: %w", err)
@@ -254,6 +260,75 @@ func DecodeJSON(data []byte, dst any) error {
 	}
 	if err := json.Unmarshal(data, dst); err != nil {
 		return fmt.Errorf("decode json target: %w", err)
+	}
+	return nil
+}
+
+func rejectDuplicateJSONKeys(data []byte) error {
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	if err := scanJSONValue(decoder); err != nil {
+		return err
+	}
+	if _, err := decoder.Token(); err != io.EOF {
+		if err == nil {
+			return fmt.Errorf("multiple JSON values")
+		}
+		return err
+	}
+	return nil
+}
+
+func scanJSONValue(decoder *json.Decoder) error {
+	token, err := decoder.Token()
+	if err != nil {
+		return err
+	}
+	delim, ok := token.(json.Delim)
+	if !ok {
+		return nil
+	}
+	switch delim {
+	case '{':
+		seen := map[string]bool{}
+		for decoder.More() {
+			keyToken, err := decoder.Token()
+			if err != nil {
+				return err
+			}
+			key, ok := keyToken.(string)
+			if !ok {
+				return fmt.Errorf("JSON object key is not a string")
+			}
+			if seen[key] {
+				return fmt.Errorf("duplicate JSON object key %q", key)
+			}
+			seen[key] = true
+			if err := scanJSONValue(decoder); err != nil {
+				return err
+			}
+		}
+		end, err := decoder.Token()
+		if err != nil {
+			return err
+		}
+		if end != json.Delim('}') {
+			return fmt.Errorf("unterminated JSON object")
+		}
+	case '[':
+		for decoder.More() {
+			if err := scanJSONValue(decoder); err != nil {
+				return err
+			}
+		}
+		end, err := decoder.Token()
+		if err != nil {
+			return err
+		}
+		if end != json.Delim(']') {
+			return fmt.Errorf("unterminated JSON array")
+		}
+	default:
+		return fmt.Errorf("unexpected JSON delimiter %q", delim)
 	}
 	return nil
 }

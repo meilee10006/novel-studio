@@ -74,10 +74,24 @@ func TestProtocolTextRejectsInvalidUTF8AndExcessiveJSONShape(t *testing.T) {
 	}
 }
 
+func TestDecodeJSONRejectsDuplicateObjectKeys(t *testing.T) {
+	for _, raw := range []string{
+		`{"project_id":"book-a","project_id":"book-b"}`,
+		`{"outer":{"id":"first","id":"second"}}`,
+	} {
+		t.Run(raw, func(t *testing.T) {
+			var value any
+			if err := DecodeJSON([]byte(raw), &value); err == nil {
+				t.Fatalf("duplicate JSON object key unexpectedly accepted: %s", raw)
+			}
+		})
+	}
+}
+
 func TestChatGPTProtocolDescribesSubmissionAndControlSchemas(t *testing.T) {
 	text := RenderChatGPTProtocol("book-1")
 	for _, want := range []string{
-		"manifest.json", "schema_version", "project_id", "task_id", "attempt_id",
+		"manifest.json", "schema_version", "project_id", "task_id", "attempt_id", "JSON 对象中的键不得重复",
 		"base_canon_root", "protocol_version", "task_digest", "completion_nonce", "files",
 		"foundation.json", "title", "protagonist 必须引用 character", "opening_location 必须引用 location", "characters.json", "characters 必须是数组", "world.json", "world.entities 一旦出现必须是数组", "每个 Foundation entity 必须有非空字符串 name", "local_id", "entity_type", "local_ref 一旦出现必须是非空字符串", "Foundation 首次定义不得自行提供 canon_id",
 		"book_plan.json", "direction", "ending_contract.json", "main_resolution",
