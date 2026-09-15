@@ -78,6 +78,31 @@ func TestBlockResolutionRejectsChoiceOutsideOfferedOptions(t *testing.T) {
 	}
 }
 
+func TestBlockResolutionRequiresExactOfferedChoice(t *testing.T) {
+	project, _, workspace, blocked, root := blockedChapterProject(t)
+	msgID := "ctrl-block-whitespace-choice"
+	writeControlMessage(t, workspace, msgID, map[string]any{
+		"kind": "block_resolution", "base_canon_root": root,
+		"block_id": blocked.BlockID, "choice": " 保留 A ",
+	})
+	project.submissionQuietPeriod = 0
+	mustReadyControl(t, project, msgID)
+	result, err := project.ProcessControlMessage(msgID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Result != "INVALID" || !strings.Contains(result.Problem, "choice") {
+		t.Fatalf("result=%+v", result)
+	}
+	status, err := project.Status()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status.BlockID != blocked.BlockID || status.CanonRoot != root || status.ActiveAttemptID != blocked.AttemptID {
+		t.Fatalf("non-exact block choice changed active state: status=%+v blocked=%+v", status, blocked)
+	}
+}
+
 func TestBlockResolutionRejectsWrongBlockID(t *testing.T) {
 	project, _, workspace, blocked, root := blockedChapterProject(t)
 	msgID := "ctrl-block-stale"

@@ -226,8 +226,8 @@ func (p *Project) processBlockResolution(project *domain.CoreProjectState, state
 	if state.ActiveBlock == nil || message.BlockID == "" || message.BlockID != state.ActiveBlock.BlockID {
 		return p.settleInvalidControl(project, record, "block resolution does not match current block")
 	}
-	choice := strings.TrimSpace(message.Choice)
-	if choice == "" {
+	choice := message.Choice
+	if strings.TrimSpace(choice) == "" {
 		return p.settleInvalidControl(project, record, "block resolution choice is required")
 	}
 	if !containsString(state.ActiveBlock.Options, choice) {
