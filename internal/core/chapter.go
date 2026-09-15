@@ -318,16 +318,19 @@ func validateAndCanonicalizeChapter(files map[string][]byte, state *domain.CoreP
 	mappings = append(mappings, promiseMappings...)
 	mappings = append(mappings, conflictMappings...)
 	lookup := make(map[string]string, len(events))
+	currentEventIDs := make(map[string]bool, len(events))
 	for _, item := range events {
 		m := item.(map[string]any)
 		localID := strings.TrimSpace(m["local_id"].(string))
 		canonID := fmt.Sprintf("story-event-%06d", seq)
 		seq++
 		lookup[localID] = canonID
+		currentEventIDs[canonID] = true
 		mappings = append(mappings, IDMapping{EntityType: "story_event", LocalID: localID, CanonID: canonID})
 		m["canon_id"] = canonID
 		delete(m, "local_id")
 	}
+	rejectPredeclaredCurrentEventIDs(values["state_delta.json"], currentEventIDs, &violations)
 	rewriteEventRefs(values["state_delta.json"], lookup, &violations)
 	if len(violations) > 0 {
 		return nil, nil, violations, chapter, nil
@@ -657,6 +660,24 @@ func rewriteChapterLocalEntityRefs(values map[string]any, characters, locations,
 			if local := cleanString(source["from_character_id"]); characters[local] != "" {
 				source["from_character_id"] = characters[local]
 			}
+		}
+	}
+}
+
+func rejectPredeclaredCurrentEventIDs(value any, current map[string]bool, violations *[]string) {
+	switch x := value.(type) {
+	case map[string]any:
+		if raw, exists := x["event_canon_id"]; exists {
+			if id := cleanString(raw); id != "" && current[id] {
+				*violations = append(*violations, "current attempt story event must be referenced by event_ref, not a predeclared canonical event id: "+id)
+			}
+		}
+		for _, child := range x {
+			rejectPredeclaredCurrentEventIDs(child, current, violations)
+		}
+	case []any:
+		for _, child := range x {
+			rejectPredeclaredCurrentEventIDs(child, current, violations)
 		}
 	}
 }
