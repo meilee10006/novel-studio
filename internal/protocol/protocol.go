@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/big"
 )
 
 const (
@@ -29,6 +30,7 @@ func RenderChatGPTProtocol(projectID string) string {
 
 - 只处理普通 UTF-8 .json、.md、.txt 文件。
 - JSON 对象中的键不得重复；重复键会被 Core 拒绝。
+- JSON 数值如果数学上是整数，该整数值必须能被 Core 精确保留；会在通用解码中发生精度损失的超大整数会被拒绝。
 - Core 写 project.json、CHATGPT_PROTOCOL.md、exchange/READY.json、exchange/STATUS.json、outbox、result、published、projection、backup。
 - ChatGPT 只写 exchange/inbox、exchange/control/inbox，以及能力检查要求的 setup 回执文件。
 - 不修改 Core 写入的文件，不使用 Google Docs/Sheets 代替协议文件。
@@ -250,7 +252,7 @@ block_resolution.choice 必须与 BLOCKED result 中某个 options 值完全相�
 }
 
 func DecodeJSON(data []byte, dst any) error {
-	if err := rejectDuplicateJSONKeys(data); err != nil {
+	if err := validateJSONTokenStream(data); err != nil {
 		return fmt.Errorf("decode json: %w", err)
 	}
 	var shape any
@@ -266,8 +268,9 @@ func DecodeJSON(data []byte, dst any) error {
 	return nil
 }
 
-func rejectDuplicateJSONKeys(data []byte) error {
+func validateJSONTokenStream(data []byte) error {
 	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.UseNumber()
 	if err := scanJSONValue(decoder); err != nil {
 		return err
 	}
@@ -287,6 +290,9 @@ func scanJSONValue(decoder *json.Decoder) error {
 	}
 	delim, ok := token.(json.Delim)
 	if !ok {
+		if number, ok := token.(json.Number); ok {
+			return rejectLossyIntegerLiteral(number)
+		}
 		return nil
 	}
 	switch delim {
@@ -331,6 +337,23 @@ func scanJSONValue(decoder *json.Decoder) error {
 		}
 	default:
 		return fmt.Errorf("unexpected JSON delimiter %q", delim)
+	}
+	return nil
+}
+
+func rejectLossyIntegerLiteral(number json.Number) error {
+	raw := number.String()
+	exact, ok := new(big.Rat).SetString(raw)
+	if !ok {
+		return fmt.Errorf("invalid JSON number %q", raw)
+	}
+	if !exact.IsInt() {
+		return nil
+	}
+	asFloat, _ := new(big.Float).SetInt(exact.Num()).Float64()
+	restored, _ := new(big.Float).SetFloat64(asFloat).Int(nil)
+	if restored == nil || restored.Cmp(exact.Num()) != 0 {
+		return fmt.Errorf("JSON integer %s cannot be represented exactly", raw)
 	}
 	return nil
 }

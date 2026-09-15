@@ -88,10 +88,40 @@ func TestDecodeJSONRejectsDuplicateObjectKeys(t *testing.T) {
 	}
 }
 
+func TestDecodeJSONRejectsLossyIntegerLiteral(t *testing.T) {
+	for _, raw := range []string{
+		`{"n":9007199254740993}`,
+		`{"n":9007199254740993.0}`,
+		`{"n":9.007199254740993e15}`,
+	} {
+		t.Run(raw, func(t *testing.T) {
+			var value map[string]any
+			if err := DecodeJSON([]byte(raw), &value); err == nil {
+				t.Fatalf("lossy integer unexpectedly accepted as %#v", value["n"])
+			}
+		})
+	}
+}
+
+func TestDecodeJSONKeepsSupportedNumbersCompatible(t *testing.T) {
+	for _, raw := range []string{
+		`{"n":0.1}`,
+		`{"n":9007199254740992}`,
+		`{"n":1e3}`,
+	} {
+		t.Run(raw, func(t *testing.T) {
+			var value map[string]any
+			if err := DecodeJSON([]byte(raw), &value); err != nil {
+				t.Fatalf("supported number rejected: %v", err)
+			}
+		})
+	}
+}
+
 func TestChatGPTProtocolDescribesSubmissionAndControlSchemas(t *testing.T) {
 	text := RenderChatGPTProtocol("book-1")
 	for _, want := range []string{
-		"manifest.json", "schema_version", "project_id", "task_id", "attempt_id", "JSON 对象中的键不得重复",
+		"manifest.json", "schema_version", "project_id", "task_id", "attempt_id", "JSON 对象中的键不得重复", "整数值必须能被 Core 精确保留",
 		"base_canon_root", "protocol_version", "task_digest", "completion_nonce", "files",
 		"foundation.json", "title", "protagonist 必须引用 character", "opening_location 必须引用 location", "characters.json", "characters 必须是数组", "world.json", "world.entities 一旦出现必须是数组", "每个 Foundation entity 必须有非空字符串 name", "local_id", "entity_type", "local_ref 一旦出现必须是非空字符串", "Foundation 首次定义不得自行提供 canon_id",
 		"book_plan.json", "direction", "ending_contract.json", "main_resolution",
