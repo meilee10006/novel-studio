@@ -65,6 +65,50 @@ func TestValidPlanningPatchAdvancesArcWithoutRepair(t *testing.T) {
 	}
 }
 
+func TestPlanningLeadAppliesToFirstChapterTask(t *testing.T) {
+	_, workspace, ready := planningChapterReadyProject(t, 2, 1)
+	base := filepath.Join(workspace, "exchange", "outbox", ready.TaskID, ready.AttemptID)
+	taskRaw, err := os.ReadFile(filepath.Join(base, "task.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	constraintsRaw, err := os.ReadFile(filepath.Join(base, "constraints.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(taskRaw), "planning_patch.json") {
+		t.Fatalf("planning lead made first patch mandatory: %s", taskRaw)
+	}
+	if !strings.Contains(string(constraintsRaw), "rolling_planning_due") {
+		t.Fatalf("planning lead obligation missing from first chapter constraints=%s", constraintsRaw)
+	}
+}
+
+func TestPlanningLeadAddsNonBlockingObligationBeforeBoundary(t *testing.T) {
+	project, workspace, ready := planningChapterReadyProject(t, 3, 1)
+	first := submitAndSettleChapter(t, project, workspace, ready, validChapterArtifacts(1))
+	if first.Result != "ACCEPTED" || first.PlanningStatus != "not_present" {
+		t.Fatalf("first settlement=%+v", first)
+	}
+
+	next := readReady(t, workspace)
+	base := filepath.Join(workspace, "exchange", "outbox", next.TaskID, next.AttemptID)
+	taskRaw, err := os.ReadFile(filepath.Join(base, "task.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	constraintsRaw, err := os.ReadFile(filepath.Join(base, "constraints.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(taskRaw), "planning_patch.json") {
+		t.Fatalf("planning lead made patch mandatory before boundary: %s", taskRaw)
+	}
+	if !strings.Contains(string(constraintsRaw), "rolling_planning_due") {
+		t.Fatalf("planning lead obligation missing constraints=%s", constraintsRaw)
+	}
+}
+
 func TestPlanningPatchBeforeBoundaryStaysQueued(t *testing.T) {
 	project, workspace, ready := planningChapterReadyProject(t, 3, 1)
 	artifacts := validChapterArtifacts(1)

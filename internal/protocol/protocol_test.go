@@ -108,7 +108,7 @@ func TestChatGPTProtocolDescribesSubmissionAndControlSchemas(t *testing.T) {
 		"relationship_id", "两个不同 canonical characters", "tags", "tags 一旦出现必须是唯一非空字符串数组", "change kind 必须来自支持列表", "foreshadow_id", "foreshadow.description", "foreshadow.description 一旦出现必须是字符串", "首次创建伏笔使用 local_id", "永久 foreshadow ID", "description 创建后不可改写", "payoff_ready", "paid_off", "closed",
 		"promise_id", "reader_promise.statement", "reader_promise.statement 一旦出现必须是字符串", "首次创建读者承诺使用 local_id", "永久 reader promise ID", "statement 创建后不可改写", "advanced", "fulfilled", "deferred", "deadline_chapter", "retired", "fulfilled / retired 为终态",
 		"conflict_id", "首次创建冲突使用 local_id", "永久 conflict ID", "participants", "participants 必须是唯一非空字符串数组", "escalation_condition", "close_condition", "定义性字段创建后不可改写", "open → escalated → resolved",
-		"ending_resolution", "travel_constraints", "min_ticks", "planning_patch.json", "next_arc",
+		"ending_resolution", "travel_constraints", "min_ticks", "planning_patch.json", "next_arc", "rolling_planning_due", "提前规划阶段仍可省略 planning_patch.json",
 	} {
 		if !strings.Contains(text, want) {
 			t.Errorf("generated ChatGPT protocol missing %q", want)

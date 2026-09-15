@@ -644,6 +644,7 @@ func (p *Project) acceptFoundation(project *domain.CoreProjectState, state *doma
 	state.Revision, state.CanonRoot = newRevision, newRoot
 	state.NextEntitySeq += len(mappings)
 	chapterTask := newTask(state, "chapter", "chapter:1", newRoot)
+	addRollingPlanningObligation(chapterTask, planning, 1)
 	chapterAttempt, err := newAttempt(state, chapterTask, "initial", chapterArtifactNames, project.ProtocolVersion)
 	if err != nil {
 		return FoundationSettlement{}, err

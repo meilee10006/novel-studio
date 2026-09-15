@@ -127,6 +127,27 @@ func exactJSONIntAllowZero(v any) int {
 	return int(f)
 }
 
+func addRollingPlanningObligation(task *domain.CoreTask, planning domain.CorePlanningState, chapter int) {
+	if task == nil || task.Kind != "chapter" || planning.NextArc != nil {
+		return
+	}
+	arc := planning.CurrentArc
+	if arc.ID == "" || arc.PlanningLeadChapters <= 0 || chapter > arc.EndChapter {
+		return
+	}
+	firstDue := arc.EndChapter - arc.PlanningLeadChapters
+	if firstDue < arc.StartChapter {
+		firstDue = arc.StartChapter
+	}
+	if chapter < firstDue {
+		return
+	}
+	task.Constraints = append(task.Constraints, domain.CoreTaskConstraint{
+		Kind:        "rolling_planning_due",
+		Instruction: "Prepare and submit a valid next Arc with planning_patch.json before the current Arc ends; the patch remains optional until the Arc boundary.",
+	})
+}
+
 func requiresArtifact(attempt *domain.CoreAttempt, name string) bool {
 	for _, item := range attempt.RequiredArtifacts {
 		if item == name {

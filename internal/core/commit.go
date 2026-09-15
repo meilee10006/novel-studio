@@ -134,6 +134,7 @@ func (p *Project) prepareChapterCommit(project *domain.CoreProjectState, state *
 	default:
 		return nil, fmt.Errorf("unsupported commit task kind %q", task.Kind)
 	}
+	addRollingPlanningObligation(nextTask, planning, chapter+1)
 	if planningRepair {
 		required = append(required, "planning_patch.json")
 		nextTask.Constraints = append(nextTask.Constraints, domain.CoreTaskConstraint{Kind: "planning_repair_required", Instruction: "Provide a valid next Arc plan before this chapter can be accepted."})

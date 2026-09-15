@@ -195,6 +195,8 @@ knowledge_add 的 fact_id 是全局稳定事实标识，statement 是后续新�
 
 首次创建读者承诺使用 local_id，并提供 reader_promise.statement；只有 ACCEPTED 时 Core 才分配永久 reader promise ID，并通过 id_mappings 返回，后续状态推进使用 promise_id 字段填写该 canonical ID。reader_promise.statement 一旦出现必须是字符串；statement 创建后不可改写；后续推进若省略 statement，Core 保留前态文本，显式提供时必须与已有非空 statement 一致。旧 Canon 已存在的历史 promise key 仍兼容继续推进。reader_promise 可用 advanced、deferred、fulfilled、retired；deferred 必须带未来的 deadline_chapter，fulfilled 必须有 event_ref；fulfilled / retired 为终态，不得恢复为 advanced/deferred；final export 前必须是 fulfilled 或 retired。最终主线收束还必须提交带本章事件证据的 ending_resolution。
 
+如果 constraints.json.control_constraints 包含 kind=rolling_planning_due，表示当前章节已进入 current_arc.planning_lead_chapters 的提前规划窗口；应尽量随本章提交合法 planning_patch.json，但提前规划阶段仍可省略 planning_patch.json，正文继续独立验收。只有越过当前 Arc 边界仍没有合法下一 Arc 时，后续 task 才会以 planning_repair_required 把 planning_patch.json 列入 required_artifacts，变成写正文前必须修复的硬前置。
+
 如果 task 要求 rolling planning 修复，planning_patch.json 最小形状为：
 
 ~~~json
