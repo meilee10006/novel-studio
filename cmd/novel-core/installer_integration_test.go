@@ -98,6 +98,17 @@ esac
 	if err := os.WriteFile(curlPath, []byte(curlScript), 0o755); err != nil {
 		t.Fatal(err)
 	}
+	unamePath := filepath.Join(fakeBin, "uname")
+	unameScript := `#!/bin/sh
+case "${1:-}" in
+  -s) echo Linux ;;
+  -m) echo x86_64 ;;
+  *) exec /usr/bin/uname "$@" ;;
+esac
+`
+	if err := os.WriteFile(unamePath, []byte(unameScript), 0o755); err != nil {
+		t.Fatal(err)
+	}
 
 	installDir := filepath.Join(tmp, "install")
 	cmd := exec.Command("sh", filepath.Join(root, "scripts", "install.sh"), "v9.9.9")
