@@ -119,6 +119,12 @@ func applyEntityAdd(state *domain.CoreLongformState, change map[string]any, enti
 func applyKnowledgeChange(state *domain.CoreLongformState, change map[string]any, violations *[]string) {
 	characterID := cleanString(change["character_id"])
 	factID := cleanString(change["fact_id"])
+	if rawStatement, provided := change["statement"]; provided {
+		if _, ok := rawStatement.(string); !ok {
+			*violations = append(*violations, "knowledge statement must be a string")
+			return
+		}
+	}
 	statement := cleanString(change["statement"])
 	if characterID == "" || factID == "" {
 		*violations = append(*violations, "knowledge change requires character_id and fact_id")
