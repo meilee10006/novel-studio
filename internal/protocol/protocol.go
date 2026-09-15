@@ -111,7 +111,7 @@ platform_profile.json：
 {"platform":"fanqie"}
 ~~~
 
-characters.json.characters 必须是数组并至少包含一个人物；world.json.entities 可省略，但 world.entities 一旦出现必须是数组。characters.json 中角色用 local_id 定义；world.json 的实体必须有 entity_type + local_id。Foundation 内部引用使用 {"entity_type":"...","local_ref":"..."}；local_ref 一旦出现必须是非空字符串，并与 entity_type 一起指向已经声明的本地实体。Core ACCEPTED 后会分配 canon_id；后续任务不要继续使用 Foundation local_id/local_ref。
+characters.json.characters 必须是数组并至少包含一个人物；world.json.entities 可省略，但 world.entities 一旦出现必须是数组。characters.json 中角色用 local_id 定义；world.json 的实体必须有 entity_type + local_id。Foundation 内部引用使用 {"entity_type":"...","local_ref":"..."}；local_ref 一旦出现必须是非空字符串，并与 entity_type 一起指向已经声明的本地实体。Foundation 首次定义不得自行提供 canon_id，typed reference 也不要预填 canon_id；Core 只在 ACCEPTED 后分配并写入 canon_id。后续任务不要继续使用 Foundation local_id/local_ref。
 
 book_plan.json 可选 current_arc：
 
