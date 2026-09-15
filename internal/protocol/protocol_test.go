@@ -101,7 +101,7 @@ func TestChatGPTProtocolDescribesSubmissionAndControlSchemas(t *testing.T) {
 		"foundation_reference", "block_resolution", "author_directive", "future_plan",
 		"historical_revision", "block_id", "choice", "instruction",
 		"active_attempt_id", "active_target", "STATUS.block_id == READY.block_id", "export_ready", "export_problems", "不一致",
-		"hard_constraints", "hard_constraints 一旦出现必须是数组", "唯一非空 id", "author_decision_required", "constraint_refs", "constraint_refs 必须是非空字符串数组", "conflict", "options",
+		"hard_constraints", "hard_constraints 一旦出现必须是数组", "唯一非空 id", "author_decision_required", "constraint_refs", "constraint_refs 必须是非空字符串数组", "offscreen constraint_refs 的重复引用会被兼容接受", "conflict", "options",
 		"character_add", "location_add", "resource_add", "description 一旦出现必须是字符串", "Core-owned ID 字段必须完全省略", "即使值为 null", "同一提交", "id_mappings", "首次创建不得自行提供永久 ID 字段",
 		"knowledge_add", "character_id", "fact_id", "statement", "knowledge statement 一旦出现必须是字符串", "source", "observed", "transmitted", "from_character_id 必须出现在 event actors", "transmitted 不得改写来源 fact 的 statement", "同一角色已有非空 statement 时不得改写", "同一 fact_id 跨角色共享同一 statement 语义",
 		"resource_id", "delta", "location_id", "start_tick", "end_tick", "location.start_tick 不得早于该角色前态 end_tick",

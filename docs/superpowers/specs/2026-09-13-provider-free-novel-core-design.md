@@ -459,7 +459,7 @@ ChatGPT 在提交包里只使用当前尝试版本内的临时 ID。新人物、
 
 正文中直接发生的事件应给一个短 `evidence_anchor`，Core 只检查这个片段是否能在 `chapter.md` 中机械匹配。新故事事件只提交 attempt-local event id，不得预填永久 `canon_id`；永久 story-event ID 只由 Core 在 `ACCEPTED` 时分配。
 
-离屏事件必须显式标记 `offscreen`，并引用允许它发生的章节约束或既有硬规则。Core 只检查引用，不假装理解这段离屏剧情写得是否合理。
+离屏事件必须显式标记 `offscreen`，并引用允许它发生的章节约束或既有硬规则。Core 只检查引用，不假装理解这段离屏剧情写得是否合理。为兼容既有提交，`constraint_refs` 不强制去重；重复引用同一已存在约束不会增加额外语义。
 
 ### 16.3 状态变化
 
