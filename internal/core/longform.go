@@ -283,7 +283,8 @@ func applyForeshadowChange(state *domain.CoreLongformState, change map[string]an
 		*violations = append(*violations, fmt.Sprintf("illegal foreshadow transition %q -> %q", previous.State, nextState))
 		return
 	}
-	if rawDescription, provided := change["description"]; provided {
+	rawDescription, descriptionProvided := change["description"]
+	if descriptionProvided {
 		if _, ok := rawDescription.(string); !ok {
 			*violations = append(*violations, "foreshadow description must be a string")
 			return
@@ -291,7 +292,7 @@ func applyForeshadowChange(state *domain.CoreLongformState, change map[string]an
 	}
 	description := cleanString(change["description"])
 	if previous.Description != "" {
-		if description != "" && description != previous.Description {
+		if descriptionProvided && description != previous.Description {
 			*violations = append(*violations, "foreshadow description cannot change after creation")
 			return
 		}
@@ -397,7 +398,8 @@ func applyReaderPromiseChange(state *domain.CoreLongformState, change map[string
 		}
 		deadline = int(v)
 	}
-	if rawStatement, provided := change["statement"]; provided {
+	rawStatement, statementProvided := change["statement"]
+	if statementProvided {
 		if _, ok := rawStatement.(string); !ok {
 			*violations = append(*violations, "reader promise statement must be a string")
 			return
@@ -405,7 +407,7 @@ func applyReaderPromiseChange(state *domain.CoreLongformState, change map[string
 	}
 	statement := cleanString(change["statement"])
 	if exists && previous.Statement != "" {
-		if statement != "" && statement != previous.Statement {
+		if statementProvided && statement != previous.Statement {
 			*violations = append(*violations, "reader promise statement cannot change after creation")
 			return
 		}

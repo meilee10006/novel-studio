@@ -57,3 +57,29 @@ func TestReaderPromiseStatementIsStableAcrossTransitions(t *testing.T) {
 		t.Fatalf("statement=%q", got)
 	}
 }
+
+func TestReaderPromiseExplicitBlankStatementIsNotOmission(t *testing.T) {
+	project, _, workspace, ready := acceptedFoundationProject(t)
+	first := longformChapterArtifacts(1, []map[string]any{{
+		"kind": "reader_promise", "local_id": "umbrella-promise",
+		"statement": "读者期待知道红色纸伞真正主人是谁", "state": "advanced",
+	}})
+	settled := submitAndSettleChapter(t, project, workspace, ready, first)
+	if settled.Result != "ACCEPTED" {
+		t.Fatalf("create=%+v", settled)
+	}
+	promiseID := mappingID(settled.IDMappings, "reader_promise", "umbrella-promise")
+	if promiseID == "" {
+		t.Fatalf("mapping missing: %+v", settled.IDMappings)
+	}
+
+	next := readReady(t, workspace)
+	blank := longformChapterArtifacts(2, []map[string]any{{
+		"kind": "reader_promise", "promise_id": promiseID,
+		"statement": "", "state": "deferred", "deadline_chapter": 5,
+	}})
+	got := submitAndSettleChapter(t, project, workspace, next, blank)
+	if got.Result != "REWRITE" || !containsViolation(got.Violations, "statement") {
+		t.Fatalf("explicit blank statement=%+v", got)
+	}
+}
