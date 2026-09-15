@@ -12,6 +12,7 @@ func TestOffscreenConstraintRefsMustBeNonEmptyStringArray(t *testing.T) {
 		{"string", `"hc-a"`, "REWRITE", "constraint_refs"},
 		{"mixed", `["hc-a",1]`, "REWRITE", "constraint_refs"},
 		{"blank element", `["hc-a",""]`, "REWRITE", "constraint_refs"},
+		{"duplicate valid ref", `["hc-a","hc-a"]`, "ACCEPTED", ""},
 		{"valid", `["hc-a"]`, "ACCEPTED", ""},
 	}
 	for _, tc := range tests {
