@@ -335,7 +335,8 @@ func applyConflictChange(state *domain.CoreLongformState, change map[string]any,
 		*violations = append(*violations, fmt.Sprintf("illegal conflict transition %q -> %q", previous.State, nextState))
 		return
 	}
-	if participants := stringSlice(change["participants"]); len(participants) > 0 {
+	if _, provided := change["participants"]; provided {
+		participants := stringSlice(change["participants"])
 		sort.Strings(participants)
 		if strings.Join(participants, "\x00") != strings.Join(previous.Participants, "\x00") {
 			*violations = append(*violations, "conflict participants are immutable after creation")
