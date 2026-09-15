@@ -431,8 +431,10 @@ func collectEntityDef(value any, entityType string, defs map[string]foundationEn
 	entityType = strings.TrimSpace(entityType)
 	localID, _ := m["local_id"].(string)
 	localID = strings.TrimSpace(localID)
-	if entityType == "" || localID == "" {
-		*violations = append(*violations, "entity definition requires entity_type and local_id")
+	name, _ := m["name"].(string)
+	name = strings.TrimSpace(name)
+	if entityType == "" || localID == "" || name == "" {
+		*violations = append(*violations, "entity definition requires entity_type, local_id, and name")
 		return
 	}
 	if _, exists := m["canon_id"]; exists {
