@@ -166,6 +166,28 @@ func applyKnowledgeChange(state *domain.CoreLongformState, change map[string]any
 		*violations = append(*violations, "knowledge source kind is unsupported")
 		return
 	}
+	globalStatement := ""
+	for _, facts := range state.Knowledge {
+		fact, ok := facts[factID]
+		if !ok || fact.Statement == "" {
+			continue
+		}
+		if globalStatement == "" {
+			globalStatement = fact.Statement
+			continue
+		}
+		if fact.Statement != globalStatement {
+			*violations = append(*violations, "knowledge fact has conflicting canonical statements")
+			return
+		}
+	}
+	if globalStatement != "" {
+		if statement != "" && statement != globalStatement {
+			*violations = append(*violations, "knowledge fact statement conflicts with canonical fact")
+			return
+		}
+		statement = globalStatement
+	}
 	if existingFacts := state.Knowledge[characterID]; existingFacts != nil {
 		if existingFact, ok := existingFacts[factID]; ok && existingFact.Statement != "" {
 			if statement != "" && statement != existingFact.Statement {

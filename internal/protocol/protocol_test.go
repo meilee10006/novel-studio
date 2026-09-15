@@ -89,7 +89,7 @@ func TestChatGPTProtocolDescribesSubmissionAndControlSchemas(t *testing.T) {
 		"active_attempt_id", "active_target", "STATUS.block_id == READY.block_id", "export_ready", "export_problems", "不一致",
 		"hard_constraints", "hard_constraints 一旦出现必须是数组", "唯一非空 id", "author_decision_required", "constraint_refs", "constraint_refs 必须是非空字符串数组", "conflict", "options",
 		"character_add", "location_add", "resource_add", "description 一旦出现必须是字符串", "Core-owned ID 字段必须完全省略", "即使值为 null", "同一提交", "id_mappings", "首次创建不得自行提供永久 ID 字段",
-		"knowledge_add", "character_id", "fact_id", "statement", "knowledge statement 一旦出现必须是字符串", "source", "observed", "transmitted", "from_character_id 必须出现在 event actors", "transmitted 不得改写来源 fact 的 statement", "同一角色已有非空 statement 时不得改写",
+		"knowledge_add", "character_id", "fact_id", "statement", "knowledge statement 一旦出现必须是字符串", "source", "observed", "transmitted", "from_character_id 必须出现在 event actors", "transmitted 不得改写来源 fact 的 statement", "同一角色已有非空 statement 时不得改写", "同一 fact_id 跨角色共享同一 statement 语义",
 		"resource_id", "delta", "location_id", "start_tick", "end_tick", "location.start_tick 不得早于该角色前态 end_tick",
 		"relationship_id", "两个不同 canonical characters", "tags", "tags 一旦出现必须是唯一非空字符串数组", "change kind 必须来自支持列表", "foreshadow_id", "foreshadow.description", "foreshadow.description 一旦出现必须是字符串", "首次创建伏笔使用 local_id", "永久 foreshadow ID", "description 创建后不可改写", "payoff_ready", "paid_off", "closed",
 		"promise_id", "reader_promise.statement", "reader_promise.statement 一旦出现必须是字符串", "首次创建读者承诺使用 local_id", "永久 reader promise ID", "statement 创建后不可改写", "advanced", "fulfilled", "deferred", "deadline_chapter", "retired", "fulfilled / retired 为终态",
