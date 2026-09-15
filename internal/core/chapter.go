@@ -364,6 +364,10 @@ func canonicalizeChapterEntityAdds(value any, seq int, violations *[]string) ([]
 			*violations = append(*violations, kind+" requires local_id and name")
 			continue
 		}
+		if cleanString(change["canon_id"]) != "" {
+			*violations = append(*violations, kind+" must not predeclare canonical id")
+			continue
+		}
 		key := entityType + "\x00" + localID
 		if _, exists := defs[key]; exists {
 			*violations = append(*violations, "duplicate "+kind+" local_id: "+localID)
@@ -413,6 +417,10 @@ func canonicalizeChapterForeshadows(value any, seq int, violations *[]string) ([
 		}
 		localID := cleanString(change["local_id"])
 		if localID == "" {
+			continue
+		}
+		if cleanString(change["foreshadow_id"]) != "" {
+			*violations = append(*violations, "new foreshadow must not predeclare canonical id")
 			continue
 		}
 		if cleanString(change["description"]) == "" {
@@ -473,6 +481,10 @@ func canonicalizeChapterReaderPromises(value any, seq int, violations *[]string)
 		if localID == "" {
 			continue
 		}
+		if cleanString(change["promise_id"]) != "" {
+			*violations = append(*violations, "new reader promise must not predeclare canonical id")
+			continue
+		}
 		if cleanString(change["statement"]) == "" {
 			*violations = append(*violations, "new reader promise requires local_id and statement")
 			continue
@@ -529,6 +541,10 @@ func canonicalizeChapterConflicts(value any, seq int, violations *[]string) ([]I
 		}
 		localID := cleanString(change["local_id"])
 		if localID == "" {
+			continue
+		}
+		if cleanString(change["conflict_id"]) != "" {
+			*violations = append(*violations, "new conflict must not predeclare canonical id")
 			continue
 		}
 		participants, participantProblems := stringArray(change["participants"], "conflict participants")
