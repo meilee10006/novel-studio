@@ -44,6 +44,16 @@ func TestSelfReviewOKMustBeBooleanAndConsistentWithOutcome(t *testing.T) {
 		}
 	})
 
+	t.Run("true with null decision still rewrites", func(t *testing.T) {
+		project, _, workspace, ready := acceptedFoundationProject(t)
+		artifacts := longformChapterArtifacts(1, nil)
+		artifacts["self_review.json"] = []byte(`{"ok":true,"author_decision_required":null}`)
+		got := submitAndSettleChapter(t, project, workspace, ready, artifacts)
+		if got.Result != "REWRITE" || !containsViolation(got.Violations, "ok=true") {
+			t.Fatalf("settlement=%+v", got)
+		}
+	})
+
 	t.Run("true accepts", func(t *testing.T) {
 		project, _, workspace, ready := acceptedFoundationProject(t)
 		got := submitAndSettleChapter(t, project, workspace, ready, longformChapterArtifacts(1, nil))
