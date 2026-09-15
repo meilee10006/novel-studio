@@ -18,6 +18,13 @@ func ReadUTF8(root, rel string, maxBytes int64) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	info, err := os.Lstat(path)
+	if err != nil {
+		return nil, fmt.Errorf("inspect %s: %w", rel, err)
+	}
+	if !info.Mode().IsRegular() {
+		return nil, fmt.Errorf("%s is not a regular file", rel)
+	}
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, fmt.Errorf("open %s: %w", rel, err)
