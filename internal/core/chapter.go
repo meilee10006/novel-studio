@@ -243,7 +243,7 @@ func validateAndCanonicalizeChapter(files map[string][]byte, state *domain.CoreP
 		}
 		localID, _ := m["local_id"].(string)
 		localID = strings.TrimSpace(localID)
-		if cleanString(m["canon_id"]) != "" {
+		if _, exists := m["canon_id"]; exists {
 			violations = append(violations, "story event must not predeclare canonical id")
 			continue
 		}
@@ -374,7 +374,7 @@ func canonicalizeChapterEntityAdds(value any, seq int, violations *[]string) ([]
 				continue
 			}
 		}
-		if cleanString(change["canon_id"]) != "" {
+		if _, exists := change["canon_id"]; exists {
 			*violations = append(*violations, kind+" must not predeclare canonical id")
 			continue
 		}
@@ -429,7 +429,7 @@ func canonicalizeChapterForeshadows(value any, seq int, violations *[]string) ([
 		if localID == "" {
 			continue
 		}
-		if cleanString(change["foreshadow_id"]) != "" {
+		if _, exists := change["foreshadow_id"]; exists {
 			*violations = append(*violations, "new foreshadow must not predeclare canonical id")
 			continue
 		}
@@ -491,7 +491,7 @@ func canonicalizeChapterReaderPromises(value any, seq int, violations *[]string)
 		if localID == "" {
 			continue
 		}
-		if cleanString(change["promise_id"]) != "" {
+		if _, exists := change["promise_id"]; exists {
 			*violations = append(*violations, "new reader promise must not predeclare canonical id")
 			continue
 		}
@@ -553,7 +553,7 @@ func canonicalizeChapterConflicts(value any, seq int, violations *[]string) ([]I
 		if localID == "" {
 			continue
 		}
-		if cleanString(change["conflict_id"]) != "" {
+		if _, exists := change["conflict_id"]; exists {
 			*violations = append(*violations, "new conflict must not predeclare canonical id")
 			continue
 		}

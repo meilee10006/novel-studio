@@ -435,7 +435,7 @@ func collectEntityDef(value any, entityType string, defs map[string]foundationEn
 		*violations = append(*violations, "entity definition requires entity_type and local_id")
 		return
 	}
-	if canonID, _ := m["canon_id"].(string); strings.TrimSpace(canonID) != "" {
+	if _, exists := m["canon_id"]; exists {
 		*violations = append(*violations, "entity definition must not predeclare canonical id")
 		return
 	}
@@ -494,7 +494,7 @@ func rewriteFoundationRefs(value any, lookup map[string]string, violations *[]st
 	case map[string]any:
 		entityType, _ := x["entity_type"].(string)
 		if rawRef, exists := x["local_ref"]; exists {
-			if canonID, _ := x["canon_id"].(string); strings.TrimSpace(canonID) != "" {
+			if _, canonExists := x["canon_id"]; canonExists {
 				*violations = append(*violations, "foundation reference must not predeclare canonical id")
 				return
 			}

@@ -34,6 +34,7 @@ func RenderChatGPTProtocol(projectID string) string {
 - 临近结局时必须读取 STATUS.export_problems；其中会列出尚未终态的伏笔/读者承诺、缺失或过期的 ending_resolution、活动 revision replay 等阻塞项。不要因为当前 task context 没带某个 obligation 就假设它已经关闭。
 - Drive 多文件同步不是原子事务。每次读取 READY 与 STATUS 后，必须确认 STATUS.active_attempt_id == READY.attempt_id、STATUS.active_target == READY.target，且 STATUS.block_id == READY.block_id（正常未阻塞时两边都为空）；如果不一致，说明文件仍在同步，等待后重新读取，不能据此提交或发 control。
 - 每次都先读取当前 READY 和对应 outbox/<task-id>/<attempt-id>/ 的 task.json、constraints.json、context.json、canon_excerpt.json、recent_prose.md。
+- 首次创建对象时，Core-owned ID 字段必须完全省略；canon_id、foreshadow_id、promise_id、conflict_id 等字段键本身都不得出现，即使值为 null、数字或对象。永久 ID 只由 Core 在 ACCEPTED 时分配。
 
 ## 能力检查
 
