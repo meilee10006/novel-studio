@@ -24,6 +24,17 @@ func TestStoryEventCanonicalIDsAreCoreOwned(t *testing.T) {
 		}
 	})
 
+	t.Run("unknown historical canonical event is rejected even when evidence is optional", func(t *testing.T) {
+		project, _, workspace, ready := acceptedFoundationProject(t)
+		artifacts := longformChapterArtifacts(1, []map[string]any{{
+			"kind": "reader_promise", "local_id": "promise", "statement": "揭晓红伞主人", "state": "advanced", "event_canon_id": "story-event-999999",
+		}})
+		got := submitAndSettleChapter(t, project, workspace, ready, artifacts)
+		if got.Result != "REWRITE" || !containsViolation(got.Violations, "event") {
+			t.Fatalf("settlement=%+v", got)
+		}
+	})
+
 	t.Run("historical canonical event remains valid evidence", func(t *testing.T) {
 		project, _, workspace, ready := acceptedFoundationProject(t)
 		first := submitAndSettleChapter(t, project, workspace, ready, longformChapterArtifacts(1, nil))

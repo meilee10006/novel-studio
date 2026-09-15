@@ -778,6 +778,10 @@ func (p *Project) validateCanonicalEntityReferences(canonical map[string][]byte,
 	for id := range longform.Resources {
 		resources[id] = true
 	}
+	events := map[string]bool{}
+	for id := range longform.Events {
+		events[id] = true
+	}
 	foreshadows := map[string]bool{}
 	for id := range longform.Foreshadows {
 		foreshadows[id] = true
@@ -801,6 +805,9 @@ func (p *Project) validateCanonicalEntityReferences(canonical map[string][]byte,
 		}
 		if mapping.EntityType == "conflict" && mapping.CanonID != "" {
 			conflicts[mapping.CanonID] = true
+		}
+		if mapping.EntityType == "story_event" && mapping.CanonID != "" {
+			events[mapping.CanonID] = true
 		}
 	}
 	for id, entity := range longform.Entities {
@@ -835,6 +842,7 @@ func (p *Project) validateCanonicalEntityReferences(canonical map[string][]byte,
 		}
 	}
 	var violations []string
+	validateCanonicalEventReferences(delta["changes"], events, &violations)
 	var contract map[string]any
 	if err := protocol.DecodeJSON(canonical["chapter_contract.json"], &contract); err != nil {
 		return nil, err
@@ -940,6 +948,25 @@ func (p *Project) validateCanonicalEntityReferences(canonical map[string][]byte,
 	}
 	sort.Strings(violations)
 	return violations, nil
+}
+
+func validateCanonicalEventReferences(value any, known map[string]bool, violations *[]string) {
+	switch x := value.(type) {
+	case map[string]any:
+		if raw, exists := x["event_canon_id"]; exists {
+			id := cleanString(raw)
+			if id != "" && !known[id] {
+				*violations = append(*violations, "state delta references unknown canonical story event: "+id)
+			}
+		}
+		for _, child := range x {
+			validateCanonicalEventReferences(child, known, violations)
+		}
+	case []any:
+		for _, child := range x {
+			validateCanonicalEventReferences(child, known, violations)
+		}
+	}
 }
 
 func relationshipCharacterIDs(id string) (string, string, bool) {
