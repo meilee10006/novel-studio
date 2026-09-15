@@ -302,6 +302,7 @@ func validateAndCanonicalizeChapter(files map[string][]byte, state *domain.CoreP
 		return nil, nil, violations, chapter, nil
 	}
 
+	submittedObjectRefs := collectSubmittedChapterObjectRefs(values)
 	entityMappings, characterLookup, locationLookup, resourceLookup, seq := canonicalizeChapterEntityAdds(values["state_delta.json"], state.NextEntitySeq, &violations)
 	rewriteChapterLocalEntityRefs(values, characterLookup, locationLookup, resourceLookup)
 	foreshadowMappings, foreshadowLookup, seq := canonicalizeChapterForeshadows(values["state_delta.json"], seq, &violations)
@@ -317,6 +318,10 @@ func validateAndCanonicalizeChapter(files map[string][]byte, state *domain.CoreP
 	mappings = append(mappings, foreshadowMappings...)
 	mappings = append(mappings, promiseMappings...)
 	mappings = append(mappings, conflictMappings...)
+	rejectCurrentAttemptCanonicalObjectRefs(submittedObjectRefs, mappings, &violations)
+	if len(violations) > 0 {
+		return nil, nil, violations, chapter, nil
+	}
 	lookup := make(map[string]string, len(events))
 	currentEventIDs := make(map[string]bool, len(events))
 	for _, item := range events {
@@ -606,6 +611,79 @@ func rewriteChapterLocalConflictRefs(value any, lookup map[string]string) {
 		}
 		if local := cleanString(change["conflict_id"]); lookup[local] != "" {
 			change["conflict_id"] = lookup[local]
+		}
+	}
+}
+
+func collectSubmittedChapterObjectRefs(values map[string]any) map[string][]string {
+	refs := map[string][]string{}
+	add := func(entityType string, value any) {
+		if id := cleanString(value); id != "" {
+			refs[entityType] = append(refs[entityType], id)
+		}
+	}
+	if contract, ok := values["chapter_contract.json"].(map[string]any); ok {
+		add("character", contract["declared_pov"])
+	}
+	if eventsRoot, ok := values["events.json"].(map[string]any); ok {
+		for _, raw := range anySlice(eventsRoot["events"]) {
+			item, _ := raw.(map[string]any)
+			for _, field := range []string{"actors", "observers"} {
+				for _, value := range anySlice(item[field]) {
+					add("character", value)
+				}
+			}
+		}
+	}
+	root, _ := values["state_delta.json"].(map[string]any)
+	for _, raw := range anySlice(root["changes"]) {
+		change, _ := raw.(map[string]any)
+		switch cleanString(change["kind"]) {
+		case "knowledge_add":
+			add("character", change["character_id"])
+			if source, ok := change["source"].(map[string]any); ok {
+				add("character", source["from_character_id"])
+			}
+		case "location":
+			add("character", change["character_id"])
+			add("location", change["location_id"])
+		case "resource":
+			add("resource", change["resource_id"])
+		case "relationship":
+			if left, right, ok := relationshipCharacterIDs(cleanString(change["relationship_id"])); ok {
+				add("character", left)
+				add("character", right)
+			}
+		case "foreshadow":
+			add("foreshadow", change["foreshadow_id"])
+		case "reader_promise":
+			add("reader_promise", change["promise_id"])
+		case "conflict":
+			add("conflict", change["conflict_id"])
+			for _, participant := range anySlice(change["participants"]) {
+				add("character", participant)
+			}
+		}
+	}
+	return refs
+}
+
+func rejectCurrentAttemptCanonicalObjectRefs(refs map[string][]string, mappings []IDMapping, violations *[]string) {
+	current := map[string]map[string]bool{}
+	for _, mapping := range mappings {
+		if mapping.CanonID == "" || mapping.EntityType == "story_event" {
+			continue
+		}
+		if current[mapping.EntityType] == nil {
+			current[mapping.EntityType] = map[string]bool{}
+		}
+		current[mapping.EntityType][mapping.CanonID] = true
+	}
+	for entityType, ids := range refs {
+		for _, id := range ids {
+			if current[entityType][id] {
+				*violations = append(*violations, "current attempt canonical "+entityType+" id must be referenced by local id: "+id)
+			}
 		}
 	}
 }
