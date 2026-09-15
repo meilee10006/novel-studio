@@ -32,7 +32,7 @@ func validateLongformState(current domain.CoreLongformState, canonical map[strin
 			violations = append(violations, "state change must be an object")
 			continue
 		}
-		applyLongformChange(&next, change, chapter, &violations)
+		applyLongformChange(&next, current.Knowledge, change, chapter, &violations)
 	}
 	sort.Strings(violations)
 	return next, violations, nil
@@ -62,7 +62,7 @@ func decodeCurrentEvents(raw []byte, chapter int) (map[string]domain.CoreEventEv
 	return out, nil
 }
 
-func applyLongformChange(state *domain.CoreLongformState, change map[string]any, chapter int, violations *[]string) {
+func applyLongformChange(state *domain.CoreLongformState, preKnowledge map[string]map[string]domain.CoreKnowledgeFact, change map[string]any, chapter int, violations *[]string) {
 	kind := cleanString(change["kind"])
 	if kind == "" {
 		*violations = append(*violations, "state change kind is required")
@@ -76,7 +76,7 @@ func applyLongformChange(state *domain.CoreLongformState, change map[string]any,
 	case "resource_add":
 		applyEntityAdd(state, change, "resource", violations)
 	case "knowledge_add":
-		applyKnowledgeChange(state, change, violations)
+		applyKnowledgeChange(state, preKnowledge, change, violations)
 	case "resource":
 		applyResourceChange(state, change, violations)
 	case "location":
@@ -116,7 +116,7 @@ func applyEntityAdd(state *domain.CoreLongformState, change map[string]any, enti
 	}
 }
 
-func applyKnowledgeChange(state *domain.CoreLongformState, change map[string]any, violations *[]string) {
+func applyKnowledgeChange(state *domain.CoreLongformState, preKnowledge map[string]map[string]domain.CoreKnowledgeFact, change map[string]any, violations *[]string) {
 	characterID := cleanString(change["character_id"])
 	factID := cleanString(change["fact_id"])
 	if rawStatement, provided := change["statement"]; provided {
@@ -150,9 +150,9 @@ func applyKnowledgeChange(state *domain.CoreLongformState, change map[string]any
 			*violations = append(*violations, "knowledge transmission source is not evidenced")
 			return
 		}
-		sourceFact, ok := state.Knowledge[from][factID]
+		sourceFact, ok := preKnowledge[from][factID]
 		if !ok {
-			*violations = append(*violations, "knowledge transmission source character does not know fact")
+			*violations = append(*violations, "knowledge transmission source character does not know fact in pre-state")
 			return
 		}
 		if sourceFact.Statement != "" {

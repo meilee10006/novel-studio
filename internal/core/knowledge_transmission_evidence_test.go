@@ -50,3 +50,30 @@ func TestKnowledgeTransmissionRequiresSourceActorAndRecipientObserver(t *testing
 		t.Fatalf("evidenced transmission=%+v", got)
 	}
 }
+
+func TestKnowledgeTransmissionRequiresSourceFactFromPreState(t *testing.T) {
+	project, workspace, sourceID, recipientID, _ := projectWithTwoCharacters(t)
+	ready := readReady(t, workspace)
+	artifacts := longformChapterArtifacts(1, []map[string]any{
+		{
+			"kind": "knowledge_add", "character_id": sourceID, "fact_id": "fact-key",
+			"statement": "钥匙在钟楼地下室", "source": map[string]any{"kind": "observed", "event_ref": "learn"},
+		},
+		{
+			"kind": "knowledge_add", "character_id": recipientID, "fact_id": "fact-key",
+			"statement": "钥匙在钟楼地下室",
+			"source":    map[string]any{"kind": "transmitted", "from_character_id": sourceID, "event_ref": "share"},
+		},
+	})
+	artifacts["chapter_contract.json"] = []byte(fmt.Sprintf(`{"chapter":1,"declared_pov":%q}`, sourceID))
+	events, _ := json.Marshal(map[string]any{"events": []map[string]any{
+		{"local_id": "learn", "kind": "onscreen", "evidence_anchor": "主角看见门口的灯", "observers": []string{sourceID}},
+		{"local_id": "share", "kind": "onscreen", "evidence_anchor": "主角看见门口的灯", "actors": []string{sourceID}, "observers": []string{recipientID}},
+	}})
+	artifacts["events.json"] = events
+
+	got := submitAndSettleChapter(t, project, workspace, ready, artifacts)
+	if got.Result != "REWRITE" || !containsViolation(got.Violations, "pre-state") {
+		t.Fatalf("same-attempt transmission settlement=%+v", got)
+	}
+}
