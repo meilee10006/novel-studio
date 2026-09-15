@@ -91,7 +91,7 @@ func TestChatGPTProtocolDescribesSubmissionAndControlSchemas(t *testing.T) {
 		"character_add", "location_add", "resource_add", "同一提交", "id_mappings",
 		"knowledge_add", "character_id", "fact_id", "statement", "source", "observed", "transmitted", "from_character_id 必须出现在 event actors", "transmitted 不得改写来源 fact 的 statement", "同一角色已有非空 statement 时不得改写",
 		"resource_id", "delta", "location_id", "start_tick", "end_tick", "location.start_tick 不得早于该角色前态 end_tick",
-		"relationship_id", "tags", "tags 一旦出现必须是唯一非空字符串数组", "change kind 必须来自支持列表", "foreshadow_id", "foreshadow.description", "首次创建伏笔使用 local_id", "永久 foreshadow ID", "description 创建后不可改写", "payoff_ready", "paid_off", "closed",
+		"relationship_id", "两个不同 canonical characters", "tags", "tags 一旦出现必须是唯一非空字符串数组", "change kind 必须来自支持列表", "foreshadow_id", "foreshadow.description", "首次创建伏笔使用 local_id", "永久 foreshadow ID", "description 创建后不可改写", "payoff_ready", "paid_off", "closed",
 		"promise_id", "reader_promise.statement", "首次创建读者承诺使用 local_id", "永久 reader promise ID", "statement 创建后不可改写", "advanced", "fulfilled", "deferred", "deadline_chapter", "retired", "fulfilled / retired 为终态",
 		"conflict_id", "首次创建冲突使用 local_id", "永久 conflict ID", "participants", "participants 必须是唯一非空字符串数组", "escalation_condition", "close_condition", "定义性字段创建后不可改写", "open → escalated → resolved",
 		"ending_resolution", "travel_constraints", "min_ticks", "planning_patch.json", "next_arc",

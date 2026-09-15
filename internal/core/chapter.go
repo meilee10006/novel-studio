@@ -879,6 +879,9 @@ func (p *Project) validateCanonicalEntityReferences(canonical map[string][]byte,
 			if !ok {
 				violations = append(violations, "relationship change requires two canonical character ids")
 			} else {
+				if left == right {
+					violations = append(violations, "relationship change requires two different canonical characters")
+				}
 				if !ids[left] {
 					violations = append(violations, "relationship change references unknown canonical character: "+left)
 				}
