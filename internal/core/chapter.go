@@ -920,17 +920,8 @@ func validateOptionalStoryEventStringArray(event map[string]any, field string, v
 	if !exists {
 		return
 	}
-	items, ok := raw.([]any)
-	if !ok {
-		*violations = append(*violations, "story event "+field+" must be an array")
-		return
-	}
-	for _, item := range items {
-		if cleanString(item) == "" {
-			*violations = append(*violations, "story event "+field+" entries must be non-empty strings")
-			return
-		}
-	}
+	_, problems := stringArray(raw, "story event "+field)
+	*violations = append(*violations, problems...)
 }
 
 func anySlice(value any) []any {

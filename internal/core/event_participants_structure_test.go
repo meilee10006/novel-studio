@@ -12,6 +12,8 @@ func TestStoryEventParticipantFieldsMustBeStringArrays(t *testing.T) {
 		{"actors string", `{"events":[{"local_id":"e1","kind":"onscreen","evidence_anchor":"主角看见门口的灯","actors":"character-000001"}]}`, "REWRITE", "actors"},
 		{"observers number", `{"events":[{"local_id":"e1","kind":"onscreen","evidence_anchor":"主角看见门口的灯","observers":1}]}`, "REWRITE", "observers"},
 		{"actors mixed", `{"events":[{"local_id":"e1","kind":"onscreen","evidence_anchor":"主角看见门口的灯","actors":["character-000001",1]}]}`, "REWRITE", "actors"},
+		{"actors duplicate", `{"events":[{"local_id":"e1","kind":"onscreen","evidence_anchor":"主角看见门口的灯","actors":["character-000001","character-000001"]}]}`, "REWRITE", "duplicate"},
+		{"observers duplicate", `{"events":[{"local_id":"e1","kind":"onscreen","evidence_anchor":"主角看见门口的灯","observers":["character-000001","character-000001"]}]}`, "REWRITE", "duplicate"},
 		{"valid arrays", `{"events":[{"local_id":"e1","kind":"onscreen","evidence_anchor":"主角看见门口的灯","actors":["character-000001"],"observers":["character-000001"]}]}`, "ACCEPTED", ""},
 	}
 	for _, tc := range tests {
