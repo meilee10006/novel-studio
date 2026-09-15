@@ -544,8 +544,8 @@ func foundationLongformState(worldRaw []byte) (domain.CoreLongformState, []strin
 			violations = append(violations, "travel constraint must be an object")
 			continue
 		}
-		from := travelNestedCanonID(item["from"])
-		to := travelNestedCanonID(item["to"])
+		from := travelNestedLocationCanonID(item["from"])
+		to := travelNestedLocationCanonID(item["to"])
 		minTicks, validTicks := integer64(item["min_ticks"])
 		if from == "" || to == "" || !validTicks || minTicks <= 0 {
 			violations = append(violations, "travel constraint requires from/to canon ids and positive min_ticks")
@@ -572,8 +572,11 @@ func foundationLongformState(worldRaw []byte) (domain.CoreLongformState, []strin
 	return state, violations, nil
 }
 
-func travelNestedCanonID(v any) string {
+func travelNestedLocationCanonID(v any) string {
 	m, _ := v.(map[string]any)
+	if cleanString(m["entity_type"]) != "location" {
+		return ""
+	}
 	return cleanString(m["canon_id"])
 }
 
