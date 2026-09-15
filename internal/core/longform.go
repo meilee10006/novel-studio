@@ -197,6 +197,12 @@ func applyKnowledgeChange(state *domain.CoreLongformState, preKnowledge map[stri
 			statement = existingFact.Statement
 		}
 	}
+	if statement == "" {
+		if _, exists := state.Knowledge[characterID][factID]; !exists {
+			*violations = append(*violations, "new knowledge requires a readable statement")
+			return
+		}
+	}
 	if state.Knowledge[characterID] == nil {
 		state.Knowledge[characterID] = map[string]domain.CoreKnowledgeFact{}
 	}

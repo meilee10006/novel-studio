@@ -315,7 +315,7 @@ func TestEvidenceBackedLongformChangesPersist(t *testing.T) {
 	project, workspace, characterID, secondID, locationID := projectWithTwoCharacters(t)
 	ready := readReady(t, workspace)
 	changes := []map[string]any{
-		{"kind": "knowledge_add", "character_id": characterID, "fact_id": "secret-a", "source": map[string]any{"kind": "observed", "event_ref": "e1"}},
+		{"kind": "knowledge_add", "character_id": characterID, "fact_id": "secret-a", "statement": "甲知道 secret-a", "source": map[string]any{"kind": "observed", "event_ref": "e1"}},
 		{"kind": "resource_add", "local_id": "cash", "name": "现金", "event_ref": "e1"},
 		{"kind": "resource", "resource_id": "cash", "delta": 3, "event_ref": "e1"},
 		{"kind": "location", "character_id": characterID, "location_id": locationID, "start_tick": 0, "end_tick": 10, "event_ref": "e1"},

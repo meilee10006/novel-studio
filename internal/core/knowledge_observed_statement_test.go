@@ -5,6 +5,18 @@ import (
 	"testing"
 )
 
+func TestNewObservedKnowledgeRequiresReadableStatement(t *testing.T) {
+	project, _, workspace, ready := acceptedFoundationProject(t)
+	artifacts := longformChapterArtifacts(1, []map[string]any{{
+		"kind": "knowledge_add", "character_id": "character-000001", "fact_id": "fact-key",
+		"source": map[string]any{"kind": "observed", "event_ref": "e1"},
+	}})
+	got := submitAndSettleChapter(t, project, workspace, ready, artifacts)
+	if got.Result != "REWRITE" || !containsViolation(got.Violations, "statement") {
+		t.Fatalf("settlement=%+v", got)
+	}
+}
+
 func TestObservedKnowledgePreservesExistingFactStatement(t *testing.T) {
 	project, _, workspace, ready := acceptedFoundationProject(t)
 	first := longformChapterArtifacts(1, []map[string]any{{
