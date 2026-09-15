@@ -243,6 +243,10 @@ func validateAndCanonicalizeChapter(files map[string][]byte, state *domain.CoreP
 		}
 		localID, _ := m["local_id"].(string)
 		localID = strings.TrimSpace(localID)
+		if cleanString(m["canon_id"]) != "" {
+			violations = append(violations, "story event must not predeclare canonical id")
+			continue
+		}
 		if localID == "" || seen[localID] {
 			violations = append(violations, "story event local_id must be present and unique")
 			continue
@@ -655,6 +659,10 @@ func rewriteEventRefs(value any, lookup map[string]string, violations *[]string)
 	switch x := value.(type) {
 	case map[string]any:
 		if local, ok := x["event_ref"].(string); ok {
+			if cleanString(x["event_canon_id"]) != "" {
+				*violations = append(*violations, "current event_ref must not include a predeclared canonical event id")
+				return
+			}
 			if canonID := lookup[strings.TrimSpace(local)]; canonID != "" {
 				x["event_canon_id"] = canonID
 				delete(x, "event_ref")
