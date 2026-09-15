@@ -671,7 +671,7 @@ func rewriteEventRefs(value any, lookup map[string]string, violations *[]string)
 				*violations = append(*violations, "event_ref must be a non-empty string")
 				return
 			}
-			if cleanString(x["event_canon_id"]) != "" {
+			if _, canonExists := x["event_canon_id"]; canonExists {
 				*violations = append(*violations, "current event_ref must not include a predeclared canonical event id")
 				return
 			}
@@ -680,6 +680,12 @@ func rewriteEventRefs(value any, lookup map[string]string, violations *[]string)
 				delete(x, "event_ref")
 			} else {
 				*violations = append(*violations, "state delta references unknown story event: "+local)
+			}
+		} else if rawCanonID, exists := x["event_canon_id"]; exists {
+			canonID, ok := rawCanonID.(string)
+			if !ok || strings.TrimSpace(canonID) == "" {
+				*violations = append(*violations, "event_canon_id must be a non-empty string")
+				return
 			}
 		}
 		for _, child := range x {
