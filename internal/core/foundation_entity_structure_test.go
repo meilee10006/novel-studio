@@ -27,7 +27,7 @@ func TestFoundationEntityCollectionsMustBeArrays(t *testing.T) {
 		}
 		ready := readReady(t, workspace)
 		artifacts := validFoundationArtifacts()
-		artifacts["foundation.json"] = []byte(`{"title":"测试书","protagonist":{"entity_type":"character","local_ref":"same"}}`)
+		artifacts["foundation.json"] = []byte(`{"title":"测试书","protagonist":{"entity_type":"character","local_ref":"same"},"opening_location":{"entity_type":"location","local_ref":"same"}}`)
 		artifacts["world.json"] = []byte(`{"entities":"location"}`)
 		got, err := project.SettleFoundation(FoundationSubmission{Manifest: manifestForReady(ready, artifacts), Artifacts: artifacts})
 		if err != nil {

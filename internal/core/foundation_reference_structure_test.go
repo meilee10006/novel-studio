@@ -9,9 +9,9 @@ func TestFoundationLocalReferenceMustBeStringWhenPresent(t *testing.T) {
 		wantResult string
 		wantText   string
 	}{
-		{"number", `{"title":"测试书","protagonist":{"entity_type":"character","local_ref":123}}`, "REWRITE", "local_ref"},
-		{"object", `{"title":"测试书","protagonist":{"entity_type":"character","local_ref":{}}}`, "REWRITE", "local_ref"},
-		{"valid", `{"title":"测试书","protagonist":{"entity_type":"character","local_ref":"same"}}`, "ACCEPTED", ""},
+		{"number", `{"title":"测试书","protagonist":{"entity_type":"character","local_ref":123},"opening_location":{"entity_type":"location","local_ref":"same"}}`, "REWRITE", "local_ref"},
+		{"object", `{"title":"测试书","protagonist":{"entity_type":"character","local_ref":{}},"opening_location":{"entity_type":"location","local_ref":"same"}}`, "REWRITE", "local_ref"},
+		{"valid", `{"title":"测试书","protagonist":{"entity_type":"character","local_ref":"same"},"opening_location":{"entity_type":"location","local_ref":"same"}}`, "ACCEPTED", ""},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

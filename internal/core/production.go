@@ -342,6 +342,8 @@ func validateAndCanonicalizeFoundation(artifacts map[string][]byte, state *domai
 	}
 	var violations []string
 	requireStringField(values["foundation.json"], "title", "foundation.title", &violations)
+	requireFoundationTypedReference(values["foundation.json"], "protagonist", "character", &violations)
+	requireFoundationTypedReference(values["foundation.json"], "opening_location", "location", &violations)
 	requireStringField(values["book_plan.json"], "direction", "book_plan.direction", &violations)
 	requireStringField(values["ending_contract.json"], "main_resolution", "ending_contract.main_resolution", &violations)
 	requireStringField(values["style_profile.json"], "language", "style_profile.language", &violations)
@@ -448,6 +450,27 @@ func collectEntityDef(value any, entityType string, defs map[string]foundationEn
 	}
 	defs[key] = foundationEntityDef{entityType: entityType, localID: localID}
 }
+func requireFoundationTypedReference(value any, field, expectedType string, violations *[]string) {
+	root, ok := value.(map[string]any)
+	if !ok {
+		return
+	}
+	ref, ok := root[field].(map[string]any)
+	if !ok {
+		*violations = append(*violations, "foundation."+field+" must be an object reference")
+		return
+	}
+	entityType, ok := ref["entity_type"].(string)
+	if !ok || strings.TrimSpace(entityType) != expectedType {
+		*violations = append(*violations, "foundation."+field+" must reference entity_type "+expectedType)
+		return
+	}
+	localRef, ok := ref["local_ref"].(string)
+	if !ok || strings.TrimSpace(localRef) == "" {
+		*violations = append(*violations, "foundation."+field+" requires non-empty local_ref")
+	}
+}
+
 func requireStringField(value any, field, label string, violations *[]string) {
 	m, ok := value.(map[string]any)
 	if !ok {

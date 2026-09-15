@@ -79,7 +79,7 @@ func TestChatGPTProtocolDescribesSubmissionAndControlSchemas(t *testing.T) {
 	for _, want := range []string{
 		"manifest.json", "schema_version", "project_id", "task_id", "attempt_id",
 		"base_canon_root", "protocol_version", "task_digest", "completion_nonce", "files",
-		"foundation.json", "title", "characters.json", "characters 必须是数组", "world.json", "world.entities 一旦出现必须是数组", "每个 Foundation entity 必须有非空字符串 name", "local_id", "entity_type", "local_ref 一旦出现必须是非空字符串", "Foundation 首次定义不得自行提供 canon_id",
+		"foundation.json", "title", "protagonist 必须引用 character", "opening_location 必须引用 location", "characters.json", "characters 必须是数组", "world.json", "world.entities 一旦出现必须是数组", "每个 Foundation entity 必须有非空字符串 name", "local_id", "entity_type", "local_ref 一旦出现必须是非空字符串", "Foundation 首次定义不得自行提供 canon_id",
 		"book_plan.json", "direction", "ending_contract.json", "main_resolution",
 		"style_profile.json", "language", "platform_profile.json", "platform",
 		"chapter.md", "chapter_contract.json", "chapter", "declared_pov", "events.json",
