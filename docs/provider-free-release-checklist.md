@@ -51,10 +51,10 @@ Transport evidence:
 | 3 | Chapter 1 accepted | PASS — ChatGPT read the canonical Foundation context from Drive, submitted a full Chapter 1 contract/body/events/state/self-review with manifest last, Core returned `ACCEPTED` at Canon `a3c38b11…`, and Drive READY/STATUS converged to `chapter:2` / `attempt-000003`. |
 | 4 | continue through Chapter 2+ | PASS — ChatGPT submitted Chapter 2 through real Drive with a full contract and optional `planning_patch.json`; Core returned `ACCEPTED` with `planning_status=accepted`, advanced Canon to `5e6b22b3…`, and Drive READY/STATUS converged to `chapter:3` / `attempt-000004`. |
 | 5 | intentionally trigger one deterministic REWRITE | PASS — Chapter 3 intentionally declared a target length excluding the actual body length; Core returned a single `REWRITE` with code `chapter_contract.invalid`, preserved legacy `violations`, limited `allowed_scope` to `chapter_contract.json`, kept Canon at `5e6b22b3…`, and opened `attempt-000005`. |
-| 6 | repair on a new attempt and accept | NOT RUN |
-| 7 | restart Core and continue | NOT RUN |
+| 6 | repair on a new attempt and accept | PASS — ChatGPT used the REWRITE feedback to create `attempt-000005`, changed only the allowed `chapter_contract.json` target-length range, kept body/events/state/self-review byte-identical, and Core returned `ACCEPTED` at Canon `ad0db185…`; ChatGPT read the accepted result back from Drive. |
+| 7 | restart Core and continue | PASS — the formal product Core was stopped and restarted during the Chapter 3 rewrite at `attempt-000005`; READY/STATUS SHA-256, Canon root, target, and attempt were identical before/after restart, then the repaired attempt was accepted and the chain continued to Chapter 4. |
 | 8 | recover from a new ChatGPT conversation by project ID/files | NOT RUN |
-| 9 | rolling Arc planning takes effect | NOT RUN |
+| 9 | rolling Arc planning takes effect | PASS — Chapter 2 received `rolling_planning_due`, its `planning_patch.json` was accepted, and the real Drive Chapter 4 context shows `current_arc.id=arc-2` with chapters 4–6 and the submitted Arc-2 goal. |
 | 10 | `future_plan` author directive takes effect | NOT RUN |
 | 11 | `historical_revision` replays downstream and catches the old head | NOT RUN |
 | 12 | trigger BLOCKED and recover with `block_resolution` | NOT RUN |
