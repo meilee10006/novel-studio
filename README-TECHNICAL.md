@@ -1,6 +1,6 @@
 # Provider-Free Novel Core — Technical Reference
 
-This document describes the supported **ChatGPT App + Google Drive + Drive Desktop + `novel-core`** architecture. Legacy provider/agent runtimes are not part of the production path.
+This document describes the supported **ordinary ChatGPT App + real Google Drive + conforming local Google Drive transport + `novel-core`** architecture. Drive Desktop (macOS/Windows) and rclone (Linux/Vultr) are transport implementations, not Core dependencies. Legacy provider/agent runtimes are not part of the production path.
 
 ## 1. Authority model
 
@@ -178,6 +178,6 @@ The old provider/agent runtime, old `cmd/novel-studio`, and vendored LiteLLM imp
 
 Automated acceptance requires fresh `go test ./...`, `go vet ./...`, dependency-boundary checks, Core recovery/security/revision/migration tests, and `verify` on a generated fixture.
 
-A real release still requires a separate manual product run using the ordinary ChatGPT App + Google Drive + Drive Desktop. Automated fixtures must not be reported as a substitute for that manual chain.
+A real release still requires a separate manual product run using the ordinary ChatGPT App + real Google Drive + a conforming local Google Drive transport + local `novel-core`. Automated fixtures must not be reported as a substitute for that manual chain.
 
 See `docs/provider-free-release-checklist.md` for the final status table.

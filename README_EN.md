@@ -6,14 +6,14 @@ The supported first-release stack is intentionally small:
 
 - the ordinary **ChatGPT App** for discussion, planning, prose, rewrites, and file submissions;
 - **Google Drive** as an exchange/backup transport only;
-- **Drive Desktop** to expose that workspace as ordinary local files;
+- a **conforming local Google Drive transport** to expose the real Drive workspace as ordinary local files; Drive Desktop remains supported on macOS/Windows, while rclone is supported on Linux/Vultr;
 - local **`novel-core`** for deterministic state, validation, transactions, recovery, revision, backup, and export.
 
 `novel-core` does not call OpenAI APIs or any other model provider. It requires no provider configuration, API key, Ollama, MCP, ChatGPT Work, embeddings, or Qdrant. Creative quality remains a responsibility of the author and ChatGPT; Core enforces only mechanically provable structured constraints.
 
 ## Quick start
 
-Requirements: Go or a `novel-core` release binary, Google Drive + Drive Desktop, and an ordinary ChatGPT App conversation.
+Requirements: Go or a `novel-core` release binary, real Google Drive + a conforming local Drive transport, and an ordinary ChatGPT App conversation. Drive Desktop remains supported on macOS/Windows; Linux/Vultr may use rclone, with `rclone mount` + VFS cache preferred for acceptance.
 
 ```bash
 git clone https://github.com/meilee10006/novel-studio.git
@@ -27,7 +27,7 @@ Initialize a local authority directory and a Drive workspace:
 ```bash
 novel-core init \
   --project "$HOME/novels/book-local" \
-  --workspace "$HOME/Google Drive/My Drive/novel-book" \
+  --workspace "$HOME/novel-drive-workspace" \
   --project-id book-001
 ```
 

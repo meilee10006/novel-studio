@@ -2,11 +2,11 @@
 
 `novel-studio` 这个 fork 现在是一套 **local-first、provider-free 的长篇小说状态核心**。
 
-首发运行组合只有：
+受支持的运行组合保持精简：
 
 - 普通 **ChatGPT App**：负责讨论、构思、写作、改写与提交文本文件；
 - **Google Drive**：只作为文件交换与备份传输层；
-- **Drive Desktop**：把 Drive workspace 同步成本机普通目录；
+- **符合要求的本地 Google Drive transport**：把真实 Drive workspace 暴露成本机普通目录；macOS/Windows 可用 Drive Desktop，Linux/Vultr 可用 rclone；
 - 本机 **`novel-core`**：负责确定性状态、校验、事务、恢复、修订、备份和导出。
 
 `novel-core` 不调用 OpenAI API 或其他模型 API，不需要 provider、model、API key、Ollama、MCP、ChatGPT Work、embedding 或 Qdrant。小说内容由普通 ChatGPT App 与作者共同完成；Core 只判断能够机械证明的结构化约束，不冒充文学审稿人。
@@ -24,10 +24,12 @@
 需要：
 
 - Go（源码运行时）；或本项目 Release 中的 `novel-core`；
-- Google Drive + Drive Desktop；
+- Google Drive + 一个符合要求的本地 Drive transport（macOS/Windows 可用 Drive Desktop；Linux/Vultr 可用 rclone）；
 - 一个普通 ChatGPT App 会话。
 
 不需要任何模型密钥。
+
+Transport 实现示例：macOS/Windows 可继续使用 Google Drive Desktop；Linux/Vultr 推荐使用 rclone Google Drive backend + `rclone mount` + VFS cache。两者都只是传输层，`meta/core/**` 的本地权威不变。
 
 源码运行：
 
@@ -47,12 +49,12 @@ novel-core --version
 
 ### 2. 初始化一本书
 
-假设 Drive Desktop 把 workspace 同步到 `~/Google Drive/My Drive/novel-book`：
+假设符合要求的本地 Drive transport 把真实 Google Drive workspace 暴露为 `$HOME/novel-drive-workspace`：
 
 ```bash
 novel-core init \
   --project "$HOME/novels/book-local" \
-  --workspace "$HOME/Google Drive/My Drive/novel-book" \
+  --workspace "$HOME/novel-drive-workspace" \
   --project-id book-001
 ```
 

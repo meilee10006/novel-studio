@@ -9,6 +9,8 @@ The supported production boundary is:
 
 This changes the transport/release-acceptance boundary only. It does not change Core authority, protocol ownership, AI boundaries, or Canon semantics.
 
+This design supersedes older Drive-Desktop-only release-gate wording in the 2026-09-13 provider-free design/plan and earlier execution plans. Those files remain historical implementation records; current product documentation and the release checklist follow this transport contract.
+
 `meta/core/**` in the local project remains the sole authority. Google Drive and every transport implementation remain non-authoritative exchange layers.
 
 ## 2. Supported transport implementations
@@ -149,8 +151,8 @@ The implementation phase updates product documentation so that:
 
 - `README.md` and `README_EN.md` describe Google Drive transport generically and list Drive Desktop/rclone as implementations;
 - `README-TECHNICAL.md` describes a conforming Google Drive transport rather than requiring Drive Desktop;
-- the original provider-free design replaces Drive-Desktop-specific release-gate wording with the contract defined here;
-- the protocol-completion design/plan no longer names Drive Desktop as mandatory acceptance infrastructure;
+- older provider-free design/plan documents may retain historical Drive-Desktop-specific wording; this design supersedes that wording for current release acceptance;
+- the current protocol-completion design no longer names Drive Desktop as mandatory acceptance infrastructure; historical execution plans may retain their original wording;
 - `docs/provider-free-release-checklist.md` records the actual transport implementation/version and uses the generic required environment.
 
 No Core protocol version bump is required because the file protocol and authority model do not change.

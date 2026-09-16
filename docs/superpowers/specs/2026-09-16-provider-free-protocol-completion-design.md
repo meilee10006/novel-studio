@@ -99,4 +99,4 @@ Core 只验证结构、类型、唯一性、可证明引用、已有状态机、
 - generated ChatGPT protocol 展示完整 contract 和结构化 REWRITE；
 - 全量 test/vet/race/build/provider-free dependency boundary 通过。
 
-普通 ChatGPT App + Google Drive + Drive Desktop 的真实产品验收仍是独立人工发布门槛；自动测试不能替代，也不能提前标记为 PASS。
+普通 ChatGPT App + 真实 Google Drive + 符合要求的本地 Google Drive transport + 本地 `novel-core` 的真实产品验收仍是独立人工发布门槛；自动测试不能替代，也不能提前标记为 PASS。

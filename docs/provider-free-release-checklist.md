@@ -34,7 +34,14 @@ Automated fixtures prove Core mechanics only. They do not prove the ordinary Cha
 
 ## Manual ChatGPT product acceptance
 
-Required environment: ordinary ChatGPT App + Google Drive + Drive Desktop + local `novel-core`.
+Required environment: ordinary ChatGPT App + real Google Drive + a conforming local Google Drive transport + local `novel-core`.
+
+Transport evidence:
+- Implementation/version: NOT RUN
+- Google Drive workspace: NOT RUN
+- Byte-preserving probes: NOT RUN
+- Bidirectional propagation: NOT RUN
+- Transport restart/recovery: NOT RUN
 
 | # | Product-chain check | Status |
 | ---: | --- | --- |

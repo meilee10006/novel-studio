@@ -23,7 +23,7 @@
 
 ### Task 1: Migrate product documentation
 
-**Files:** `README.md`, `README_EN.md`, `README-TECHNICAL.md`, `docs/provider-free-release-checklist.md`, original provider-free design/plan, protocol-completion design/plan.
+**Files:** `README.md`, `README_EN.md`, `README-TECHNICAL.md`, `docs/provider-free-release-checklist.md`, the transport design, and the protocol-completion design. Older provider-free specs/plans remain historical records and are superseded by the transport design.
 
 **Produces:** consistent boundary: `ordinary ChatGPT App + real Google Drive + conforming local Google Drive transport + local novel-core`.
 
@@ -32,10 +32,7 @@
 ```bash
 grep -nE 'Required environment:.*Drive Desktop|requires a separate manual product run using.*Drive Desktop|发布前必须使用普通 ChatGPT App \+ Google Drive \+ Drive Desktop|首发组合只有普通 ChatGPT App \+ Google Drive \+ Drive Desktop' \
   README.md README_EN.md README-TECHNICAL.md docs/provider-free-release-checklist.md \
-  docs/superpowers/specs/2026-09-13-provider-free-novel-core-design.md \
-  docs/superpowers/specs/2026-09-16-provider-free-protocol-completion-design.md \
-  docs/superpowers/plans/2026-09-13-provider-free-novel-core.md \
-  docs/superpowers/plans/2026-09-16-provider-free-protocol-completion.md
+  docs/superpowers/specs/2026-09-16-provider-free-protocol-completion-design.md
 ```
 
 Expected: one or more mandatory Drive-Desktop-only matches.
