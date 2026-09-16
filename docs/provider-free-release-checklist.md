@@ -37,11 +37,12 @@ Automated fixtures prove Core mechanics only. They do not prove the ordinary Cha
 Required environment: ordinary ChatGPT App + real Google Drive + a conforming local Google Drive transport + local `novel-core`.
 
 Transport evidence:
-- Implementation/version: NOT RUN
-- Google Drive workspace: NOT RUN
-- Byte-preserving probes: NOT RUN
-- Bidirectional propagation: NOT RUN
-- Transport restart/recovery: NOT RUN
+- Implementation/version: PASS — Vultr Linux using rclone v1.75.1 + FUSE3 3.14.0, `rclone mount --vfs-cache-mode full`; OAuth token remained host-local and outside Git.
+- Google Drive workspace: PASS — `Novel Core Product Acceptance 2026-09-16/novel-core-workspace`.
+- Byte-preserving probes: PASS — ordinary `.json`, `.md`, and `.txt` files preserved exact bytes/SHA-256 in both tested directions.
+- Bidirectional propagation: PASS — Vultr mount -> Google Drive -> ChatGPT readback, and ChatGPT raw `upload_file` -> Google Drive -> Vultr mount.
+- Transport restart/recovery: PASS — after stopping Core, unmounting/restarting rclone, remounting, and restarting Core, READY/STATUS SHA-256, Canon root, task, attempt, and target were unchanged.
+- Eventual-consistency safety: PASS — partial Foundation uploads (3/7 artifacts, then 7/7 artifacts) produced no settlement without `manifest.json`; uploading manifest last was the transition that allowed ACCEPTED.
 
 | # | Product-chain check | Status |
 | ---: | --- | --- |
