@@ -162,3 +162,22 @@ func TestChatGPTProtocolJSONExamplesAreValid(t *testing.T) {
 		}
 	}
 }
+
+func TestChatGPTProtocolDescribesStructuredRewriteFeedback(t *testing.T) {
+	text := RenderChatGPTProtocol("book-1")
+	for _, want := range []string{
+		"rewrite_feedback",
+		"code",
+		"entity_ref",
+		"expected",
+		"observed",
+		"evidence_refs",
+		"allowed_scope",
+		"violations",
+		"一一对应",
+	} {
+		if !strings.Contains(text, want) {
+			t.Errorf("generated ChatGPT protocol missing structured REWRITE guidance %q", want)
+		}
+	}
+}
