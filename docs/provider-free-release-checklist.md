@@ -57,7 +57,7 @@ Transport evidence:
 | 9 | rolling Arc planning takes effect | PASS — Chapter 2 received `rolling_planning_due`, its `planning_patch.json` was accepted, and the real Drive Chapter 4 context shows `current_arc.id=arc-2` with chapters 4–6 and the submitted Arc-2 goal. |
 | 10 | `future_plan` author directive takes effect | PASS — while Chapter 4 was active, ChatGPT submitted `ctrl-future-001`; Core returned `ACCEPTED`, Chapter 4 remained `control_constraints:null`, and the real Drive Chapter 5 constraints/context contain the same `future_plan` instruction starting from the next task. |
 | 11 | `historical_revision` replays downstream and catches the old head | NOT RUN |
-| 12 | trigger BLOCKED and recover with `block_resolution` | NOT RUN |
+| 12 | trigger BLOCKED and recover with `block_resolution` | PASS — Chapter 5 returned `BLOCKED` with stable `block-2e08d531fb741000` and two exact options; ChatGPT submitted `ctrl-block-001` using the offered choice verbatim, Core opened `attempt-000008` with the resolution constraint, the repaired Chapter 5 was `ACCEPTED` at Canon `1ec6b423…`, and Drive advanced to Chapter 6. |
 | 13 | satisfy ending hard conditions | NOT RUN |
 | 14 | `novel-core verify` passes | NOT RUN |
 | 15 | final export succeeds | NOT RUN |
