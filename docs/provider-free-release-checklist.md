@@ -55,7 +55,7 @@ Transport evidence:
 | 7 | restart Core and continue | PASS — the formal product Core was stopped and restarted during the Chapter 3 rewrite at `attempt-000005`; READY/STATUS SHA-256, Canon root, target, and attempt were identical before/after restart, then the repaired attempt was accepted and the chain continued to Chapter 4. |
 | 8 | recover from a new ChatGPT conversation by project ID/files | NOT RUN |
 | 9 | rolling Arc planning takes effect | PASS — Chapter 2 received `rolling_planning_due`, its `planning_patch.json` was accepted, and the real Drive Chapter 4 context shows `current_arc.id=arc-2` with chapters 4–6 and the submitted Arc-2 goal. |
-| 10 | `future_plan` author directive takes effect | NOT RUN |
+| 10 | `future_plan` author directive takes effect | PASS — while Chapter 4 was active, ChatGPT submitted `ctrl-future-001`; Core returned `ACCEPTED`, Chapter 4 remained `control_constraints:null`, and the real Drive Chapter 5 constraints/context contain the same `future_plan` instruction starting from the next task. |
 | 11 | `historical_revision` replays downstream and catches the old head | NOT RUN |
 | 12 | trigger BLOCKED and recover with `block_resolution` | NOT RUN |
 | 13 | satisfy ending hard conditions | NOT RUN |
