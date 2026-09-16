@@ -29,9 +29,9 @@ func validateAndCanonicalizeChapter(files map[string][]byte, state *domain.CoreP
 		}
 		values[name] = value
 	}
-	contract, ok := values["chapter_contract.json"].(map[string]any)
+	contract, contractOK := values["chapter_contract.json"].(map[string]any)
 	knownConstraints := map[string]bool{}
-	if !ok {
+	if !contractOK {
 		violations = append(violations, "chapter_contract.json must be an object")
 	} else {
 		declared, _ := contract["chapter"].(float64)
@@ -118,10 +118,16 @@ func validateAndCanonicalizeChapter(files map[string][]byte, state *domain.CoreP
 			violations = append(violations, "visible story event evidence anchor is absent from chapter")
 		}
 	}
+	var deltaChanges []any
 	if delta, ok := values["state_delta.json"].(map[string]any); !ok {
 		violations = append(violations, "state_delta.json must be an object")
-	} else if _, ok := delta["changes"].([]any); !ok {
+	} else if changes, ok := delta["changes"].([]any); !ok {
 		violations = append(violations, "state_delta.json.changes must be an array")
+	} else {
+		deltaChanges = changes
+	}
+	if contractOK {
+		validateExtendedChapterContract(contract, body, state, task, deltaChanges, &violations)
 	}
 	review, ok := values["self_review.json"].(map[string]any)
 	if !ok {

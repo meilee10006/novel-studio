@@ -181,3 +181,29 @@ func TestChatGPTProtocolDescribesStructuredRewriteFeedback(t *testing.T) {
 		}
 	}
 }
+
+func TestChatGPTProtocolDescribesCompleteBackwardCompatibleChapterContract(t *testing.T) {
+	text := RenderChatGPTProtocol("book-1")
+	for _, want := range []string{
+		"start_state",
+		"purpose",
+		"main_conflict",
+		"reader_question",
+		"obligation_refs",
+		"immutable_refs",
+		"foreshadow_operations",
+		"allowed_states",
+		"expected_changes",
+		"ending_hook",
+		"target_length",
+		"min_chars",
+		"max_chars",
+		"planning_obligations",
+		"历史最小 1.0 chapter_contract 仍可读取",
+		"新提交应使用完整 chapter_contract",
+	} {
+		if !strings.Contains(text, want) {
+			t.Errorf("generated ChatGPT protocol missing complete chapter contract guidance %q", want)
+		}
+	}
+}

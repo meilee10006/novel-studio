@@ -101,6 +101,13 @@ func (p *Project) settleActiveSnapshotLocked() (ChapterSettlement, error) {
 		}
 		validationCanon = baseCanon
 	}
+	contractViolations, err := p.validateExtendedChapterContractSemantics(canonical, validationCanon, task)
+	if err != nil {
+		return ChapterSettlement{}, err
+	}
+	if len(contractViolations) > 0 {
+		return p.rejectChapter(project, state, task, attempt, record, files, contractViolations)
+	}
 	referenceViolations, err := p.validateCanonicalEntityReferences(canonical, validationCanon.Longform, mappings)
 	if err != nil {
 		return ChapterSettlement{}, err

@@ -116,12 +116,29 @@ world.json 可选 travel_constraints，用 Foundation local_ref 连接地点，m
 
 写之前读取 context.json.foundation_reference。这里包含 Core 已规范化的 foundation、characters、world、style_profile、platform_profile；角色/地点等引用使用其中的 canon_id。例如 declared_pov 应使用 characters 中真实存在的 canonical character ID。
 
-最小形状如下。
+历史最小 1.0 chapter_contract 仍可读取，例如 {"chapter":1,"declared_pov":"character-000001"}；为获得完整的确定性保护，新提交应使用完整 chapter_contract。新增字段采用“出现则严格机械验证”，Core 不判断文学质量。
 
-chapter_contract.json：
+chapter_contract.json 推荐完整形状：
 
 ~~~json
-{"chapter":1,"declared_pov":"character-000001"}
+{
+  "chapter": 1,
+  "declared_pov": "character-000001",
+  "start_state": {"canon_root": "从当前 READY.base_canon_root 复制"},
+  "purpose": "本章要完成的叙事目的",
+  "main_conflict": "本章主冲突",
+  "reader_question": "本章持续推动的读者问题",
+  "obligation_refs": ["foreshadow-000010", "promise-000011"],
+  "immutable_refs": ["character-000001"],
+  "foreshadow_operations": [{"foreshadow_id":"foreshadow-000010","allowed_states":["reinforced","payoff_ready"]}],
+  "expected_changes": ["location", "relationship"],
+  "ending_hook": "章末钩子说明",
+  "target_length": {"min_chars":1800,"max_chars":2600},
+  "planning_obligations": ["rolling_planning_due"],
+  "hard_constraints": [{"id":"hc-001"}]
+}
 ~~~
+
+start_state.canon_root 一旦出现必须等于当前 attempt 的 base_canon_root。purpose、main_conflict、reader_question、ending_hook 一旦出现必须是非空字符串。obligation_refs、immutable_refs、planning_obligations 一旦出现必须是唯一非空字符串数组并引用 Core 当前可机械证明的对象或任务约束。foreshadow_operations 每项必须包含已存在的 foreshadow_id 和唯一非空 allowed_states；本次对应伏笔状态变化不得超出 allowed_states。expected_changes 只能使用 Core 支持的 state change kind，并且每个声明类别都必须实际出现在本次 state_delta.json.changes 中。target_length.min_chars/max_chars 必须是非负整数且 min_chars <= max_chars，Core 按 chapter.md 的 Unicode rune 数检查。planning_obligations 只能填写当前 constraints.json.control_constraints 已经下发的滚动规划 kind，不能从正文自行推断。
 
 `
