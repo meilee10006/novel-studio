@@ -46,7 +46,7 @@ Transport evidence:
 
 | # | Product-chain check | Status |
 | ---: | --- | --- |
-| 1 | capability check | NOT RUN |
+| 1 | capability check | PASS — ordinary ChatGPT App read the real Drive challenge, uploaded raw `capability-ack.json` + `capability-write-test.md`, Core reached `capability=passed`, and ChatGPT read back READY/STATUS with matching `foundation` / `attempt-000001`. |
 | 2 | first-book Foundation accepted | NOT RUN |
 | 3 | Chapter 1 accepted | NOT RUN |
 | 4 | continue through Chapter 2+ | NOT RUN |
