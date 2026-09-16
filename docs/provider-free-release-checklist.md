@@ -50,7 +50,7 @@ Transport evidence:
 | 2 | first-book Foundation accepted | PASS — ChatGPT uploaded the 7 required raw Foundation artifacts plus manifest to the real Drive inbox; Core returned `ACCEPTED`, allocated canonical IDs, advanced Canon to `92dcb26d…`, and ChatGPT read the result back from Drive. |
 | 3 | Chapter 1 accepted | PASS — ChatGPT read the canonical Foundation context from Drive, submitted a full Chapter 1 contract/body/events/state/self-review with manifest last, Core returned `ACCEPTED` at Canon `a3c38b11…`, and Drive READY/STATUS converged to `chapter:2` / `attempt-000003`. |
 | 4 | continue through Chapter 2+ | PASS — ChatGPT submitted Chapter 2 through real Drive with a full contract and optional `planning_patch.json`; Core returned `ACCEPTED` with `planning_status=accepted`, advanced Canon to `5e6b22b3…`, and Drive READY/STATUS converged to `chapter:3` / `attempt-000004`. |
-| 5 | intentionally trigger one deterministic REWRITE | NOT RUN |
+| 5 | intentionally trigger one deterministic REWRITE | PASS — Chapter 3 intentionally declared a target length excluding the actual body length; Core returned a single `REWRITE` with code `chapter_contract.invalid`, preserved legacy `violations`, limited `allowed_scope` to `chapter_contract.json`, kept Canon at `5e6b22b3…`, and opened `attempt-000005`. |
 | 6 | repair on a new attempt and accept | NOT RUN |
 | 7 | restart Core and continue | NOT RUN |
 | 8 | recover from a new ChatGPT conversation by project ID/files | NOT RUN |
