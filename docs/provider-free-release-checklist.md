@@ -37,7 +37,7 @@ Automated fixtures prove Core mechanics only. They do not prove the ordinary Cha
 Required environment: ordinary ChatGPT App + real Google Drive + a conforming local Google Drive transport + local `novel-core`.
 
 Transport evidence:
-- Implementation/version: PASS — Vultr Linux using rclone v1.75.1 + FUSE3 3.14.0, `rclone mount --vfs-cache-mode full`; OAuth token remained host-local and outside Git.
+- Implementation/version: PASS — Vultr Linux using rclone v1.75.1. Initial transport acceptance and product rows 1–12 used FUSE3 `rclone mount`; after the FUSE read path stalled, acceptance continued on the same real Drive workspace with an ownership-filtered `rclone copy` bridge (ChatGPT-owned inbox/control paths Drive→local; Core-owned READY/STATUS/outbox/result paths local→Drive). READY/STATUS SHA-256 remained identical across the transport switchover, and the OAuth token remained host-local and outside Git.
 - Google Drive workspace: PASS — `Novel Core Product Acceptance 2026-09-16/novel-core-workspace`.
 - Byte-preserving probes: PASS — ordinary `.json`, `.md`, and `.txt` files preserved exact bytes/SHA-256 in both tested directions.
 - Bidirectional propagation: PASS — Vultr mount -> Google Drive -> ChatGPT readback, and ChatGPT raw `upload_file` -> Google Drive -> Vultr mount.
@@ -56,7 +56,7 @@ Transport evidence:
 | 8 | recover from a new ChatGPT conversation by project ID/files | NOT RUN |
 | 9 | rolling Arc planning takes effect | PASS — Chapter 2 received `rolling_planning_due`, its `planning_patch.json` was accepted, and the real Drive Chapter 4 context shows `current_arc.id=arc-2` with chapters 4–6 and the submitted Arc-2 goal. |
 | 10 | `future_plan` author directive takes effect | PASS — while Chapter 4 was active, ChatGPT submitted `ctrl-future-001`; Core returned `ACCEPTED`, Chapter 4 remained `control_constraints:null`, and the real Drive Chapter 5 constraints/context contain the same `future_plan` instruction starting from the next task. |
-| 11 | `historical_revision` replays downstream and catches the old head | NOT RUN |
+| 11 | `historical_revision` replays downstream and catches the old head | PASS — ChatGPT submitted `ctrl-revision-001` targeting Chapter 4; Core branched from Chapter 3 Canon, accepted revised Chapter 4 at Canon `ccd3e165…`, issued Chapter 5 as `attempt_reason=rebase`, accepted that replay at Canon `2fcb73a1…`, cleared `revision_replay`, and real Drive READY/STATUS returned to Chapter 6, thereby catching the former accepted head. |
 | 12 | trigger BLOCKED and recover with `block_resolution` | PASS — Chapter 5 returned `BLOCKED` with stable `block-2e08d531fb741000` and two exact options; ChatGPT submitted `ctrl-block-001` using the offered choice verbatim, Core opened `attempt-000008` with the resolution constraint, the repaired Chapter 5 was `ACCEPTED` at Canon `1ec6b423…`, and Drive advanced to Chapter 6. |
 | 13 | satisfy ending hard conditions | NOT RUN |
 | 14 | `novel-core verify` passes | NOT RUN |
