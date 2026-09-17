@@ -46,9 +46,8 @@ The 5s scan interval is intentional: a 500ms scan interval repeatedly rewrote RE
 
 ## Acceptance status and next work
 
-`docs/provider-free-release-checklist.md` is the authoritative acceptance ledger. Rows 1-7 and 9-12 are complete in the current run. Remaining rows are:
+`docs/provider-free-release-checklist.md` is the authoritative acceptance ledger. Rows 1-12 are complete in the current run. Row 8 was independently re-proven from real Drive files in a genuinely new ChatGPT conversation on 2026-09-17. Remaining rows are:
 
-- Row 8: recover from a genuinely new ordinary ChatGPT conversation by project ID/files. The next conversation should perform this row rather than marking it from this document alone: use the project ID to locate/read `project.json`, `CHATGPT_PROTOCOL.md`, `exchange/STATUS.json`, `exchange/READY.json`, and the active outbox from real Drive, then prove it can continue without old chat context.
 - Row 13: satisfy ending hard conditions on Chapter 6.
 - Row 14: run `novel-core verify` successfully after the final accepted state.
 - Row 15: run final export successfully and verify the produced export.
@@ -61,5 +60,5 @@ For Chapter 6, do not invent the ending payload from memory. Read the current ge
 2. Read this file and `docs/provider-free-release-checklist.md`.
 3. On Vultr, re-read `meta/core/project.json`, `meta/core/production.json`, Canon head, local `exchange/STATUS.json`/`READY.json`, and running processes. Do not assume the runtime checkpoint above is still current if those files disagree.
 4. Reconcile the ownership-filtered Drive bridge and independently read real Drive STATUS/READY before creating any submission.
-5. Perform Row 8 as a new-conversation recovery from Drive project files, then continue Chapter 6 ending -> verify -> export.
+5. Row 8 is complete; continue Chapter 6 ending -> verify -> export from the current Drive/Core identities, re-reading them before each submission.
 6. At each stable acceptance milestone, update the release checklist (and this recovery card if the active checkpoint changes), run fresh relevant verification, commit, and push immediately. Non-integration remote CI is asynchronous: trigger if appropriate, but do not wait or poll.
