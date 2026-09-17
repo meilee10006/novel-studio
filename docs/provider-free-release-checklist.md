@@ -34,6 +34,8 @@ Automated fixtures prove Core mechanics only. They do not prove the ordinary Cha
 
 ## Manual ChatGPT product acceptance
 
+Each product-chain row uses one of `PASS`, `FAIL`, or `NOT RUN`; completed rows keep their verification evidence inline.
+
 Required environment: ordinary ChatGPT App + real Google Drive + a conforming local Google Drive transport + local `novel-core`.
 
 Transport evidence:
