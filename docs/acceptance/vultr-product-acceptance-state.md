@@ -29,11 +29,11 @@ Use `rclone copy`/`copyto` on the specific ownership paths rather than syncing t
 
 At handoff, Core authority reports:
 
-- Canon root: `2fcb73a15d275cb5db98a3d44ce8c25fcdc238ba459724aa22eac1ad2115c204`.
-- Active task: `task-000010`, `chapter:6`.
-- Active attempt: `attempt-000012`, reason `initial`.
-- Base Canon root equals the Canon root above.
-- Export is not ready; current problem is `ending resolution is missing`.
+- Canon root: `40ec21cb14bc763bc41eb5900e82eb8a455e5e86bd4bd9606431ca12d3eed52c`.
+- Chapter 6 ending attempt `task-000010` / `attempt-000012` is `ACCEPTED`; its ending evidence event is canonical `story-event-000012`.
+- Active task is now `task-000011`, `chapter:7`; active attempt is `attempt-000013`, reason `initial`, with `planning_repair_required`.
+- Active task base Canon root equals the Canon root above.
+- `exchange/STATUS.json` reports `export_ready: true` with no `export_problems`; Chapter 7 planning repair is a next-chapter workflow state and does not undo the satisfied final-export hard conditions.
 - Historical revision replay has caught the former head and is no longer active.
 
 Core serve command used for the formal run:
@@ -46,9 +46,8 @@ The 5s scan interval is intentional: a 500ms scan interval repeatedly rewrote RE
 
 ## Acceptance status and next work
 
-`docs/provider-free-release-checklist.md` is the authoritative acceptance ledger. Rows 1-12 are complete in the current run. Row 8 was independently re-proven from real Drive files in a genuinely new ChatGPT conversation on 2026-09-17. Remaining rows are:
+`docs/provider-free-release-checklist.md` is the authoritative acceptance ledger. Rows 1-13 are complete in the current run. Row 8 was independently re-proven from real Drive files in a genuinely new ChatGPT conversation on 2026-09-17, and Row 13 was completed by the real Drive Chapter 6 ending submission. Remaining rows are:
 
-- Row 13: satisfy ending hard conditions on Chapter 6.
 - Row 14: run `novel-core verify` successfully after the final accepted state.
 - Row 15: run final export successfully and verify the produced export.
 
@@ -60,5 +59,5 @@ For Chapter 6, do not invent the ending payload from memory. Read the current ge
 2. Read this file and `docs/provider-free-release-checklist.md`.
 3. On Vultr, re-read `meta/core/project.json`, `meta/core/production.json`, Canon head, local `exchange/STATUS.json`/`READY.json`, and running processes. Do not assume the runtime checkpoint above is still current if those files disagree.
 4. Reconcile the ownership-filtered Drive bridge and independently read real Drive STATUS/READY before creating any submission.
-5. Row 8 is complete; continue Chapter 6 ending -> verify -> export from the current Drive/Core identities, re-reading them before each submission.
+5. Rows 8 and 13 are complete; run `novel-core verify` against the current authoritative project, then final export and verify the produced export.
 6. At each stable acceptance milestone, update the release checklist (and this recovery card if the active checkpoint changes), run fresh relevant verification, commit, and push immediately. Non-integration remote CI is asynchronous: trigger if appropriate, but do not wait or poll.

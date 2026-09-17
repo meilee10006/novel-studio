@@ -58,7 +58,7 @@ Transport evidence:
 | 10 | `future_plan` author directive takes effect | PASS — while Chapter 4 was active, ChatGPT submitted `ctrl-future-001`; Core returned `ACCEPTED`, Chapter 4 remained `control_constraints:null`, and the real Drive Chapter 5 constraints/context contain the same `future_plan` instruction starting from the next task. |
 | 11 | `historical_revision` replays downstream and catches the old head | PASS — ChatGPT submitted `ctrl-revision-001` targeting Chapter 4; Core branched from Chapter 3 Canon, accepted revised Chapter 4 at Canon `ccd3e165…`, issued Chapter 5 as `attempt_reason=rebase`, accepted that replay at Canon `2fcb73a1…`, cleared `revision_replay`, and real Drive READY/STATUS returned to Chapter 6, thereby catching the former accepted head. |
 | 12 | trigger BLOCKED and recover with `block_resolution` | PASS — Chapter 5 returned `BLOCKED` with stable `block-2e08d531fb741000` and two exact options; ChatGPT submitted `ctrl-block-001` using the offered choice verbatim, Core opened `attempt-000008` with the resolution constraint, the repaired Chapter 5 was `ACCEPTED` at Canon `1ec6b423…`, and Drive advanced to Chapter 6. |
-| 13 | satisfy ending hard conditions | NOT RUN |
+| 13 | satisfy ending hard conditions | PASS — in Chapter 6, ordinary ChatGPT uploaded the five required raw artifacts to the real Drive inbox and uploaded `manifest.json` last; the ownership-filtered Drive→Vultr bridge exposed that exact attempt to Core, which returned `ACCEPTED`, mapped `e1` to `story-event-000012`, advanced Canon to `40ec21cb…`, and the Core-owned Drive result/STATUS readback converged with `export_ready=true` and no export problems. |
 | 14 | `novel-core verify` passes | NOT RUN |
 | 15 | final export succeeds | NOT RUN |
 
