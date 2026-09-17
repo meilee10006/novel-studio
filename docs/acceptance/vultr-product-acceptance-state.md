@@ -35,6 +35,8 @@ At handoff, Core authority reports:
 - Active task base Canon root equals the Canon root above.
 - `exchange/STATUS.json` reports `export_ready: true` with no `export_problems`; Chapter 7 planning repair is a next-chapter workflow state and does not undo the satisfied final-export hard conditions.
 - Historical revision replay has caught the former head and is no longer active.
+- Final export: `/opt/sentinelx-cloud-core/novel-core-acceptance/final-export/vultr-product-acceptance-20260916.md`, 15,943 bytes, SHA-256 `6497161b1c20674b80670b23c105908c8ff202637c472db9316789f096c13ca6`; independent reconstruction from active Canon was byte-identical and post-export `novel-core verify` returned `ok:true`.
+- Core `serve` was restarted with `-scan-interval 5s`; revision 9 / Canon `40ec21cb…` / `task-000011` / `attempt-000013` remained unchanged and Drive READY/STATUS SHA-256 matched local after restart.
 
 Core serve command used for the formal run:
 
@@ -46,9 +48,7 @@ The 5s scan interval is intentional: a 500ms scan interval repeatedly rewrote RE
 
 ## Acceptance status and next work
 
-`docs/provider-free-release-checklist.md` is the authoritative acceptance ledger. Rows 1-14 are complete in the current run. Row 8 was independently re-proven from real Drive files in a genuinely new ChatGPT conversation on 2026-09-17, and Row 13 was completed by the real Drive Chapter 6 ending submission. Remaining rows are:
-
-- Row 15: run final export successfully and verify the produced export.
+`docs/provider-free-release-checklist.md` is the authoritative acceptance ledger. All 15 manual product-chain rows are complete in the current run. Row 8 was independently re-proven from real Drive files in a genuinely new ChatGPT conversation on 2026-09-17; Row 13 completed the real Drive Chapter 6 ending; Row 14 verified the live authority; Row 15 produced and independently byte-verified the final export.
 
 For Chapter 6, do not invent the ending payload from memory. Read the current generated protocol, active outbox, canonical Foundation/ending contract, and existing tests/schema first; then submit through ordinary ChatGPT raw Drive files with manifest last.
 
@@ -58,5 +58,5 @@ For Chapter 6, do not invent the ending payload from memory. Read the current ge
 2. Read this file and `docs/provider-free-release-checklist.md`.
 3. On Vultr, re-read `meta/core/project.json`, `meta/core/production.json`, Canon head, local `exchange/STATUS.json`/`READY.json`, and running processes. Do not assume the runtime checkpoint above is still current if those files disagree.
 4. Reconcile the ownership-filtered Drive bridge and independently read real Drive STATUS/READY before creating any submission.
-5. Rows 8, 13, and 14 are complete; `serve` is intentionally stopped for the single-writer read-lock window. Run final export against the same authority, verify the produced export, then restart `serve` with the original 5s scan interval and re-check identities.
+5. All manual rows are complete. `serve` is running again with the original 5s scan interval. Preserve the current authority/Drive identities unless a new protocol-valid task is intentionally submitted.
 6. At each stable acceptance milestone, update the release checklist (and this recovery card if the active checkpoint changes), run fresh relevant verification, commit, and push immediately. Non-integration remote CI is asynchronous: trigger if appropriate, but do not wait or poll.
