@@ -1,5 +1,7 @@
 # Provider-Free 语义设计基线 Implementation Plan
 
+> 状态：已完成计划级 self-review，待按任务实施。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 在不恢复任何模型 Provider、Agent runtime 或新 TaskKind 的前提下，为新项目加入建书前语义设计证据链，并把通过建书就绪检查的七个 Foundation 文件可靠地接入现有 Canon 结算。
@@ -2210,7 +2212,7 @@ FoundationDesignRoot string `json:"foundation_design_root,omitempty"`
 - legacy：DesignHead/Checkpoint/FoundationDesignRoot 为空；
 - CanonRoot/ActiveTask 继续来自 production state。
 
-不要新增 `foundation_state` 或 `current_phase`。required accepted 项目的 receipt/head 交叉一致性由 Task 7 Verify 负责；STATUS 不自己修复不一致。
+不要新增 foundation_state 或任何流程阶段游标。required accepted 项目的 receipt/head 交叉一致性由 Task 7 Verify 负责；STATUS 不自己修复不一致。
 
 - [ ] **Step 8: 更新生成的 CHATGPT_PROTOCOL.md**
 
@@ -3107,7 +3109,7 @@ git push origin provider-free-novel-core
 - [ ] Foundation receipt 首次写入就携带 foundation_design_root；旧 legacy Foundation receipt 保持为空。
 - [ ] Foundation journal 在 canon / receipt / production / ready 各故障阶段都能重启恢复，不产生第二份 Foundation Canon、receipt 或 chapter:1 attempt。
 - [ ] Foundation ACCEPTED 后 Design Head 冻结；现有 historical_revision 不被伪装成 Foundation revision。
-- [ ] exchange/STATUS.json 是唯一状态投影，不新增 current_phase / foundation_state 等第二套流程状态。
+- [ ] exchange/STATUS.json 是唯一状态投影，不新增流程阶段游标 / foundation_state 等第二套流程状态。
 - [ ] verify 覆盖所有 Design object/bundle/commit/receipt、正式 HEAD 线性链和 Foundation receipt/head 交叉一致性。
 - [ ] backup 继续复用 meta/core 全量复制，不新增第二套 Design 收集器。
 - [ ] restore 复用现有 staged Verify，恢复后 design_root/canon_root 都验证通过。

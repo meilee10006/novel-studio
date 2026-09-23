@@ -1,10 +1,11 @@
 # Provider-Free 语义设计基线与证据链规格
 
-状态：设计已收敛，待审阅
+状态：设计已收敛，实施计划已生成，待实现
 日期：2026-09-23
 目标分支：provider-free-novel-core
 依赖规格：docs/superpowers/specs/2026-09-13-provider-free-novel-core-design.md
 能力审计：docs/upstream-fork-capability-audit-20260923.md
+实施计划：docs/superpowers/plans/2026-09-23-provider-free-semantic-design-baseline.md
 
 ## 1. 目标
 

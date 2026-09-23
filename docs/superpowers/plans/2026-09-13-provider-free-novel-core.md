@@ -1,6 +1,6 @@
 # 无 AI Novel Core 实施计划
 
-> 状态：已执行的历史实施计划。2026-09-23 的语义设计基线规格新增了建书前流程，并覆盖本计划中“capability 后直接创建 foundation READY”的初始化语义。不要把本文件继续追加成新规格的实施计划；当前新规格尚无实施计划，通过审阅后再单独生成。
+> 状态：已执行的历史实施计划。2026-09-23 的语义设计基线规格新增了建书前流程，并覆盖本计划中“capability 后直接创建 foundation READY”的初始化语义。不要继续追加本文件；后续实现以 `docs/superpowers/plans/2026-09-23-provider-free-semantic-design-baseline.md` 为准。
 
 目标规格：`docs/superpowers/specs/2026-09-13-provider-free-novel-core-design.md`
 
