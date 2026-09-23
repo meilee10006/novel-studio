@@ -6,6 +6,7 @@ type CoreProjectState struct {
 	SchemaVersion   int    `json:"schema_version"`
 	ProjectID       string `json:"project_id"`
 	ProtocolVersion string `json:"protocol_version"`
+	DesignMode      string `json:"design_mode,omitempty"`
 	WorkspaceRoot   string `json:"workspace_root"`
 	CapabilityNonce string `json:"capability_nonce"`
 	MarkdownProbe   string `json:"markdown_probe"`
