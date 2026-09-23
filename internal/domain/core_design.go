@@ -48,3 +48,31 @@ type CoreDesignReceipt struct {
 	Problem            string `json:"problem,omitempty"`
 	CommittedAt        string `json:"committed_at,omitempty"`
 }
+
+type CoreDesignSubmissionRecord struct {
+	SchemaVersion      int               `json:"schema_version"`
+	SubmissionID       string            `json:"submission_id"`
+	Operation          string            `json:"operation,omitempty"`
+	State              string            `json:"state"`
+	ObservedDigest     string            `json:"observed_digest,omitempty"`
+	ObservedAt         string            `json:"observed_at,omitempty"`
+	SnapshotDigest     string            `json:"snapshot_digest,omitempty"`
+	Conflict           bool              `json:"conflict,omitempty"`
+	Problem            string            `json:"problem,omitempty"`
+	Result             string            `json:"result,omitempty"`
+	Refs               map[string]string `json:"refs,omitempty"`
+	PreviousDesignRoot string            `json:"previous_design_root,omitempty"`
+	NewDesignRoot      string            `json:"new_design_root,omitempty"`
+	ReceiptPath        string            `json:"receipt_path,omitempty"`
+}
+
+type CoreDesignSubmissionResult struct {
+	SchemaVersion      int               `json:"schema_version"`
+	SubmissionID       string            `json:"submission_id"`
+	Result             string            `json:"result"`
+	Refs               map[string]string `json:"refs,omitempty"`
+	PreviousDesignRoot string            `json:"previous_design_root,omitempty"`
+	NewDesignRoot      string            `json:"new_design_root,omitempty"`
+	ReceiptRef         string            `json:"receipt_ref,omitempty"`
+	Problem            string            `json:"problem,omitempty"`
+}

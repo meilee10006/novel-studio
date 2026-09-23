@@ -7,6 +7,38 @@ import (
 	"testing"
 )
 
+func TestSubmissionStillRejectsMutationAfterSharedSnapshotRefactor(t *testing.T) {
+	project, _, workspace := newCapabilityPassedProject(t)
+	project.submissionQuietPeriod = 0
+	if err := project.Reconcile(); err != nil {
+		t.Fatal(err)
+	}
+	ready := readReady(t, workspace)
+	files := validFoundationArtifacts()
+	writeSubmission(t, workspace, ready, files, false)
+
+	if _, err := project.ScanActiveSubmission(); err != nil {
+		t.Fatal(err)
+	}
+	first, err := project.ScanActiveSubmission()
+	if err != nil || first.State != "READY_TO_VALIDATE" {
+		t.Fatalf("first scan=%+v err=%v", first, err)
+	}
+
+	path := filepath.Join(workspace, "exchange", "inbox", ready.TaskID, ready.AttemptID, "foundation.json")
+	if err := os.WriteFile(path, []byte(`{"title":"changed"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	second, err := project.ScanActiveSubmission()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !second.Conflict || second.State != "INVALID" {
+		t.Fatalf("mutated locked submission=%+v", second)
+	}
+}
+
 func TestSubmissionSnapshotPendingUntilManifestAndFilesStable(t *testing.T) {
 	project, _, workspace := newChapterReadyProject(t)
 	project.submissionQuietPeriod = 0

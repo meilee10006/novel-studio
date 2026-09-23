@@ -108,3 +108,71 @@ func (s *CoreStore) saveImmutableCoreDesignFile(rel string, data []byte) error {
 		return s.io.WriteFileUnlocked(rel, data)
 	})
 }
+
+func coreDesignSubmissionRecordPath(submissionID string) string {
+	return filepath.Join("meta", "core", "design", "reconcile", submissionID+".json")
+}
+
+func coreDesignSnapshotPath(submissionID string) string {
+	return filepath.Join("meta", "core", "design", "snapshots", submissionID)
+}
+
+func (s *CoreStore) LoadCoreDesignSubmissionRecord(submissionID string) (*domain.CoreDesignSubmissionRecord, error) {
+	if submissionID == "" || submissionID == "." || submissionID == ".." || filepath.Base(submissionID) != submissionID {
+		return nil, fmt.Errorf("invalid design submission id %q", submissionID)
+	}
+	var record domain.CoreDesignSubmissionRecord
+	if err := s.io.ReadJSON(coreDesignSubmissionRecordPath(submissionID), &record); err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &record, nil
+}
+
+func (s *CoreStore) SaveCoreDesignSubmissionRecord(record *domain.CoreDesignSubmissionRecord) error {
+	if record == nil || record.SubmissionID == "" || record.SubmissionID == "." || record.SubmissionID == ".." || filepath.Base(record.SubmissionID) != record.SubmissionID {
+		return fmt.Errorf("valid design submission record is required")
+	}
+	return s.io.WriteJSON(coreDesignSubmissionRecordPath(record.SubmissionID), record)
+}
+
+func (s *CoreStore) SaveCoreDesignSnapshot(submissionID string, files map[string][]byte) error {
+	if submissionID == "" || submissionID == "." || submissionID == ".." || filepath.Base(submissionID) != submissionID {
+		return fmt.Errorf("invalid design submission id %q", submissionID)
+	}
+	base := s.io.path(coreDesignSnapshotPath(submissionID))
+	if _, err := os.Stat(base); err == nil {
+		return compareExistingSnapshot(base, files)
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(base), 0o755); err != nil {
+		return err
+	}
+	tmp, err := os.MkdirTemp(filepath.Dir(base), ".design-snapshot-*")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(tmp)
+	for name, data := range files {
+		if name == "" || filepath.Base(name) != name {
+			return fmt.Errorf("invalid design snapshot artifact %q", name)
+		}
+		if err := os.WriteFile(filepath.Join(tmp, name), data, 0o644); err != nil {
+			return err
+		}
+	}
+	return os.Rename(tmp, base)
+}
+
+func (s *CoreStore) ReadCoreDesignSnapshotFile(submissionID, name string) ([]byte, error) {
+	if submissionID == "" || submissionID == "." || submissionID == ".." || filepath.Base(submissionID) != submissionID {
+		return nil, fmt.Errorf("invalid design submission id %q", submissionID)
+	}
+	if name == "" || filepath.Base(name) != name {
+		return nil, fmt.Errorf("invalid design snapshot artifact %q", name)
+	}
+	return s.io.ReadFile(filepath.Join(coreDesignSnapshotPath(submissionID), name))
+}

@@ -52,66 +52,47 @@ func (p *Project) scanActiveSubmissionLocked() (SubmissionStatus, error) {
 		return p.invalidateSubmission(record, err.Error())
 	}
 
-	inbox := filepath.Join(project.WorkspaceRoot, "exchange", "inbox", task.TaskID, attempt.AttemptID)
-	if problem := validateInboxEntries(inbox, manifest.Files); problem != "" {
-		return p.invalidateSubmission(record, problem)
-	}
-	files := make(map[string][]byte, len(manifest.Files)+1)
-	manifestRaw, err := protocol.ReadUTF8(project.WorkspaceRoot, manifestRel, 64<<10)
+	baseRel := filepath.Join("exchange", "inbox", task.TaskID, attempt.AttemptID)
+	files, scanDigest, err := readInboxCandidate(project.WorkspaceRoot, baseRel, manifest.Files, maxSubmissionBytes)
 	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return p.saveSubmissionRecord(record)
+		}
 		return p.invalidateSubmission(record, err.Error())
 	}
-	files["manifest.json"] = manifestRaw
-	total := len(manifestRaw)
-	for _, name := range manifest.Files {
-		rel := filepath.Join("exchange", "inbox", task.TaskID, attempt.AttemptID, name)
-		data, err := protocol.ReadUTF8(project.WorkspaceRoot, rel, protocol.DefaultMaxTextSize)
-		if err != nil {
-			if errors.Is(err, os.ErrNotExist) {
-				return p.saveSubmissionRecord(record)
-			}
-			return p.invalidateSubmission(record, err.Error())
-		}
-		total += len(data)
-		if total > maxSubmissionBytes {
-			return p.invalidateSubmission(record, "submission exceeds max total size")
-		}
-		files[name] = data
-	}
-
-	scanDigest, err := digestArtifactManifest(digestArtifacts(files))
-	if err != nil {
-		return SubmissionStatus{}, err
-	}
-	if record.SnapshotDigest != "" {
-		if scanDigest == record.SnapshotDigest {
-			return *record, nil
-		}
+	observation, decision := advanceStableObservation(stableObservation{
+		ObservedDigest: record.ObservedDigest,
+		ObservedAt:     record.ObservedAt,
+		SnapshotDigest: record.SnapshotDigest,
+	}, scanDigest, time.Now().UTC(), p.submissionQuietPeriod)
+	record.ObservedDigest = observation.ObservedDigest
+	record.ObservedAt = observation.ObservedAt
+	record.SnapshotDigest = observation.SnapshotDigest
+	switch decision {
+	case "LOCKED_SAME":
+		return *record, nil
+	case "LOCKED_CONFLICT":
 		record.Conflict = true
 		record.Problem = "Drive content changed after local snapshot was locked"
 		if record.State != "SETTLED" {
 			record.State = "INVALID"
 		}
 		return p.saveSubmissionRecord(record)
-	}
-	now := time.Now().UTC()
-	if record.ObservedDigest != scanDigest {
-		record.ObservedDigest = scanDigest
-		record.ObservedAt = now.Format(time.RFC3339Nano)
+	case "PENDING":
 		record.State = "PENDING"
 		record.Problem = ""
 		return p.saveSubmissionRecord(record)
+	case "READY_TO_SNAPSHOT":
+		if err := p.store.SaveCoreSnapshot(attempt.AttemptID, files); err != nil {
+			return SubmissionStatus{}, err
+		}
+		record.SnapshotDigest = scanDigest
+		record.State = "READY_TO_VALIDATE"
+		record.Problem = ""
+		return p.saveSubmissionRecord(record)
+	default:
+		return SubmissionStatus{}, fmt.Errorf("unknown stable observation decision %q", decision)
 	}
-	if observedAt, err := time.Parse(time.RFC3339Nano, record.ObservedAt); err == nil && now.Sub(observedAt) < p.submissionQuietPeriod {
-		return *record, nil
-	}
-	if err := p.store.SaveCoreSnapshot(attempt.AttemptID, files); err != nil {
-		return SubmissionStatus{}, err
-	}
-	record.SnapshotDigest = scanDigest
-	record.State = "READY_TO_VALIDATE"
-	record.Problem = ""
-	return p.saveSubmissionRecord(record)
 }
 
 func (p *Project) activeProduction() (*domain.CoreProjectState, *domain.CoreProductionState, error) {
