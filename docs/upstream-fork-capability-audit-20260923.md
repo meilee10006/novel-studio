@@ -1,5 +1,7 @@
 # Upstream vs Provider-Free Fork Capability Audit — 2026-09-23
 
+> 后续架构已经收敛到 docs/superpowers/specs/2026-09-23-provider-free-semantic-design-baseline.md；本文件保留能力差距审计结论，后续实现以该规格为准。
+
 ## 1. 审计范围与基线
 
 本审计比较当前两个真实 Git 状态，而不是依赖旧聊天摘要：

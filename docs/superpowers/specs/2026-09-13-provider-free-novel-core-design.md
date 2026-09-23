@@ -1,6 +1,8 @@
 # 无 AI Novel Core 设计规格
 
 状态：已收敛，待实施
+> 后续规格：2026-09-23-provider-free-semantic-design-baseline.md 在第一份 Canon 之前增加语义设计基线；其中“能力检查后直接生成 ChatGPT-facing foundation READY”的旧流程由后续规格覆盖。
+
 日期：2026-09-13  
 目标分支：`provider-free-novel-core`  
 上游基线：`Xiaoyangy/novel-studio@e3beebbf2f35b9ff55fd781d82055b60d45970c8`
