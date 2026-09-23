@@ -223,13 +223,25 @@ story_concept
 
 记录作者真正想解决的问题和边界，不负责写故事答案。
 
-至少包含：
+creative_brief.payload 固定使用：
 
-- 写作目的；
-- 目标类型/平台约束；
-- 已明确偏好；
-- 已明确禁区；
-- 当前必须保留的作者原则。
+~~~json
+{
+  "purpose": "为什么要写这本书",
+  "target_genre": "目标类型",
+  "platform_constraints": [],
+  "preferences": [],
+  "exclusions": [],
+  "author_principles": []
+}
+~~~
+
+确定性要求：
+
+- purpose、target_genre 必须是非空字符串；
+- platform_constraints、preferences、exclusions、author_principles 必须是字符串数组；
+- 数组内条目必须是非空字符串且不得重复；
+- 数组允许为空，Core 不替作者发明偏好、禁区或原则。
 
 ### 8.2 story_decisions
 
@@ -243,15 +255,37 @@ story_concept
 - rejected：已经明确否决，后续不得在没有重新确认的情况下偷偷恢复；
 - open：尚未决定，但可以继续探索。
 
-每条决定必须有稳定本地 id。重新打开旧决定时，不改旧记录，而是新建一条决定并通过 supersedes 指向旧决定。
+story_decisions.payload 使用固定结构：
 
-建书就绪时不得存在标记为 blocking 的 open 决定。
+~~~json
+{
+  "decisions": [
+    {
+      "id": "story-decision-001",
+      "status": "locked",
+      "statement": "故事层决定",
+      "blocking": true,
+      "supersedes": ""
+    }
+  ]
+}
+~~~
+
+- decisions 必须是数组；
+- id 必须是本产物内唯一的非空字符串；
+- status 只允许 locked / rejected / open；
+- statement 必须是非空字符串；
+- blocking 必须是 boolean；
+- supersedes 可省略或为空；非空时只能引用同一 payload 中另一个 decision.id，且不能自指；
+- 重新打开旧决定时不改旧条目，而是新增一条决定并用 supersedes 指向被取代的 decision.id。
+
+故事锁定和建书就绪时都不得存在 blocking=true 且 status=open 的故事层决定。
 
 ### 8.3 story_concept
 
 回答“这本书到底讲一个什么故事”，而不是把题材、金手指、爽点循环或升级手段本身当作主线。
 
-至少包含：
+story_concept.payload 固定包含：
 
 - story：用直接语言说明故事本身；
 - protagonist_goal；
@@ -259,6 +293,8 @@ story_concept
 - story_engine：什么持续制造事件和选择；
 - change_path：主角、关系或处境会如何发生长期变化；
 - ending_direction。
+
+这六个字段都必须是非空字符串。Core 只检查字段和类型，不判断“story 是否真的是好故事”；这项语义判断由 story_review 负责。
 
 story_concept 必须把当前 creative_brief 和 story_decisions 作为 inputs。
 
@@ -294,16 +330,38 @@ Architect 能力不再单独对应 Agent 或 Task，而是把 story_concept 展�
 
 语义设计层的 book_plan 不能只写 direction。
 
-首版至少要求包含：
+首版固定使用下面的最低机器结构；可以增加其他创作字段，但不能换名替代这些字段：
 
-- direction；
-- whole_book_skeleton；
-- 至少两个明确阶段；本项目定位长篇，不为单阶段作品放宽这条建书门槛；
-- 每个阶段的主要目标或问题；
-- 阶段之间发生了什么不可忽略的变化；
-- 结局如何与 ending_contract 接上。
+~~~json
+{
+  "direction": "全书总方向",
+  "whole_book_skeleton": {
+    "stages": [
+      {
+        "id": "stage-1",
+        "objective": "这一阶段要解决的主要目标或问题",
+        "transition": "这一阶段结束后发生的不可忽略变化"
+      },
+      {
+        "id": "stage-2",
+        "objective": "下一阶段的主要目标或问题",
+        "transition": "如何进入最终收束"
+      }
+    ],
+    "ending_connection": "全书骨架如何接到 ending_contract"
+  }
+}
+~~~
 
-Core 只检查这些字段存在、类型正确、引用有效，不判断结构是否精彩。
+确定性要求：
+
+- direction 必须是非空字符串；
+- whole_book_skeleton 必须是对象；
+- stages 必须是长度至少 2 的数组；
+- 每个 stage 的 id、objective、transition 都必须是非空字符串，id 在数组内唯一；
+- ending_connection 必须是非空字符串。
+
+Core 只检查这些字段存在、类型正确和局部结构有效，不判断阶段设计是否精彩，也不判断 ending_connection 的文学合理性；后者属于建书就绪审查。
 
 ### 8.6 world 的额外建书要求
 
@@ -784,7 +842,11 @@ required 模式下，能力检查通过但尚未建书就绪时：
 
 本规格同时改变本地项目元数据和 Drive 协议，因此实施时必须显式提升 core schema version 与 protocol version，并继续遵守现有“先备份、再迁移、未知新版本 fail closed”的规则。
 
-迁移时绝不伪造历史设计证据。所有在升级前已经初始化的项目——无论是否已经有 Canon、是否正停在旧 foundation attempt、还是只有 capability 状态——统一写入 design_mode=legacy，并保持当前 task/attempt/Canon/READY 语义不变。
+迁移时绝不伪造历史设计证据。所有在升级前已经初始化的项目——无论是否已经有 Canon、是否正停在旧 foundation attempt、还是只有 capability 状态——统一写入 design_mode=legacy。
+
+core schema migration 只补本地运行元数据，不改变 Canon、active task/attempt 或现有 READY 指向。protocol migration 继续沿用当前已经存在的安全语义：为了让旧协议 submission 失效，可以为同一个 active task 生成绑定新 protocol_version 的 replacement attempt，并在重新完成 capability check 后发布对应的新 READY；这个重绑不得改变 task 的 kind、target、base_canon_root、约束、Canon 或业务进度，也不得把 legacy 项目切换到 required。
+
+因此这里的“保持旧流程”指不推进或重写小说生产事实，不要求保留旧协议 attempt 的字节级身份。
 
 只有升级后新建的项目进入 design_mode=required。首版不自动把 legacy 项目切换成 required，也不取消或重写旧项目已经存在的 foundation attempt。
 
@@ -886,9 +948,14 @@ novel-core verify 至少新增：
 
 未知设计 schema version 必须 fail closed。
 
-core schema migration 负责为旧 CoreProjectState 明确写入 design_mode=legacy；protocol migration 负责生成与新 exchange/design 协议匹配的 CHATGPT_PROTOCOL.md。两者都不得改变现有 Canon、active task/attempt 或 READY 指向。
+core schema migration 负责为旧 CoreProjectState 明确写入 design_mode=legacy，并且不得改变现有 Canon、active task/attempt 或 READY 指向。
+
+protocol migration 负责生成与新 exchange/design 协议匹配的 CHATGPT_PROTOCOL.md，并继续使用当前 provider-free Core 已有的 replacement-attempt 机制重新绑定 protocol_version：允许替换 active attempt 和重新发布 READY，但必须保持同一个 active task、target、base canon、约束和 Canon，不得推进章节或 Foundation 业务状态。
 
 本期只新增“当前已发布版本 → 本规格版本”的显式迁移路径，不为了将来可能出现的多版本组合建设通用迁移图。
+
+
+当前发布版本同时需要 core schema 与 protocol 升级，而现有迁移器一次只提交一种迁移。因此当前发布版本升级到本规格版本固定分两段执行：先完成 core schema 迁移并写入 design_mode=legacy，再完成 protocol migration 与 replacement attempt 重绑。两段各自使用与当时本地状态精确匹配的独立预迁移备份；第一段完成到第二段开始之间，普通生产 mutation 继续 fail closed。首版不为把两段压成一个命令而引入通用迁移编排器。
 
 任何会改写 设计存储 格式的迁移必须遵守现有“先备份再迁移”原则。
 
@@ -1014,7 +1081,8 @@ novel-core status 至少增加：
 ### 24.6 兼容
 
 - 所有升级前已初始化项目迁移后都是 legacy，包括尚未结算的旧 foundation attempt；
-- legacy 项目保持原 active task/attempt/READY，不生成虚假 design_root；
+- core schema migration 后原 active task/attempt/READY 指向保持不变；随后若执行 protocol migration，可以按现有安全机制为同一 active task 重绑 replacement attempt，并在 capability 重新通过后发布新 READY，但不得改变 target/base canon/业务进度；
+- legacy 项目不生成虚假 design_root；
 - 新 required 项目 capability 通过但尚未建书就绪时没有 active task 是合法状态，且不得生成 READY；
 - required 项目的 serve 在没有 active task 时仍能处理 design/inbox；
 - required 项目的设计操作不得改变 NextTaskSeq、NextAttemptSeq、NextEntitySeq；
