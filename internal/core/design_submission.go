@@ -246,6 +246,15 @@ func (p *Project) promoteDesignLocked(request protocol.DesignPromoteRequest, rec
 		currentRoot = head.DesignRoot
 	}
 
+	if head != nil && head.Checkpoint == domain.DesignCheckpointFoundationReady {
+		return p.settleDesignPromoteOutcome(record, domain.CoreDesignSubmissionResult{
+			SchemaVersion:      coreSchemaVersion,
+			SubmissionID:       record.SubmissionID,
+			Result:             "INVALID",
+			PreviousDesignRoot: currentRoot,
+			Problem:            "foundation design baseline is frozen",
+		}, "INVALID")
+	}
 	if head == nil {
 		if request.ExpectedDesignRoot != "" {
 			return p.settleDesignPromoteOutcome(record, domain.CoreDesignSubmissionResult{
@@ -271,27 +280,53 @@ func (p *Project) promoteDesignLocked(request protocol.DesignPromoteRequest, rec
 		}
 	}
 
-	if request.Checkpoint != domain.DesignCheckpointStoryLocked {
+	checkpointPolicyVersion := 0
+	switch request.Checkpoint {
+	case domain.DesignCheckpointStoryLocked:
+		if err := p.validateStoryLocked(request.BundleRef, request.Evidence); err != nil {
+			return p.settleDesignPromoteOutcome(record, domain.CoreDesignSubmissionResult{
+				SchemaVersion: coreSchemaVersion, SubmissionID: record.SubmissionID,
+				Result: "INVALID", PreviousDesignRoot: currentRoot, Problem: err.Error(),
+			}, "INVALID")
+		}
+		checkpointPolicyVersion = storyLockedCheckpointPolicyVersion
+	case domain.DesignCheckpointFoundationReady:
+		if head == nil || head.Checkpoint != domain.DesignCheckpointStoryLocked {
+			return p.settleDesignPromoteOutcome(record, domain.CoreDesignSubmissionResult{
+				SchemaVersion: coreSchemaVersion, SubmissionID: record.SubmissionID,
+				Result: "INVALID", PreviousDesignRoot: currentRoot,
+				Problem: "foundation_ready requires current story_locked design head",
+			}, "INVALID")
+		}
+		state, err := p.store.LoadCoreProductionState()
+		if err != nil {
+			return domain.CoreDesignSubmissionResult{}, err
+		}
+		if state == nil {
+			state = newCoreProductionState()
+		}
+		if err := p.validateFoundationReady(head, request.BundleRef, request.Evidence, state); err != nil {
+			return p.settleDesignPromoteOutcome(record, domain.CoreDesignSubmissionResult{
+				SchemaVersion: coreSchemaVersion, SubmissionID: record.SubmissionID,
+				Result: "INVALID", PreviousDesignRoot: currentRoot, Problem: err.Error(),
+			}, "INVALID")
+		}
+		checkpointPolicyVersion = foundationReadyCheckpointPolicyVersion
+	default:
 		return p.settleDesignPromoteOutcome(record, domain.CoreDesignSubmissionResult{
 			SchemaVersion: coreSchemaVersion, SubmissionID: record.SubmissionID,
 			Result: "INVALID", PreviousDesignRoot: currentRoot,
 			Problem: "unsupported design checkpoint for this task",
 		}, "INVALID")
 	}
-	if err := p.validateStoryLocked(request.BundleRef, request.Evidence); err != nil {
-		return p.settleDesignPromoteOutcome(record, domain.CoreDesignSubmissionResult{
-			SchemaVersion: coreSchemaVersion, SubmissionID: record.SubmissionID,
-			Result: "INVALID", PreviousDesignRoot: currentRoot, Problem: err.Error(),
-		}, "INVALID")
-	}
 
 	commit := domain.CoreDesignCommit{
 		SchemaVersion:           coreSchemaVersion,
-		Checkpoint:              domain.DesignCheckpointStoryLocked,
+		Checkpoint:              request.Checkpoint,
 		ParentDesignRoot:        currentRoot,
 		BundleRef:               request.BundleRef,
 		Evidence:                cloneStringMap(request.Evidence),
-		CheckpointPolicyVersion: storyLockedCheckpointPolicyVersion,
+		CheckpointPolicyVersion: checkpointPolicyVersion,
 	}
 	root, err := computeDesignRoot(commit)
 	if err != nil {

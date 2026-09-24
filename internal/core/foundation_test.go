@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -23,6 +24,45 @@ type readyView struct {
 	CompletionNonce string `json:"completion_nonce"`
 	Status          string `json:"status"`
 	BlockID         string `json:"block_id,omitempty"`
+}
+
+func TestPrepareFoundationArtifactsDoesNotConsumeEntitySequence(t *testing.T) {
+	state := newCoreProductionState()
+	before := *state
+
+	prepared, violations, err := prepareFoundationArtifacts(validFoundationArtifacts(), state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(violations) != 0 {
+		t.Fatalf("violations=%v", violations)
+	}
+	if len(prepared.Canonical) != len(foundationArtifactNames) {
+		t.Fatalf("canonical=%v", prepared.Canonical)
+	}
+	if !reflect.DeepEqual(before, *state) {
+		t.Fatalf("prevalidation mutated state: before=%+v after=%+v", before, *state)
+	}
+}
+
+func TestLegacyFoundationStillAcceptsBookPlanWithoutWholeBookSkeleton(t *testing.T) {
+	project, _, workspace := newCapabilityPassedProject(t)
+	if err := project.Reconcile(); err != nil {
+		t.Fatal(err)
+	}
+	ready := readReady(t, workspace)
+	artifacts := validFoundationArtifacts()
+
+	settlement, err := project.SettleFoundation(FoundationSubmission{
+		Manifest:  manifestForReady(ready, artifacts),
+		Artifacts: artifacts,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if settlement.Result != "ACCEPTED" {
+		t.Fatalf("settlement=%+v", settlement)
+	}
 }
 
 func TestFoundationAttemptCreatedOnceAfterCapabilityPassed(t *testing.T) {

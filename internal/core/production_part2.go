@@ -9,6 +9,40 @@ import (
 	"strings"
 )
 
+type preparedFoundation struct {
+	Canonical map[string][]byte
+	Mappings  []IDMapping
+	Longform  domain.CoreLongformState
+	Planning  domain.CorePlanningState
+}
+
+func prepareFoundationArtifacts(
+	artifacts map[string][]byte,
+	state *domain.CoreProductionState,
+) (preparedFoundation, []string, error) {
+	canonical, mappings, violations, err := validateAndCanonicalizeFoundation(artifacts, state)
+	if err != nil || len(violations) != 0 {
+		return preparedFoundation{}, violations, err
+	}
+
+	longform, violations, err := foundationLongformState(canonical["world.json"])
+	if err != nil || len(violations) != 0 {
+		return preparedFoundation{}, violations, err
+	}
+
+	planning, violations, err := foundationPlanningState(canonical["book_plan.json"])
+	if err != nil || len(violations) != 0 {
+		return preparedFoundation{}, violations, err
+	}
+
+	return preparedFoundation{
+		Canonical: canonical,
+		Mappings:  mappings,
+		Longform:  longform,
+		Planning:  planning,
+	}, nil, nil
+}
+
 func (p *Project) writeActiveAttempt(projectState *domain.CoreProjectState, state *domain.CoreProductionState) error {
 	if state.ActiveTask == nil || state.ActiveAttempt == nil {
 		return fmt.Errorf("active task and attempt are required")
@@ -111,28 +145,24 @@ func (p *Project) settleFoundationLocked(sub FoundationSubmission) (FoundationSe
 	if err := validateSubmissionIdentity(projectState, task, attempt, sub.Manifest); err != nil {
 		return FoundationSettlement{}, err
 	}
-	canonical, mappings, violations, err := validateAndCanonicalizeFoundation(sub.Artifacts, state)
+	prepared, violations, err := prepareFoundationArtifacts(sub.Artifacts, state)
 	if err != nil {
 		return FoundationSettlement{}, err
 	}
 	if len(violations) > 0 {
 		return p.rejectFoundation(projectState, state, task, attempt, violations)
 	}
-	longform, longformViolations, err := foundationLongformState(canonical["world.json"])
-	if err != nil {
-		return FoundationSettlement{}, err
-	}
-	if len(longformViolations) > 0 {
-		return p.rejectFoundation(projectState, state, task, attempt, longformViolations)
-	}
-	planning, planningViolations, err := foundationPlanningState(canonical["book_plan.json"])
-	if err != nil {
-		return FoundationSettlement{}, err
-	}
-	if len(planningViolations) > 0 {
-		return p.rejectFoundation(projectState, state, task, attempt, planningViolations)
-	}
-	return p.acceptFoundation(projectState, state, task, attempt, sub, canonical, mappings, longform, planning)
+	return p.acceptFoundation(
+		projectState,
+		state,
+		task,
+		attempt,
+		sub,
+		prepared.Canonical,
+		prepared.Mappings,
+		prepared.Longform,
+		prepared.Planning,
+	)
 }
 func validateSubmissionIdentity(project *domain.CoreProjectState, task *domain.CoreTask, attempt *domain.CoreAttempt, manifest protocol.SubmissionManifest) error {
 	if manifest.SchemaVersion != protocol.MachineSchemaVersion {

@@ -89,3 +89,38 @@ func hasDuplicateStrings(items []string) bool {
 	}
 	return false
 }
+
+var foundationDesignSlots = map[string]string{
+	"foundation":       "foundation.json",
+	"characters":       "characters.json",
+	"world":            "world.json",
+	"book_plan":        "book_plan.json",
+	"ending_contract":  "ending_contract.json",
+	"style_profile":    "style_profile.json",
+	"platform_profile": "platform_profile.json",
+}
+
+func (p *Project) foundationArtifactsFromDesignBundle(
+	bundle domain.CoreDesignBundle,
+) (map[string][]byte, error) {
+	out := make(map[string][]byte, len(foundationDesignSlots))
+	for slot, fileName := range foundationDesignSlots {
+		ref, ok := bundle.Selections[slot]
+		if !ok {
+			return nil, fmt.Errorf("design bundle is missing %s", slot)
+		}
+		artifact, err := p.loadDesignArtifactRef(ref)
+		if err != nil {
+			return nil, err
+		}
+		if artifact.ArtifactType != slot {
+			return nil, fmt.Errorf("%s selects artifact type %s", slot, artifact.ArtifactType)
+		}
+		raw, err := json.Marshal(artifact.Payload)
+		if err != nil {
+			return nil, err
+		}
+		out[fileName] = raw
+	}
+	return out, nil
+}

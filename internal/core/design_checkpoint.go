@@ -10,7 +10,10 @@ import (
 	"github.com/chenhongyang/novel-studio/internal/domain"
 )
 
-const storyLockedCheckpointPolicyVersion = 1
+const (
+	storyLockedCheckpointPolicyVersion     = 1
+	foundationReadyCheckpointPolicyVersion = 1
+)
 
 func (p *Project) validateStoryLocked(bundleRef string, evidence map[string]string) error {
 	bundle, err := p.loadDesignBundleRef(bundleRef)
@@ -75,6 +78,189 @@ func (p *Project) validateStoryLocked(bundleRef string, evidence map[string]stri
 	}
 	if err := validateAuthorConfirmation(confirmation, conceptRef); err != nil {
 		return fmt.Errorf("author_confirmation: %w", err)
+	}
+	return nil
+}
+
+func (p *Project) validateFoundationReady(
+	head *domain.CoreDesignHead,
+	bundleRef string,
+	evidence map[string]string,
+	state *domain.CoreProductionState,
+) error {
+	if head == nil || head.DesignRoot == "" || head.Checkpoint != domain.DesignCheckpointStoryLocked {
+		return fmt.Errorf("foundation_ready requires current story_locked design head")
+	}
+	parentCommit, err := p.store.LoadCoreDesignCommit(head.DesignRoot)
+	if err != nil {
+		return err
+	}
+	if parentCommit == nil || parentCommit.Checkpoint != domain.DesignCheckpointStoryLocked {
+		return fmt.Errorf("current story_locked design commit is missing or invalid")
+	}
+	parentBundle, err := p.loadDesignBundleRef(parentCommit.BundleRef)
+	if err != nil {
+		return fmt.Errorf("story_locked parent bundle: %w", err)
+	}
+	bundle, err := p.loadDesignBundleRef(bundleRef)
+	if err != nil {
+		return err
+	}
+
+	requiredSlots := []string{
+		"creative_brief",
+		"story_decisions",
+		"story_concept",
+		"foundation",
+		"characters",
+		"world",
+		"book_plan",
+		"ending_contract",
+		"style_profile",
+		"platform_profile",
+	}
+	if len(bundle.Selections) != len(requiredSlots) {
+		return fmt.Errorf("foundation_ready bundle must select exactly 10 fixed slots")
+	}
+	for _, slot := range requiredSlots {
+		if bundle.Selections[slot] == "" {
+			return fmt.Errorf("foundation_ready bundle is missing %s", slot)
+		}
+	}
+	for _, slot := range []string{"creative_brief", "story_decisions", "story_concept"} {
+		if bundle.Selections[slot] != parentBundle.Selections[slot] {
+			return fmt.Errorf("%s does not match current story_locked bundle", slot)
+		}
+	}
+
+	artifacts := make(map[string]domain.CoreDesignArtifact, len(requiredSlots))
+	for _, slot := range requiredSlots {
+		artifact, err := p.loadDesignArtifactRef(bundle.Selections[slot])
+		if err != nil {
+			return fmt.Errorf("%s: %w", slot, err)
+		}
+		if artifact.ArtifactType != slot {
+			return fmt.Errorf("%s selects artifact type %s", slot, artifact.ArtifactType)
+		}
+		artifacts[slot] = artifact
+	}
+
+	briefRef := bundle.Selections["creative_brief"]
+	conceptRef := bundle.Selections["story_concept"]
+	charactersRef := bundle.Selections["characters"]
+	worldRef := bundle.Selections["world"]
+	endingRef := bundle.Selections["ending_contract"]
+
+	type hardInputRule struct {
+		slot     string
+		required []struct {
+			name string
+			ref  string
+		}
+	}
+	rules := []hardInputRule{
+		{
+			slot: "characters",
+			required: []struct {
+				name string
+				ref  string
+			}{{"story_concept", conceptRef}},
+		},
+		{
+			slot: "world",
+			required: []struct {
+				name string
+				ref  string
+			}{{"story_concept", conceptRef}},
+		},
+		{
+			slot: "ending_contract",
+			required: []struct {
+				name string
+				ref  string
+			}{{"story_concept", conceptRef}},
+		},
+		{
+			slot: "foundation",
+			required: []struct {
+				name string
+				ref  string
+			}{
+				{"story_concept", conceptRef},
+				{"characters", charactersRef},
+				{"world", worldRef},
+			},
+		},
+		{
+			slot: "book_plan",
+			required: []struct {
+				name string
+				ref  string
+			}{
+				{"story_concept", conceptRef},
+				{"characters", charactersRef},
+				{"world", worldRef},
+				{"ending_contract", endingRef},
+			},
+		},
+		{
+			slot: "style_profile",
+			required: []struct {
+				name string
+				ref  string
+			}{{"creative_brief", briefRef}},
+		},
+		{
+			slot: "platform_profile",
+			required: []struct {
+				name string
+				ref  string
+			}{{"creative_brief", briefRef}},
+		},
+	}
+	for _, rule := range rules {
+		for _, required := range rule.required {
+			if !containsAllRefs(artifacts[rule.slot].Inputs, required.ref) {
+				return fmt.Errorf("%s inputs must include current %s", rule.slot, required.name)
+			}
+		}
+	}
+
+	if err := validateStoryDecisionsPayload(artifacts["story_decisions"].Payload); err != nil {
+		return fmt.Errorf("story_decisions: %w", err)
+	}
+	if violations := validateWholeBookSkeleton(artifacts["book_plan"].Payload); len(violations) != 0 {
+		return fmt.Errorf("book_plan: %s", strings.Join(violations, "; "))
+	}
+	if err := validateBundleClosure(p, bundle); err != nil {
+		return err
+	}
+
+	foundationArtifacts, err := p.foundationArtifactsFromDesignBundle(bundle)
+	if err != nil {
+		return err
+	}
+	if state == nil {
+		state = newCoreProductionState()
+	}
+	stateCopy := *state
+	_, violations, err := prepareFoundationArtifacts(foundationArtifacts, &stateCopy)
+	if err != nil {
+		return err
+	}
+	if len(violations) != 0 {
+		return fmt.Errorf("foundation preparation failed: %s", strings.Join(violations, "; "))
+	}
+
+	if len(evidence) != 1 || evidence["foundation_readiness_review"] == "" {
+		return fmt.Errorf("foundation_ready evidence must contain exactly foundation_readiness_review")
+	}
+	review, err := p.loadDesignArtifactRef(evidence["foundation_readiness_review"])
+	if err != nil {
+		return fmt.Errorf("foundation_readiness_review: %w", err)
+	}
+	if err := validateReviewArtifact(review, "foundation_readiness_review", bundleRef); err != nil {
+		return fmt.Errorf("foundation_readiness_review: %w", err)
 	}
 	return nil
 }
@@ -341,4 +527,51 @@ func positiveInteger(value any) bool {
 	default:
 		return false
 	}
+}
+
+func validateWholeBookSkeleton(payload any) []string {
+	root, ok := payload.(map[string]any)
+	if !ok {
+		return []string{"book_plan payload must be an object"}
+	}
+	var violations []string
+	if !nonEmptyString(root["direction"]) {
+		violations = append(violations, "book_plan.direction must be a non-empty string")
+	}
+	skeleton, ok := root["whole_book_skeleton"].(map[string]any)
+	if !ok {
+		return append(violations, "book_plan.whole_book_skeleton must be an object")
+	}
+	stages, ok := skeleton["stages"].([]any)
+	if !ok || len(stages) < 2 {
+		violations = append(violations, "book_plan.whole_book_skeleton.stages must contain at least two stages")
+	} else {
+		seen := make(map[string]bool, len(stages))
+		for i, raw := range stages {
+			stage, ok := raw.(map[string]any)
+			if !ok {
+				violations = append(violations, fmt.Sprintf("book_plan.whole_book_skeleton.stages[%d] must be an object", i))
+				continue
+			}
+			id, _ := stage["id"].(string)
+			id = strings.TrimSpace(id)
+			if id == "" {
+				violations = append(violations, fmt.Sprintf("book_plan.whole_book_skeleton.stages[%d].id must be a non-empty string", i))
+			} else if seen[id] {
+				violations = append(violations, fmt.Sprintf("book_plan.whole_book_skeleton stage id %q must be unique", id))
+			} else {
+				seen[id] = true
+			}
+			if !nonEmptyString(stage["objective"]) {
+				violations = append(violations, fmt.Sprintf("book_plan.whole_book_skeleton.stages[%d].objective must be a non-empty string", i))
+			}
+			if !nonEmptyString(stage["transition"]) {
+				violations = append(violations, fmt.Sprintf("book_plan.whole_book_skeleton.stages[%d].transition must be a non-empty string", i))
+			}
+		}
+	}
+	if !nonEmptyString(skeleton["ending_connection"]) {
+		violations = append(violations, "book_plan.whole_book_skeleton.ending_connection must be a non-empty string")
+	}
+	return violations
 }
