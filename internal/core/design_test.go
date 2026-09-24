@@ -418,6 +418,34 @@ func removeRefForTest(items []string, remove string) []string {
 	return out
 }
 
+func TestImportingNewSourceDoesNotMoveStoryLockedHead(t *testing.T) {
+	project, _, _ := newRequiredDesignProjectForTest(t)
+	bundleRef, evidence := validStoryLockInputsForTest(t, project)
+	locked := promoteForTest(
+		t, project, "source-stability-lock", "",
+		domain.DesignCheckpointStoryLocked, bundleRef, evidence,
+	)
+	if locked.Result != "PROMOTED" {
+		t.Fatalf("locked=%+v", locked)
+	}
+
+	_ = importDesignArtifactForTest(
+		t, project, "source_record", nil,
+		map[string]any{
+			"name":        "新资料",
+			"source_type": "web",
+			"locator":     "example",
+			"summary":     "新增但尚未采用的资料",
+			"analysis":    "只作为候选 source",
+		},
+	)
+
+	head := mustDesignHeadForTest(t, project)
+	if head.DesignRoot != locked.NewDesignRoot {
+		t.Fatalf("source import moved head: %+v", head)
+	}
+}
+
 func TestFoundationReadyFreezesFurtherPromote(t *testing.T) {
 	project, _, _, fixture := makeStoryLockedProjectForTest(t)
 	bundleRef, reviewRef := importValidFoundationDesignForTest(

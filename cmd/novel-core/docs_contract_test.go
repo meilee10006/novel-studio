@@ -169,3 +169,49 @@ func TestDocumentationExplainsSelfDescribingWorkspaceRecovery(t *testing.T) {
 		t.Error("release checklist does not record the self-describing workspace file E2E gate")
 	}
 }
+
+func TestREADMEUsesSemanticDesignBeforeFirstReady(t *testing.T) {
+	root := filepath.Clean(filepath.Join("..", ".."))
+	raw, err := os.ReadFile(filepath.Join(root, "README.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(raw)
+	for _, want := range []string{
+		"design_mode=required",
+		"exchange/design/inbox",
+		"story_locked",
+		"foundation_ready",
+		"Core 内部 Foundation settlement",
+		"chapter:1 READY",
+		"不读取、不等待 READY",
+		"meta/core/design/",
+		"CHATGPT_PROTOCOL.md",
+	} {
+		if !strings.Contains(text, want) {
+			t.Errorf("README.md missing semantic-design workflow %q", want)
+		}
+	}
+	if strings.Contains(text, "Core 只有确认普通 UTF-8 JSON/Markdown 读写能力后才会生成正式任务") {
+		t.Error("README.md still says capability immediately creates a production task")
+	}
+}
+
+func TestReleaseChecklistMarksProtocolOneZeroAcceptanceHistorical(t *testing.T) {
+	root := filepath.Clean(filepath.Join("..", ".."))
+	raw, err := os.ReadFile(filepath.Join(root, "docs", "provider-free-release-checklist.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(raw)
+	for _, want := range []string{
+		"protocol 1.0 / core schema 1",
+		"protocol 1.1 / core schema 2",
+		"不得继承旧 PASS",
+		"Real ChatGPT App + Google Drive protocol 1.1 product chain | NOT RUN",
+	} {
+		if !strings.Contains(text, want) {
+			t.Errorf("release checklist missing semantic-design acceptance marker %q", want)
+		}
+	}
+}

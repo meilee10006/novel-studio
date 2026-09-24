@@ -6,11 +6,14 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/chenhongyang/novel-studio/internal/core"
+	"github.com/chenhongyang/novel-studio/internal/domain"
+	"github.com/chenhongyang/novel-studio/internal/protocol"
 )
 
 type protocolChainReady struct {
@@ -35,6 +38,438 @@ type protocolChainStatus struct {
 	ActiveAttemptID string `json:"active_attempt_id"`
 	BlockID         string `json:"block_id"`
 	RevisionReplay  bool   `json:"revision_replay"`
+}
+
+func TestSemanticDesignProtocolChainCreatesFirstCanonWithoutFoundationTaskReady(t *testing.T) {
+	local := t.TempDir()
+	workspace := t.TempDir()
+	project, err := core.InitProject(core.InitOptions{
+		ProjectID:     "semantic-e2e",
+		LocalRoot:     local,
+		WorkspaceRoot: workspace,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeProtocolCapabilityAck(t, workspace)
+
+	if err := project.Reconcile(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(workspace, "exchange", "READY.json")); !os.IsNotExist(err) {
+		t.Fatalf("READY exists before Canon: %v", err)
+	}
+
+	briefRef := driveImportArtifactForProtocolChain(
+		t, project, workspace, "e2e-brief", "creative_brief",
+		nil, protocolCreativeBriefPayload(),
+	)
+	decisionsRef := driveImportArtifactForProtocolChain(
+		t, project, workspace, "e2e-decisions", "story_decisions",
+		nil, protocolStoryDecisionsPayload(),
+	)
+	conceptRef := driveImportArtifactForProtocolChain(
+		t, project, workspace, "e2e-concept", "story_concept",
+		[]string{briefRef, decisionsRef},
+		protocolStoryConceptPayload(),
+	)
+	storyBundle := driveImportBundleForProtocolChain(
+		t, project, workspace, "e2e-story-bundle",
+		map[string]string{
+			"creative_brief":  briefRef,
+			"story_decisions": decisionsRef,
+			"story_concept":   conceptRef,
+		},
+	)
+	storyReview := driveImportArtifactForProtocolChain(
+		t, project, workspace, "e2e-story-review", "story_review", nil,
+		map[string]any{
+			"review_type":               "story_review",
+			"subject_ref":               conceptRef,
+			"policy_version":            1,
+			"verdict":                   "PASS",
+			"findings":                  []any{},
+			"created_from_context_refs": []any{briefRef, decisionsRef},
+		},
+	)
+	authorConfirmation := driveImportArtifactForProtocolChain(
+		t, project, workspace, "e2e-author-confirm", "author_confirmation", nil,
+		map[string]any{
+			"subject_ref": conceptRef,
+			"decision":    "APPROVED",
+		},
+	)
+	storyLocked := drivePromoteForProtocolChain(
+		t, project, workspace, "e2e-story-promote", "",
+		domain.DesignCheckpointStoryLocked,
+		storyBundle,
+		map[string]string{
+			"story_review":        storyReview,
+			"author_confirmation": authorConfirmation,
+		},
+	)
+	if storyLocked.Result != "PROMOTED" {
+		t.Fatalf("story locked=%+v", storyLocked)
+	}
+	if _, err := os.Stat(filepath.Join(workspace, "exchange", "READY.json")); !os.IsNotExist(err) {
+		t.Fatalf("READY exists at story_locked before Canon: %v", err)
+	}
+
+	charactersRef := driveImportArtifactForProtocolChain(
+		t, project, workspace, "e2e-characters", "characters",
+		[]string{conceptRef}, protocolFoundationPayload("characters.json"),
+	)
+	worldRef := driveImportArtifactForProtocolChain(
+		t, project, workspace, "e2e-world", "world",
+		[]string{conceptRef}, protocolFoundationPayload("world.json"),
+	)
+	endingRef := driveImportArtifactForProtocolChain(
+		t, project, workspace, "e2e-ending", "ending_contract",
+		[]string{conceptRef}, protocolFoundationPayload("ending_contract.json"),
+	)
+	foundationRef := driveImportArtifactForProtocolChain(
+		t, project, workspace, "e2e-foundation", "foundation",
+		[]string{conceptRef, charactersRef, worldRef},
+		protocolFoundationPayload("foundation.json"),
+	)
+	bookPlanRef := driveImportArtifactForProtocolChain(
+		t, project, workspace, "e2e-book-plan", "book_plan",
+		[]string{conceptRef, charactersRef, worldRef, endingRef},
+		protocolFoundationPayload("book_plan.json"),
+	)
+	styleRef := driveImportArtifactForProtocolChain(
+		t, project, workspace, "e2e-style", "style_profile",
+		[]string{briefRef}, protocolFoundationPayload("style_profile.json"),
+	)
+	platformRef := driveImportArtifactForProtocolChain(
+		t, project, workspace, "e2e-platform", "platform_profile",
+		[]string{briefRef}, protocolFoundationPayload("platform_profile.json"),
+	)
+
+	foundationBundle := driveImportBundleForProtocolChain(
+		t, project, workspace, "e2e-foundation-bundle",
+		map[string]string{
+			"creative_brief":   briefRef,
+			"story_decisions":  decisionsRef,
+			"story_concept":    conceptRef,
+			"foundation":       foundationRef,
+			"characters":       charactersRef,
+			"world":            worldRef,
+			"book_plan":        bookPlanRef,
+			"ending_contract":  endingRef,
+			"style_profile":    styleRef,
+			"platform_profile": platformRef,
+		},
+	)
+	readinessReview := driveImportArtifactForProtocolChain(
+		t, project, workspace, "e2e-readiness-review",
+		"foundation_readiness_review", nil,
+		map[string]any{
+			"review_type":    "foundation_readiness_review",
+			"subject_ref":    foundationBundle,
+			"policy_version": 1,
+			"verdict":        "PASS",
+			"findings":       []any{},
+			"created_from_context_refs": []any{
+				conceptRef,
+				foundationBundle,
+			},
+		},
+	)
+	readyResult := drivePromoteForProtocolChain(
+		t, project, workspace, "e2e-foundation-promote",
+		storyLocked.NewDesignRoot,
+		domain.DesignCheckpointFoundationReady,
+		foundationBundle,
+		map[string]string{
+			"foundation_readiness_review": readinessReview,
+		},
+	)
+	if readyResult.Result != "PROMOTED" {
+		t.Fatalf("foundation ready=%+v", readyResult)
+	}
+	if _, err := os.Stat(filepath.Join(workspace, "exchange", "READY.json")); !os.IsNotExist(err) {
+		t.Fatalf("Foundation READY was published before internal settlement: %v", err)
+	}
+
+	if err := project.Reconcile(); err != nil {
+		t.Fatal(err)
+	}
+
+	ready := waitProtocolReady(t, workspace, func(r protocolChainReady) bool {
+		return r.TaskKind == "chapter" && r.Target == "chapter:1"
+	})
+	status, err := project.Status()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status.CanonRoot == "" ||
+		status.FoundationDesignRoot != readyResult.NewDesignRoot ||
+		status.DesignHead != readyResult.NewDesignRoot ||
+		status.DesignCheckpoint != domain.DesignCheckpointFoundationReady {
+		t.Fatalf("status=%+v", status)
+	}
+	if ready.BaseCanonRoot != status.CanonRoot {
+		t.Fatalf("READY=%+v status=%+v", ready, status)
+	}
+	verification, err := project.Verify()
+	if err != nil || !verification.OK {
+		t.Fatalf("verification=%+v err=%v", verification, err)
+	}
+}
+
+func writeProtocolDesignSubmission(
+	t *testing.T,
+	p *core.Project,
+	workspace string,
+	submissionID string,
+	operation string,
+	files map[string]any,
+) {
+	t.Helper()
+	status, err := p.Status()
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(workspace, "exchange", "design", "inbox", submissionID)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	names := make([]string, 0, len(files))
+	for name, value := range files {
+		names = append(names, name)
+		writeProtocolJSON(t, filepath.Join(dir, name), value)
+	}
+	sort.Strings(names)
+	writeProtocolJSON(t, filepath.Join(dir, "manifest.json"), protocol.DesignManifest{
+		SchemaVersion:   protocol.MachineSchemaVersion,
+		ProjectID:       status.ProjectID,
+		SubmissionID:    submissionID,
+		ProtocolVersion: protocol.CurrentVersion,
+		Operation:       operation,
+		Files:           names,
+	})
+}
+
+func settleProtocolDesignSubmission(
+	t *testing.T,
+	p *core.Project,
+	submissionID string,
+) domain.CoreDesignSubmissionResult {
+	t.Helper()
+	record, err := p.ScanDesignSubmission(submissionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if record.State != "PENDING" && record.State != "READY_TO_VALIDATE" {
+		t.Fatalf("first design scan=%+v", record)
+	}
+	if record.State != "READY_TO_VALIDATE" {
+		time.Sleep(300 * time.Millisecond)
+		record, err = p.ScanDesignSubmission(submissionID)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	if record.State != "READY_TO_VALIDATE" {
+		t.Fatalf("design record=%+v", record)
+	}
+	result, err := p.ProcessDesignSubmission(submissionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return result
+}
+
+func driveImportArtifactForProtocolChain(
+	t *testing.T,
+	p *core.Project,
+	workspace, submissionID, artifactType string,
+	inputs []string,
+	payload any,
+) string {
+	t.Helper()
+	if inputs == nil {
+		inputs = []string{}
+	}
+	writeProtocolDesignSubmission(
+		t, p, workspace, submissionID, "import",
+		map[string]any{
+			"artifact.json": map[string]any{
+				"kind": "artifact",
+				"artifact": map[string]any{
+					"schema_version": 1,
+					"artifact_type":  artifactType,
+					"inputs":         inputs,
+					"sources":        []string{},
+					"payload":        payload,
+				},
+			},
+		},
+	)
+	result := settleProtocolDesignSubmission(t, p, submissionID)
+	if result.Result != "IMPORTED" {
+		t.Fatalf("design artifact import=%+v", result)
+	}
+	ref := result.Refs["artifact.json"]
+	if ref == "" {
+		t.Fatalf("design artifact import returned no ref: %+v", result)
+	}
+	return ref
+}
+
+func driveImportBundleForProtocolChain(
+	t *testing.T,
+	p *core.Project,
+	workspace, submissionID string,
+	selections map[string]string,
+) string {
+	t.Helper()
+	writeProtocolDesignSubmission(
+		t, p, workspace, submissionID, "import",
+		map[string]any{
+			"bundle.json": map[string]any{
+				"kind": "bundle",
+				"bundle": map[string]any{
+					"schema_version": 1,
+					"selections":     selections,
+				},
+			},
+		},
+	)
+	result := settleProtocolDesignSubmission(t, p, submissionID)
+	if result.Result != "IMPORTED" {
+		t.Fatalf("design bundle import=%+v", result)
+	}
+	ref := result.Refs["bundle.json"]
+	if ref == "" {
+		t.Fatalf("design bundle import returned no ref: %+v", result)
+	}
+	return ref
+}
+
+func drivePromoteForProtocolChain(
+	t *testing.T,
+	p *core.Project,
+	workspace, submissionID, expectedRoot, checkpoint, bundleRef string,
+	evidence map[string]string,
+) domain.CoreDesignSubmissionResult {
+	t.Helper()
+	status, err := p.Status()
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeProtocolDesignSubmission(
+		t, p, workspace, submissionID, "promote",
+		map[string]any{
+			"promote.json": protocol.DesignPromoteRequest{
+				SchemaVersion:      protocol.MachineSchemaVersion,
+				ProjectID:          status.ProjectID,
+				SubmissionID:       submissionID,
+				ProtocolVersion:    protocol.CurrentVersion,
+				ExpectedDesignRoot: expectedRoot,
+				Checkpoint:         checkpoint,
+				BundleRef:          bundleRef,
+				Evidence:           evidence,
+			},
+		},
+	)
+	return settleProtocolDesignSubmission(t, p, submissionID)
+}
+
+func protocolCreativeBriefPayload() map[string]any {
+	return map[string]any{
+		"purpose":              "验证长篇语义设计链",
+		"target_genre":         "都市男频",
+		"platform_constraints": []any{},
+		"preferences":          []any{"故事主线优先"},
+		"exclusions":           []any{"不把金手指当故事本身"},
+		"author_principles":    []any{"先定故事再定手段"},
+	}
+}
+
+func protocolStoryDecisionsPayload() map[string]any {
+	return map[string]any{
+		"decisions": []any{
+			map[string]any{
+				"id":        "story-decision-001",
+				"status":    "locked",
+				"statement": "故事主线优先于爽点机制",
+				"blocking":  true,
+			},
+		},
+	}
+}
+
+func protocolStoryConceptPayload() map[string]any {
+	return map[string]any{
+		"story":            "主角为解决迫近的个人危机被迫进入新的竞争环境，并逐步改变自己与核心关系。",
+		"protagonist_goal": "解决眼前危机并获得持续生存空间",
+		"central_conflict": "个人目标与竞争环境的规则持续冲突",
+		"story_engine":     "每次推进目标都会制造新的选择、代价和关系变化",
+		"change_path":      "主角从被动求生变成能主动选择并承担后果",
+		"ending_direction": "核心危机和长期关系获得明确收束",
+	}
+}
+
+func protocolFoundationPayload(name string) any {
+	switch name {
+	case "foundation.json":
+		return map[string]any{
+			"title": "语义设计 E2E",
+			"protagonist": map[string]any{
+				"entity_type": "character",
+				"local_ref":   "same",
+			},
+			"opening_location": map[string]any{
+				"entity_type": "location",
+				"local_ref":   "same",
+			},
+		}
+	case "characters.json":
+		return map[string]any{
+			"characters": []any{
+				map[string]any{"local_id": "same", "name": "主角"},
+			},
+		}
+	case "world.json":
+		return map[string]any{
+			"entities": []any{
+				map[string]any{
+					"entity_type": "location",
+					"local_id":    "same",
+					"name":        "起点",
+				},
+			},
+		}
+	case "book_plan.json":
+		return map[string]any{
+			"direction": "完成主线",
+			"whole_book_skeleton": map[string]any{
+				"stages": []any{
+					map[string]any{
+						"id":         "stage-1",
+						"objective":  "建立核心冲突与主角目标",
+						"transition": "主角主动进入下一阶段",
+					},
+					map[string]any{
+						"id":         "stage-2",
+						"objective":  "升级冲突并完成主线收束",
+						"transition": "核心冲突进入最终解决",
+					},
+				},
+				"ending_connection": "第二阶段直接连接既定结局收束",
+			},
+		}
+	case "ending_contract.json":
+		return map[string]any{"main_resolution": "主线得到明确收束"}
+	case "style_profile.json":
+		return map[string]any{"language": "zh-CN"}
+	case "platform_profile.json":
+		return map[string]any{"platform": "fanqie"}
+	default:
+		panic("unknown foundation payload: " + name)
+	}
 }
 
 func TestPublicFileProtocolFullChain(t *testing.T) {

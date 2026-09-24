@@ -36,6 +36,8 @@ func TestNovelCoreDependencyGraphExcludesAIRuntime(t *testing.T) {
 		"github.com/voocel/agentcore",
 		"github.com/chenhongyang/novel-studio/internal/agents",
 		"github.com/chenhongyang/novel-studio/internal/llmcodex",
+		"github.com/chenhongyang/novel-studio/internal/models",
+		"github.com/chenhongyang/novel-studio/internal/rag",
 	} {
 		if strings.Contains(deps, forbidden) {
 			t.Fatalf("forbidden dependency %q in novel-core graph", forbidden)
@@ -58,8 +60,20 @@ func TestInitNeedsNoModelCredentialsAndCreatesCapabilityChallenge(t *testing.T) 
 	if _, err := os.Stat(filepath.Join(workspace, "setup", "capability-challenge.json")); err != nil {
 		t.Fatalf("capability challenge missing: %v", err)
 	}
+	if !strings.Contains(stdout.String(), "\"design_mode\":\"required\"") {
+		t.Fatalf("fresh init status must expose required design mode: %s", stdout.String())
+	}
 	if _, err := os.Stat(filepath.Join(workspace, "exchange", "READY.json")); !os.IsNotExist(err) {
 		t.Fatalf("READY must not exist before ack: %v", err)
+	}
+	for _, rel := range []string{
+		filepath.Join("exchange", "design", "inbox"),
+		filepath.Join("exchange", "design", "result"),
+	} {
+		info, err := os.Stat(filepath.Join(workspace, rel))
+		if err != nil || !info.IsDir() {
+			t.Fatalf("fresh init missing design directory %s: info=%v err=%v", rel, info, err)
+		}
 	}
 }
 

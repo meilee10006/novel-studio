@@ -1,6 +1,22 @@
 # Provider-Free Release Checklist
 
+> 本清单中的既有 PASS 记录属于 protocol 1.0 / core schema 1 的
+> 2026-09-16 产品验收。protocol 1.1 / core schema 2 的语义设计链
+> 必须完成新的真实 ChatGPT App + Google Drive 验收后，才能宣称
+> 新流程通过产品验收；不得继承旧 PASS。
+
 This file records final release acceptance status only. It is not a design log or review history.
+
+## Protocol 1.1 / core schema 2 semantic-design acceptance
+
+Automated E2E may validate Core mechanics, but it does not replace the real ordinary ChatGPT App + Google Drive product boundary.
+
+| Check | Status |
+| --- | --- |
+| Fresh required semantic-design automated E2E | PASS |
+| Real ChatGPT App + Google Drive protocol 1.1 product chain | NOT RUN |
+| New-session recovery from protocol 1.1 project files | NOT RUN |
+| protocol 1.1 verify + backup/restore product acceptance | NOT RUN |
 
 ## Automated acceptance
 

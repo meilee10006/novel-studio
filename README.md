@@ -67,7 +67,24 @@ novel-core init \
 - `setup/capability-ack.json`
 - `setup/capability-write-test.md`
 
-Core 只有确认普通 UTF-8 JSON/Markdown 读写能力后才会生成正式任务。
+Core 只有确认普通 UTF-8 JSON/Markdown 读写能力后才会接受后续交换。
+
+fresh protocol 1.1 / core schema 2 项目默认 `design_mode=required`。**第一份 Canon 建立前不会生成 `exchange/READY.json`**；此阶段不要等待 READY，而是按 `CHATGPT_PROTOCOL.md` 使用 `exchange/design/inbox/<submission-id>/` 与 `exchange/design/result/`：
+
+```text
+init
+→ capability ack
+→ creative_brief / story_decisions / story_concept
+→ story_review + author_confirmation
+→ story_locked
+→ 七个建书设计文件 + 完整十槽 bundle
+→ foundation_readiness_review
+→ foundation_ready
+→ Core 内部 Foundation settlement
+→ chapter:1 READY
+```
+
+`story_locked` 与 `foundation_ready` 都是本地内容寻址 Design authority 的检查点。候选资料或新 source 的导入不会自动移动已锁定的 Design Head；到达 `foundation_ready` 后，建书设计基线冻结。
 
 ### 4. 启动 Core
 
@@ -83,9 +100,17 @@ novel-core serve --project "$HOME/novels/book-local"
 novel-core status --project "$HOME/novels/book-local"
 ```
 
-### 5. 在 ChatGPT App 中逐任务创作
+### 5. 在 ChatGPT App 中继续 Design 或逐任务创作
 
-以 Drive 中的 `exchange/READY.json` 为唯一当前任务指针；`exchange/STATUS.json` 提供当前权威 `canon_root`、capability、活动 task/attempt/block，以及 `export_ready` / `export_problems`。临近结局时以 `export_problems` 检查全量确定性阻塞项；`export_ready=true` 只表示导出前置条件满足，真正 `export` 仍会重新验证 Canon 完整性。Drive 多文件同步不是原子操作：只有当 `STATUS.active_attempt_id == READY.attempt_id`、`STATUS.active_target == READY.target` 且 `STATUS.block_id == READY.block_id`（未阻塞时两边为空）时才继续；不一致就等待同步后重读。读取对应 `exchange/outbox/<task>/<attempt>/` 的任务、约束和上下文，然后把完整提交写到：
+先读 `project.json`、生成的 `CHATGPT_PROTOCOL.md` 和 `exchange/STATUS.json`。`CHATGPT_PROTOCOL.md` 是操作协议唯一正文来源；不要从 README 或旧聊天推断 machine protocol。
+
+- `design_mode=required` 且还没有 Canon：依据 `STATUS.design_head` / `STATUS.design_checkpoint` 和 `exchange/design/**` 继续 Design，**不读取、不等待 READY**。
+- 已建立 Canon 且 STATUS 有 active production attempt：以 `exchange/READY.json` 为当前 production task 指针，并读取对应 `exchange/outbox/<task>/<attempt>/`。
+- `design_mode=legacy`：保持兼容旧流程，capability 通过后仍由外部 ChatGPT 提交 Foundation READY/Inbox，再进入 Chapter 链。
+
+`exchange/STATUS.json` 投影当前权威 `design_mode`、`design_head`、`design_checkpoint`、`foundation_design_root`、`canon_root`、capability、活动 task/attempt/block，以及 `export_ready` / `export_problems`。临近结局时以 `export_problems` 检查全量确定性阻塞项；`export_ready=true` 只表示导出前置条件满足，真正 `export` 仍会重新验证 Canon 完整性。
+
+Drive 多文件同步不是原子操作：production 阶段只有当 `STATUS.active_attempt_id == READY.attempt_id`、`STATUS.active_target == READY.target` 且 `STATUS.block_id == READY.block_id`（未阻塞时两边为空）时才继续；不一致就等待同步后重读。把完整 production 提交写到：
 
 ```text
 exchange/inbox/<task-id>/<attempt-id>/
@@ -97,7 +122,9 @@ exchange/inbox/<task-id>/<attempt-id>/
 - `REWRITE`：同一 task 创建新 attempt，按结构化反馈修改；
 - `BLOCKED`：等待作者通过 control channel 裁决。
 
-文学质量、情绪强度、节奏和文风由作者与 ChatGPT 负责；Core 不用“AI 味评分”替代创作判断。
+文学质量、情绪强度、节奏、文风，以及 story/review 中的主观判断由作者与 ChatGPT 负责；Core 只验证内容寻址、引用、结构、证据绑定与事务条件，不声称能够机械判断“故事好不好”。
+
+Design Store 的本地权威位于 `meta/core/design/`。Google Drive 的 `exchange/design/**` 只是交换层；Drive 文件不会自动成为 Design authority，只有经 Core 导入、内容寻址和 promote 后才进入正式 Design 历史。
 
 ## 作者指令与历史修订
 
