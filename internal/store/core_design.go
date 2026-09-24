@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 
 	"github.com/chenhongyang/novel-studio/internal/domain"
 )
@@ -235,4 +237,93 @@ func (s *CoreStore) LoadCoreDesignReceipt(submissionID string) (*domain.CoreDesi
 		return nil, err
 	}
 	return &receipt, nil
+}
+
+type CoreDesignCommitEntry struct {
+	Root   string
+	Commit domain.CoreDesignCommit
+}
+
+func (s *CoreStore) ListCoreDesignArtifactDigests() ([]string, error) {
+	return s.listCoreDesignJSONNames(filepath.Join("meta", "core", "design", "objects"))
+}
+
+func (s *CoreStore) ListCoreDesignBundleDigests() ([]string, error) {
+	return s.listCoreDesignJSONNames(filepath.Join("meta", "core", "design", "bundles"))
+}
+
+func (s *CoreStore) ListCoreDesignCommits() ([]CoreDesignCommitEntry, error) {
+	roots, err := s.listCoreDesignJSONNames(filepath.Join("meta", "core", "design", "commits"))
+	if err != nil {
+		return nil, err
+	}
+	out := make([]CoreDesignCommitEntry, 0, len(roots))
+	for _, root := range roots {
+		var commit domain.CoreDesignCommit
+		if err := s.io.ReadJSON(coreDesignCommitPath(root), &commit); err != nil {
+			return nil, fmt.Errorf("read design commit %s: %w", root, err)
+		}
+		out = append(out, CoreDesignCommitEntry{Root: root, Commit: commit})
+	}
+	return out, nil
+}
+
+func (s *CoreStore) ListCoreDesignReceipts() ([]domain.CoreDesignReceipt, error) {
+	dirRel := filepath.Join("meta", "core", "design", "receipts")
+	names, err := s.listCoreDesignJSONNames(dirRel)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]domain.CoreDesignReceipt, 0, len(names))
+	for _, name := range names {
+		var receipt domain.CoreDesignReceipt
+		if err := s.io.ReadJSON(filepath.Join(dirRel, name+".json"), &receipt); err != nil {
+			return nil, fmt.Errorf("read design receipt %s: %w", name, err)
+		}
+		if receipt.SubmissionID != name {
+			return nil, fmt.Errorf(
+				"design receipt filename %q does not match submission_id %q",
+				name, receipt.SubmissionID,
+			)
+		}
+		out = append(out, receipt)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].SubmissionID < out[j].SubmissionID
+	})
+	return out, nil
+}
+
+func (s *CoreStore) listCoreDesignJSONNames(dirRel string) ([]string, error) {
+	dir := s.io.path(dirRel)
+	entries, err := os.ReadDir(dir)
+	if os.IsNotExist(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	out := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		if entry.Type()&os.ModeSymlink != 0 {
+			return nil, fmt.Errorf("design store contains symlink: %s", filepath.Join(dirRel, entry.Name()))
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return nil, err
+		}
+		if !info.Mode().IsRegular() {
+			return nil, fmt.Errorf("design store contains non-regular entry: %s", filepath.Join(dirRel, entry.Name()))
+		}
+		if filepath.Ext(entry.Name()) != ".json" {
+			continue
+		}
+		name := strings.TrimSuffix(entry.Name(), ".json")
+		if name == "" {
+			return nil, fmt.Errorf("design store contains invalid json filename: %s", filepath.Join(dirRel, entry.Name()))
+		}
+		out = append(out, name)
+	}
+	sort.Strings(out)
+	return out, nil
 }

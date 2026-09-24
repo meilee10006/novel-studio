@@ -257,7 +257,326 @@ func (p *Project) Verify() (Verification, error) {
 		}
 		problems = append(problems, p.verifyReceiptChain(head)...)
 	}
+	projectState, err := p.store.LoadCoreProjectState()
+	if err != nil {
+		problems = append(problems, "project state: "+err.Error())
+	} else if projectState != nil {
+		problems = append(problems, p.verifyDesignStore(projectState)...)
+	}
+	sort.Strings(problems)
 	return Verification{Root: p.root, OK: len(problems) == 0, Problems: problems}, nil
+}
+
+func (p *Project) verifyDesignStore(project *domain.CoreProjectState) []string {
+	if project == nil {
+		return []string{"design store project state is missing"}
+	}
+	var problems []string
+
+	artifactDigests, err := p.store.ListCoreDesignArtifactDigests()
+	if err != nil {
+		problems = append(problems, "design artifacts: "+err.Error())
+		artifactDigests = nil
+	}
+	artifacts := make(map[string]domain.CoreDesignArtifact, len(artifactDigests))
+	for _, fileDigest := range artifactDigests {
+		raw, err := p.store.ReadCoreDesignArtifact(fileDigest)
+		if err != nil {
+			problems = append(problems, fmt.Sprintf("design artifact %s: %v", fileDigest, err))
+			continue
+		}
+		artifact, _, ref, err := canonicalDesignArtifact(raw)
+		if err != nil {
+			problems = append(problems, fmt.Sprintf("design artifact %s: %v", fileDigest, err))
+			continue
+		}
+		artifactType, digest, err := parseDesignArtifactRef(ref)
+		if err != nil {
+			problems = append(problems, fmt.Sprintf("design artifact %s ref: %v", fileDigest, err))
+			continue
+		}
+		if digest != fileDigest {
+			problems = append(problems, fmt.Sprintf(
+				"design artifact digest mismatch: file %s, recomputed %s",
+				fileDigest, digest,
+			))
+		}
+		if artifactType != artifact.ArtifactType {
+			problems = append(problems, fmt.Sprintf(
+				"design artifact type mismatch: ref %s, object %s",
+				artifactType, artifact.ArtifactType,
+			))
+		}
+		artifacts[ref] = artifact
+	}
+
+	bundleDigests, err := p.store.ListCoreDesignBundleDigests()
+	if err != nil {
+		problems = append(problems, "design bundles: "+err.Error())
+		bundleDigests = nil
+	}
+	bundles := make(map[string]domain.CoreDesignBundle, len(bundleDigests))
+	for _, fileDigest := range bundleDigests {
+		raw, err := p.store.ReadCoreDesignBundle(fileDigest)
+		if err != nil {
+			problems = append(problems, fmt.Sprintf("design bundle %s: %v", fileDigest, err))
+			continue
+		}
+		bundle, _, ref, err := canonicalDesignBundle(raw)
+		if err != nil {
+			problems = append(problems, fmt.Sprintf("design bundle %s: %v", fileDigest, err))
+			continue
+		}
+		digest, err := parseDesignBundleRef(ref)
+		if err != nil {
+			problems = append(problems, fmt.Sprintf("design bundle %s ref: %v", fileDigest, err))
+			continue
+		}
+		if digest != fileDigest {
+			problems = append(problems, fmt.Sprintf(
+				"design bundle digest mismatch: file %s, recomputed %s",
+				fileDigest, digest,
+			))
+		}
+		bundles[ref] = bundle
+	}
+
+	entries, err := p.store.ListCoreDesignCommits()
+	if err != nil {
+		problems = append(problems, "design commits: "+err.Error())
+		entries = nil
+	}
+	commits := make(map[string]domain.CoreDesignCommit, len(entries))
+	for _, entry := range entries {
+		commits[entry.Root] = entry.Commit
+	}
+
+	head, err := p.store.LoadCoreDesignHead()
+	if err != nil {
+		problems = append(problems, "design head: "+err.Error())
+		head = nil
+	}
+
+	coreReceipts, err := p.store.ListCoreReceipts()
+	if err != nil {
+		problems = append(problems, "foundation receipts: "+err.Error())
+		coreReceipts = nil
+	}
+
+	required := project.DesignMode == domain.DesignModeRequired
+	if !required {
+		if head != nil || len(entries) != 0 {
+			problems = append(problems, "legacy project unexpectedly contains authoritative design history")
+		}
+		for _, receipt := range coreReceipts {
+			if receipt.FoundationDesignRoot != "" {
+				problems = append(problems, fmt.Sprintf(
+					"legacy foundation receipt %s unexpectedly contains foundation design root %s",
+					receipt.AttemptID, receipt.FoundationDesignRoot,
+				))
+			}
+		}
+		sort.Strings(problems)
+		return problems
+	}
+
+	for ref, artifact := range artifacts {
+		for _, relation := range []struct {
+			name string
+			refs []string
+		}{
+			{name: "input", refs: artifact.Inputs},
+			{name: "source", refs: artifact.Sources},
+		} {
+			for _, dependency := range relation.refs {
+				if _, ok := artifacts[dependency]; !ok {
+					problems = append(problems, fmt.Sprintf(
+						"design artifact %s %s ref does not exist: %s",
+						ref, relation.name, dependency,
+					))
+				}
+			}
+		}
+		if artifact.Supersedes != "" {
+			previous, ok := artifacts[artifact.Supersedes]
+			if !ok {
+				problems = append(problems, fmt.Sprintf(
+					"design artifact %s supersedes ref does not exist: %s",
+					ref, artifact.Supersedes,
+				))
+			} else if previous.ArtifactType != artifact.ArtifactType {
+				problems = append(problems, fmt.Sprintf(
+					"design artifact %s supersedes type mismatch: %s vs %s",
+					ref, artifact.ArtifactType, previous.ArtifactType,
+				))
+			}
+		}
+	}
+
+	for ref, bundle := range bundles {
+		for slot, selectedRef := range bundle.Selections {
+			artifact, ok := artifacts[selectedRef]
+			if !ok {
+				problems = append(problems, fmt.Sprintf(
+					"design bundle %s selection %s does not exist: %s",
+					ref, slot, selectedRef,
+				))
+				continue
+			}
+			if artifact.ArtifactType != slot {
+				problems = append(problems, fmt.Sprintf(
+					"design bundle %s slot %s selects artifact type %s",
+					ref, slot, artifact.ArtifactType,
+				))
+			}
+		}
+		if err := validateBundleClosure(p, bundle); err != nil {
+			problems = append(problems, fmt.Sprintf("design bundle %s closure: %v", ref, err))
+		}
+	}
+
+	for _, entry := range entries {
+		recomputed, err := computeDesignRoot(entry.Commit)
+		if err != nil {
+			problems = append(problems, fmt.Sprintf("design commit %s: %v", entry.Root, err))
+		} else if recomputed != entry.Root {
+			problems = append(problems, fmt.Sprintf(
+				"design commit root mismatch: file %s, recomputed %s",
+				entry.Root, recomputed,
+			))
+		}
+		if entry.Commit.Checkpoint != domain.DesignCheckpointStoryLocked &&
+			entry.Commit.Checkpoint != domain.DesignCheckpointFoundationReady {
+			problems = append(problems, fmt.Sprintf(
+				"design commit %s has invalid checkpoint %q",
+				entry.Root, entry.Commit.Checkpoint,
+			))
+		}
+		if _, ok := bundles[entry.Commit.BundleRef]; !ok {
+			problems = append(problems, fmt.Sprintf(
+				"design commit %s bundle ref does not exist: %s",
+				entry.Root, entry.Commit.BundleRef,
+			))
+		}
+		for name, evidenceRef := range entry.Commit.Evidence {
+			if _, ok := artifacts[evidenceRef]; !ok {
+				problems = append(problems, fmt.Sprintf(
+					"design commit %s evidence %s does not exist: %s",
+					entry.Root, name, evidenceRef,
+				))
+			}
+		}
+		if entry.Commit.ParentDesignRoot != "" {
+			if _, ok := commits[entry.Commit.ParentDesignRoot]; !ok {
+				problems = append(problems, fmt.Sprintf(
+					"design commit %s parent does not exist: %s",
+					entry.Root, entry.Commit.ParentDesignRoot,
+				))
+			}
+		}
+	}
+
+	canonHead, err := p.store.LoadCoreCanonHead()
+	if err != nil {
+		problems = append(problems, "design/canon head: "+err.Error())
+	}
+	canonExists := canonHead != nil
+	if head == nil {
+		if canonExists {
+			problems = append(problems, "design head is missing while canon exists")
+		}
+	} else {
+		commit, ok := commits[head.DesignRoot]
+		if !ok {
+			problems = append(problems, fmt.Sprintf(
+				"design head points to missing commit: %s",
+				head.DesignRoot,
+			))
+		} else if head.Checkpoint != commit.Checkpoint {
+			problems = append(problems, fmt.Sprintf(
+				"design head checkpoint mismatch: head %s, commit %s",
+				head.Checkpoint, commit.Checkpoint,
+			))
+		}
+	}
+
+	reachable := map[string]bool{}
+	if head != nil {
+		current := head.DesignRoot
+		for current != "" {
+			if reachable[current] {
+				problems = append(problems, "design commit history contains a cycle at "+current)
+				break
+			}
+			reachable[current] = true
+			commit, ok := commits[current]
+			if !ok {
+				problems = append(problems, "design commit history is broken at "+current)
+				break
+			}
+			current = commit.ParentDesignRoot
+		}
+	}
+	for _, entry := range entries {
+		if !reachable[entry.Root] {
+			problems = append(problems, "design commit is outside authoritative history: "+entry.Root)
+		}
+	}
+
+	designReceipts, err := p.store.ListCoreDesignReceipts()
+	if err != nil {
+		problems = append(problems, "design receipts: "+err.Error())
+	} else {
+		for _, receipt := range designReceipts {
+			if receipt.Result != "PROMOTED" {
+				continue
+			}
+			commit, ok := commits[receipt.NewDesignRoot]
+			if !ok {
+				problems = append(problems, fmt.Sprintf(
+					"design receipt %s new root does not exist: %s",
+					receipt.SubmissionID, receipt.NewDesignRoot,
+				))
+				continue
+			}
+			if receipt.PreviousDesignRoot != commit.ParentDesignRoot {
+				problems = append(problems, fmt.Sprintf(
+					"design receipt %s previous root mismatch: receipt %s, commit %s",
+					receipt.SubmissionID, receipt.PreviousDesignRoot, commit.ParentDesignRoot,
+				))
+			}
+		}
+	}
+
+	if canonExists {
+		if head == nil || head.Checkpoint != domain.DesignCheckpointFoundationReady {
+			problems = append(problems, "required canon exists without foundation_ready design head")
+		}
+		var accepted []domain.CoreReceipt
+		for _, receipt := range coreReceipts {
+			if receipt.Result == "ACCEPTED" && receipt.FoundationDesignRoot != "" {
+				accepted = append(accepted, receipt)
+			}
+		}
+		if len(accepted) != 1 {
+			problems = append(problems, fmt.Sprintf(
+				"required canon has %d accepted foundation receipts with foundation design root",
+				len(accepted),
+			))
+		} else if head == nil || accepted[0].FoundationDesignRoot != head.DesignRoot {
+			headRoot := ""
+			if head != nil {
+				headRoot = head.DesignRoot
+			}
+			problems = append(problems, fmt.Sprintf(
+				"foundation design root mismatch: receipt %s, design head %s",
+				accepted[0].FoundationDesignRoot, headRoot,
+			))
+		}
+	}
+
+	sort.Strings(problems)
+	return problems
 }
 
 func (p *Project) verifyReceiptChain(head *domain.CoreCanonHead) []string {

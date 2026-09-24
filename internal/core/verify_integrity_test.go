@@ -127,3 +127,226 @@ func TestVerifyRefusesConcurrentProjectWriter(t *testing.T) {
 		t.Fatalf("Verify err=%v, want ErrProjectLocked", err)
 	}
 }
+
+func TestVerifyDetectsDesignArtifactTamper(t *testing.T) {
+	project, local, _, _ := acceptedRequiredDesignProjectForTest(t)
+	ref := currentStoryConceptRefForTest(t, project)
+	_, digest, err := parseDesignArtifactRef(ref)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(local, "meta", "core", "design", "objects", digest+".json")
+	if err := os.WriteFile(path, []byte(`{"tampered":true}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	verification, err := project.Verify()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if verification.OK || !containsProblem(verification.Problems, "design artifact") {
+		t.Fatalf("verification=%+v", verification)
+	}
+}
+
+func TestVerifyDetectsDesignBundleTamper(t *testing.T) {
+	project, local, _, _ := acceptedRequiredDesignProjectForTest(t)
+	head := mustDesignHeadForTest(t, project)
+	commit, err := project.store.LoadCoreDesignCommit(head.DesignRoot)
+	if err != nil || commit == nil {
+		t.Fatalf("commit=%+v err=%v", commit, err)
+	}
+	digest, err := parseDesignBundleRef(commit.BundleRef)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(local, "meta", "core", "design", "bundles", digest+".json")
+	writeJSONFile(t, path, map[string]any{
+		"schema_version": 1,
+		"selections":     map[string]string{},
+	})
+	verification, err := project.Verify()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if verification.OK || !containsProblem(verification.Problems, "design bundle") {
+		t.Fatalf("verification=%+v", verification)
+	}
+}
+
+func TestVerifyDetectsDesignCommitTamper(t *testing.T) {
+	project, local, _, _ := acceptedRequiredDesignProjectForTest(t)
+	head := mustDesignHeadForTest(t, project)
+	commit, err := project.store.LoadCoreDesignCommit(head.DesignRoot)
+	if err != nil || commit == nil {
+		t.Fatalf("commit=%+v err=%v", commit, err)
+	}
+	commit.CheckpointPolicyVersion++
+	path := filepath.Join(local, "meta", "core", "design", "commits", head.DesignRoot+".json")
+	writeJSONFile(t, path, commit)
+	verification, err := project.Verify()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if verification.OK || !containsProblem(verification.Problems, "design commit") {
+		t.Fatalf("verification=%+v", verification)
+	}
+}
+
+func TestVerifyDetectsDesignHeadMissingCommit(t *testing.T) {
+	project, local, _, _ := acceptedRequiredDesignProjectForTest(t)
+	head := mustDesignHeadForTest(t, project)
+	head.DesignRoot = strings.Repeat("0", 64)
+	path := filepath.Join(local, "meta", "core", "design", "HEAD.json")
+	writeJSONFile(t, path, head)
+	verification, err := project.Verify()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if verification.OK || !containsProblem(verification.Problems, "design head") {
+		t.Fatalf("verification=%+v", verification)
+	}
+}
+
+func TestVerifyDetectsFoundationReceiptDesignRootMismatch(t *testing.T) {
+	tests := []struct {
+		name string
+		root func(project *Project, foundationRoot string) string
+	}{
+		{
+			name: "other existing design root",
+			root: func(project *Project, foundationRoot string) string {
+				head := mustDesignHeadForTest(t, project)
+				commit, err := project.store.LoadCoreDesignCommit(head.DesignRoot)
+				if err != nil || commit == nil || commit.ParentDesignRoot == "" {
+					t.Fatalf("commit=%+v err=%v", commit, err)
+				}
+				return commit.ParentDesignRoot
+			},
+		},
+		{
+			name: "missing design root",
+			root: func(project *Project, foundationRoot string) string {
+				return strings.Repeat("f", 64)
+			},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			project, local, _, foundationRoot := acceptedRequiredDesignProjectForTest(t)
+			receipts, err := project.store.ListCoreReceipts()
+			if err != nil {
+				t.Fatal(err)
+			}
+			accepted := foundationAcceptedReceiptsForTest(receipts)
+			if len(accepted) != 1 {
+				t.Fatalf("accepted foundation receipts=%+v", accepted)
+			}
+			receipt := accepted[0]
+			receipt.FoundationDesignRoot = tc.root(project, foundationRoot)
+			writeJSONFile(
+				t,
+				filepath.Join(local, "meta", "core", "receipts", receipt.AttemptID+".json"),
+				receipt,
+			)
+			verification, err := project.Verify()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if verification.OK || !containsProblem(verification.Problems, "foundation design root") {
+				t.Fatalf("verification=%+v", verification)
+			}
+		})
+	}
+}
+
+func TestVerifyAcceptsFoundationReadyBeforeFirstCanon(t *testing.T) {
+	project, _, _, _ := makeFoundationReadyProjectForTest(t)
+	verification, err := project.Verify()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !verification.OK {
+		t.Fatalf("verification=%+v", verification)
+	}
+}
+
+func TestVerifyDetectsGhostDesignCommitOutsideHeadHistory(t *testing.T) {
+	project, local, _, _ := acceptedRequiredDesignProjectForTest(t)
+	head := mustDesignHeadForTest(t, project)
+	commit, err := project.store.LoadCoreDesignCommit(head.DesignRoot)
+	if err != nil || commit == nil {
+		t.Fatalf("commit=%+v err=%v", commit, err)
+	}
+	ghost := *commit
+	ghost.CheckpointPolicyVersion += 100
+	ghostRoot, err := computeDesignRoot(ghost)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ghostRoot == head.DesignRoot {
+		t.Fatal("ghost root unexpectedly equals head")
+	}
+	writeJSONFile(
+		t,
+		filepath.Join(local, "meta", "core", "design", "commits", ghostRoot+".json"),
+		ghost,
+	)
+	verification, err := project.Verify()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if verification.OK || !containsProblem(verification.Problems, "outside authoritative history") {
+		t.Fatalf("verification=%+v", verification)
+	}
+}
+
+func TestVerifyDetectsDesignReceiptFilenameSubmissionMismatch(t *testing.T) {
+	project, local, _, _ := acceptedRequiredDesignProjectForTest(t)
+	receipts, err := project.store.ListCoreDesignReceipts()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(receipts) == 0 {
+		t.Fatal("no design receipts")
+	}
+	receipt := receipts[0]
+	originalID := receipt.SubmissionID
+	receipt.SubmissionID = originalID + "-tampered"
+	writeJSONFile(
+		t,
+		filepath.Join(local, "meta", "core", "design", "receipts", originalID+".json"),
+		receipt,
+	)
+	verification, err := project.Verify()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if verification.OK || !containsProblem(verification.Problems, "design receipt") {
+		t.Fatalf("verification=%+v", verification)
+	}
+}
+
+func TestVerifyRejectsLegacyFoundationReceiptWithDesignRoot(t *testing.T) {
+	project, local, _, _ := acceptedFoundationProject(t)
+	receipts, err := project.store.ListCoreReceipts()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(receipts) == 0 {
+		t.Fatal("no legacy receipts")
+	}
+	receipt := receipts[0]
+	receipt.FoundationDesignRoot = strings.Repeat("a", 64)
+	writeJSONFile(
+		t,
+		filepath.Join(local, "meta", "core", "receipts", receipt.AttemptID+".json"),
+		receipt,
+	)
+	verification, err := project.Verify()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if verification.OK || !containsProblem(verification.Problems, "legacy foundation receipt") {
+		t.Fatalf("verification=%+v", verification)
+	}
+}

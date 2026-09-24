@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/chenhongyang/novel-studio/internal/domain"
 	"github.com/chenhongyang/novel-studio/internal/protocol"
 )
 
@@ -106,4 +107,197 @@ func assertSubmissionInvalid(t *testing.T, project *Project, problemContains str
 	if status.State != "INVALID" || !strings.Contains(strings.ToLower(status.Problem), strings.ToLower(problemContains)) {
 		t.Fatalf("status=%+v want INVALID containing %q", status, problemContains)
 	}
+}
+
+func TestDesignInboxRejectsAbsoluteAndTraversalPaths(t *testing.T) {
+	tests := []struct {
+		name string
+		file string
+	}{
+		{name: "absolute", file: "/tmp/escape.json"},
+		{name: "traversal", file: "../escape.json"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			project, _, workspace := newRequiredDesignProjectForTest(t)
+			submissionID := "design-path-" + tc.name
+			base := filepath.Join(workspace, "exchange", "design", "inbox", submissionID)
+			if err := os.MkdirAll(base, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			writeJSONFile(t, filepath.Join(base, "manifest.json"), protocol.DesignManifest{
+				SchemaVersion:   protocol.MachineSchemaVersion,
+				ProjectID:       "book-1",
+				SubmissionID:    submissionID,
+				ProtocolVersion: protocol.CurrentVersion,
+				Operation:       "import",
+				Files:           []string{tc.file},
+			})
+			status, err := project.ScanDesignSubmission(submissionID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if status.State != "INVALID" || !strings.Contains(strings.ToLower(status.Problem), "file list") {
+				t.Fatalf("status=%+v", status)
+			}
+		})
+	}
+}
+
+func TestDesignInboxRejectsNestedDirectory(t *testing.T) {
+	project, _, workspace := newRequiredDesignProjectForTest(t)
+	submissionID := "design-nested"
+	base := filepath.Join(workspace, "exchange", "design", "inbox", submissionID)
+	if err := os.MkdirAll(filepath.Join(base, "nested"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := json.Marshal(artifactImportEnvelope("creative_brief", nil, validCreativeBriefPayload()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(base, "artifact.json"), raw, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	writeJSONFile(t, filepath.Join(base, "manifest.json"), protocol.DesignManifest{
+		SchemaVersion:   protocol.MachineSchemaVersion,
+		ProjectID:       "book-1",
+		SubmissionID:    submissionID,
+		ProtocolVersion: protocol.CurrentVersion,
+		Operation:       "import",
+		Files:           []string{"artifact.json"},
+	})
+	status, err := project.ScanDesignSubmission(submissionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status.State != "INVALID" || !strings.Contains(strings.ToLower(status.Problem), "directory") {
+		t.Fatalf("status=%+v", status)
+	}
+}
+
+func TestDesignInboxRejectsInvalidUTF8(t *testing.T) {
+	project, _, workspace := newRequiredDesignProjectForTest(t)
+	submissionID := "design-invalid-utf8"
+	writeRawDesignSubmissionForSecurityTest(
+		t, workspace, submissionID, []byte{0xff, 0xfe, 0xfd},
+	)
+	status, err := project.ScanDesignSubmission(submissionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status.State != "INVALID" || !strings.Contains(strings.ToLower(status.Problem), "utf") {
+		t.Fatalf("status=%+v", status)
+	}
+}
+
+func TestDesignInboxRejectsExcessiveJSONDepth(t *testing.T) {
+	project, _, workspace := newRequiredDesignProjectForTest(t)
+	submissionID := "design-deep-json"
+	deep := strings.Repeat("[", protocol.MaxJSONDepth+1) +
+		"0" +
+		strings.Repeat("]", protocol.MaxJSONDepth+1)
+	raw := []byte(
+		`{"kind":"artifact","artifact":{"schema_version":1,"artifact_type":"creative_brief","inputs":[],"sources":[],"payload":` +
+			deep + `}}`,
+	)
+	writeRawDesignSubmissionForSecurityTest(t, workspace, submissionID, raw)
+	result := processRawDesignSubmissionForSecurityTest(t, project, submissionID)
+	if result.Result != "INVALID" || !strings.Contains(strings.ToLower(result.Problem), "depth") {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
+func TestDesignInboxRejectsExcessiveJSONArrayLength(t *testing.T) {
+	project, _, workspace := newRequiredDesignProjectForTest(t)
+	submissionID := "design-wide-json"
+	wide := "[" + strings.Repeat("0,", protocol.MaxJSONArrayLength) + "0]"
+	raw := []byte(
+		`{"kind":"artifact","artifact":{"schema_version":1,"artifact_type":"creative_brief","inputs":[],"sources":[],"payload":` +
+			wide + `}}`,
+	)
+	writeRawDesignSubmissionForSecurityTest(t, workspace, submissionID, raw)
+	result := processRawDesignSubmissionForSecurityTest(t, project, submissionID)
+	if result.Result != "INVALID" || !strings.Contains(strings.ToLower(result.Problem), "array") {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
+func TestServeIgnoresInvalidDesignSubmissionIDDirectory(t *testing.T) {
+	project, local, workspace := newRequiredDesignProjectForTest(t)
+	project.submissionQuietPeriod = 0
+	submissionID := "INVALID!"
+	base := filepath.Join(workspace, "exchange", "design", "inbox", submissionID)
+	if err := os.MkdirAll(base, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := json.Marshal(artifactImportEnvelope("creative_brief", nil, validCreativeBriefPayload()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(base, "artifact.json"), raw, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	writeJSONFile(t, filepath.Join(base, "manifest.json"), protocol.DesignManifest{
+		SchemaVersion:   protocol.MachineSchemaVersion,
+		ProjectID:       "book-1",
+		SubmissionID:    submissionID,
+		ProtocolVersion: protocol.CurrentVersion,
+		Operation:       "import",
+		Files:           []string{"artifact.json"},
+	})
+	if err := project.servePassLocked(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(workspace, "exchange", "design", "result", submissionID+".json")); !os.IsNotExist(err) {
+		t.Fatalf("invalid submission id produced result: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(local, "meta", "core", "design", "reconcile", submissionID+".json")); !os.IsNotExist(err) {
+		t.Fatalf("invalid submission id produced reconcile record: %v", err)
+	}
+}
+
+func writeRawDesignSubmissionForSecurityTest(
+	t *testing.T,
+	workspace, submissionID string,
+	raw []byte,
+) {
+	t.Helper()
+	base := filepath.Join(workspace, "exchange", "design", "inbox", submissionID)
+	if err := os.MkdirAll(base, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(base, "artifact.json"), raw, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	writeJSONFile(t, filepath.Join(base, "manifest.json"), protocol.DesignManifest{
+		SchemaVersion:   protocol.MachineSchemaVersion,
+		ProjectID:       "book-1",
+		SubmissionID:    submissionID,
+		ProtocolVersion: protocol.CurrentVersion,
+		Operation:       "import",
+		Files:           []string{"artifact.json"},
+	})
+}
+
+func processRawDesignSubmissionForSecurityTest(
+	t *testing.T,
+	project *Project,
+	submissionID string,
+) domain.CoreDesignSubmissionResult {
+	t.Helper()
+	if _, err := project.ScanDesignSubmission(submissionID); err != nil {
+		t.Fatal(err)
+	}
+	status, err := project.ScanDesignSubmission(submissionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status.State != "READY_TO_VALIDATE" {
+		t.Fatalf("status=%+v", status)
+	}
+	result, err := project.ProcessDesignSubmission(submissionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return result
 }

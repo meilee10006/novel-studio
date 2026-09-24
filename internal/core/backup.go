@@ -94,6 +94,12 @@ func (p *Project) createBackupUnlocked(destination string) (BackupResult, error)
 		}
 		canonRoot = head.Root
 	}
+	if problems := p.verifyDesignStore(projectState); len(problems) > 0 {
+		return BackupResult{}, fmt.Errorf(
+			"verify design store before backup: %s",
+			strings.Join(problems, "; "),
+		)
+	}
 
 	parent := filepath.Dir(backupRoot)
 	if err := os.MkdirAll(parent, 0o755); err != nil {

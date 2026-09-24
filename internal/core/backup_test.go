@@ -91,3 +91,104 @@ func TestRestoreRefusesExistingTarget(t *testing.T) {
 		t.Fatalf("existing target modified: raw=%q err=%v", raw, readErr)
 	}
 }
+
+func TestBackupRestoreRoundTripPreservesDesignAndCanonRoots(t *testing.T) {
+	project, _, _, designRoot := acceptedRequiredDesignProjectForTest(t)
+	before, err := project.Status()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	backupDir := filepath.Join(t.TempDir(), "backup")
+	if _, err := project.CreateBackup(backupDir); err != nil {
+		t.Fatal(err)
+	}
+	restored, err := RestoreBackup(
+		backupDir,
+		filepath.Join(t.TempDir(), "restored"),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	after, err := restored.Status()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if before.CanonRoot != after.CanonRoot ||
+		after.DesignHead != designRoot ||
+		after.FoundationDesignRoot != designRoot {
+		t.Fatalf("before=%+v after=%+v", before, after)
+	}
+	verification, err := restored.Verify()
+	if err != nil || !verification.OK {
+		t.Fatalf("verification=%+v err=%v", verification, err)
+	}
+}
+
+func TestBackupRejectsTamperedDesignStoreBeforeStaging(t *testing.T) {
+	project, local, _, _ := acceptedRequiredDesignProjectForTest(t)
+	ref := currentStoryConceptRefForTest(t, project)
+	_, digest, err := parseDesignArtifactRef(ref)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(local, "meta", "core", "design", "objects", digest+".json")
+	if err := os.WriteFile(path, []byte(`{"tampered":true}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	backupDir := filepath.Join(t.TempDir(), "backup")
+	_, err = project.CreateBackup(backupDir)
+	if err == nil || !strings.Contains(strings.ToLower(err.Error()), "verify design store") {
+		t.Fatalf("CreateBackup err=%v", err)
+	}
+	if _, statErr := os.Stat(backupDir); !os.IsNotExist(statErr) {
+		t.Fatalf("failed backup created destination: %v", statErr)
+	}
+}
+
+func TestRestoreRejectsTamperedDesignBackupEvenWhenManifestMatches(t *testing.T) {
+	project, _, _, _ := acceptedRequiredDesignProjectForTest(t)
+	ref := currentStoryConceptRefForTest(t, project)
+	_, digest, err := parseDesignArtifactRef(ref)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	backupDir := filepath.Join(t.TempDir(), "backup")
+	if _, err := project.CreateBackup(backupDir); err != nil {
+		t.Fatal(err)
+	}
+	rel := filepath.ToSlash(filepath.Join("meta", "core", "design", "objects", digest+".json"))
+	payloadPath := filepath.Join(backupDir, "payload", filepath.FromSlash(rel))
+	tampered := []byte(`{"tampered":true}`)
+	if err := os.WriteFile(payloadPath, tampered, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	var manifest coreBackupManifest
+	readJSONFile(t, filepath.Join(backupDir, "manifest.json"), &manifest)
+	var found bool
+	for i := range manifest.Files {
+		if manifest.Files[i].Path != rel {
+			continue
+		}
+		manifest.Files[i].Digest = sha256Bytes(tampered)
+		manifest.Files[i].Size = int64(len(tampered))
+		found = true
+		break
+	}
+	if !found {
+		t.Fatalf("design object %s not found in backup manifest", rel)
+	}
+	writeJSONFile(t, filepath.Join(backupDir, "manifest.json"), manifest)
+
+	target := filepath.Join(t.TempDir(), "restored")
+	_, err = RestoreBackup(backupDir, target)
+	if err == nil || !strings.Contains(strings.ToLower(err.Error()), "design") {
+		t.Fatalf("RestoreBackup err=%v, want design integrity failure", err)
+	}
+	if _, statErr := os.Stat(target); !os.IsNotExist(statErr) {
+		t.Fatalf("failed restore created target: %v", statErr)
+	}
+}

@@ -496,3 +496,45 @@ func foundationAcceptedReceiptsForTest(
 	}
 	return out
 }
+
+func acceptedRequiredDesignProjectForTest(
+	t *testing.T,
+) (*Project, string, string, string) {
+	t.Helper()
+	project, local, workspace, fixture := makeFoundationReadyProjectForTest(t)
+	if err := project.Reconcile(); err != nil {
+		t.Fatal(err)
+	}
+	status, err := project.Status()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status.CanonRoot == "" {
+		t.Fatal("required project did not create first canon")
+	}
+	return project, local, workspace, fixture.FoundationRoot
+}
+
+func currentStoryConceptRefForTest(
+	t *testing.T,
+	p *Project,
+) string {
+	t.Helper()
+	head, err := p.store.LoadCoreDesignHead()
+	if err != nil || head == nil {
+		t.Fatalf("design head=%+v err=%v", head, err)
+	}
+	commit, err := p.store.LoadCoreDesignCommit(head.DesignRoot)
+	if err != nil || commit == nil {
+		t.Fatalf("design commit=%+v err=%v", commit, err)
+	}
+	bundle, err := p.loadDesignBundleRef(commit.BundleRef)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ref := bundle.Selections["story_concept"]
+	if ref == "" {
+		t.Fatal("story_concept is missing")
+	}
+	return ref
+}
