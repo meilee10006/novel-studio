@@ -146,6 +146,27 @@ func TestChatGPTProtocolDescribesSubmissionAndControlSchemas(t *testing.T) {
 	}
 }
 
+func TestChatGPTProtocolDescribesSemanticDesignLifecycle(t *testing.T) {
+	text := RenderChatGPTProtocol("book-1")
+	for _, want := range []string{
+		"design_mode",
+		"exchange/design/inbox",
+		"story_locked",
+		"foundation_ready",
+		"author_confirmation",
+		"foundation_readiness_review",
+		"expected_design_root",
+		"没有 READY",
+		"foundation_design_root",
+		"legacy",
+		"required",
+	} {
+		if !strings.Contains(text, want) {
+			t.Errorf("generated ChatGPT protocol missing semantic design guidance %q", want)
+		}
+	}
+}
+
 func TestChatGPTProtocolJSONExamplesAreValid(t *testing.T) {
 	text := RenderChatGPTProtocol("book-1")
 	parts := strings.Split(text, "~~~json\n")

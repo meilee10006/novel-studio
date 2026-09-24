@@ -6,8 +6,69 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/chenhongyang/novel-studio/internal/domain"
 	"github.com/chenhongyang/novel-studio/internal/protocol"
 )
+
+func TestNewProjectStartsInRequiredDesignModeWithoutProductionTask(t *testing.T) {
+	local := t.TempDir()
+	workspace := t.TempDir()
+	project, err := InitProject(InitOptions{
+		ProjectID:     "required-new",
+		LocalRoot:     local,
+		WorkspaceRoot: workspace,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	writeCapabilityAckForTest(t, workspace)
+	if err := project.Reconcile(); err != nil {
+		t.Fatal(err)
+	}
+
+	state, err := project.store.LoadCoreProjectState()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.DesignMode != domain.DesignModeRequired {
+		t.Fatalf("design_mode=%q", state.DesignMode)
+	}
+
+	production, err := project.store.LoadCoreProductionState()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if production != nil {
+		t.Fatalf("required idle project created production state: %+v", production)
+	}
+	if _, err := os.Stat(filepath.Join(workspace, "exchange", "READY.json")); !os.IsNotExist(err) {
+		t.Fatalf("required project published READY before canon: %v", err)
+	}
+}
+
+func writeCapabilityAckForTest(t *testing.T, workspace string) {
+	t.Helper()
+	var challenge capabilityChallenge
+	readJSONFile(t, filepath.Join(workspace, "setup", "capability-challenge.json"), &challenge)
+	writeJSONFile(t, filepath.Join(workspace, "setup", "capability-ack.json"), map[string]any{
+		"project_id":       challenge.ProjectID,
+		"protocol_version": challenge.ProtocolVersion,
+		"nonce":            challenge.Nonce,
+		"capabilities": map[string]bool{
+			"read":            true,
+			"write_utf8_json": true,
+			"write_utf8_md":   true,
+		},
+	})
+	if err := os.WriteFile(
+		filepath.Join(workspace, "setup", "capability-write-test.md"),
+		[]byte(challenge.MarkdownProbe),
+		0o644,
+	); err != nil {
+		t.Fatal(err)
+	}
+}
 
 func TestInitProjectSeparatesAuthorityAndWorkspace(t *testing.T) {
 	parent := t.TempDir()
@@ -21,6 +82,8 @@ func TestInitProjectSeparatesAuthorityAndWorkspace(t *testing.T) {
 		filepath.Join(workspace, "project.json"),
 		filepath.Join(workspace, "CHATGPT_PROTOCOL.md"),
 		filepath.Join(workspace, "setup", "capability-challenge.json"),
+		filepath.Join(workspace, "exchange", "design", "inbox"),
+		filepath.Join(workspace, "exchange", "design", "result"),
 	} {
 		if _, err := os.Stat(path); err != nil {
 			t.Fatalf("missing %s: %v", path, err)
@@ -205,20 +268,17 @@ func TestWorkspaceStatusTracksCapabilityAndActiveAuthority(t *testing.T) {
 	}
 	var readyStatus map[string]any
 	readJSONFile(t, statusPath, &readyStatus)
-	if readyStatus["capability"] != "passed" || readyStatus["active_task_kind"] != "foundation" || readyStatus["active_attempt_id"] == "" {
-		t.Fatalf("ready workspace status=%+v", readyStatus)
+	if readyStatus["capability"] != "passed" {
+		t.Fatalf("capability=%v", readyStatus["capability"])
 	}
-
-	ready := readReady(t, workspace)
-	artifacts := validFoundationArtifacts()
-	settlement, err := project.SettleFoundation(FoundationSubmission{Manifest: manifestForReady(ready, artifacts), Artifacts: artifacts})
-	if err != nil || settlement.Result != "ACCEPTED" {
-		t.Fatalf("foundation=%+v err=%v", settlement, err)
+	if readyStatus["design_mode"] != "required" {
+		t.Fatalf("design_mode=%v", readyStatus["design_mode"])
 	}
-	var chapterStatus map[string]any
-	readJSONFile(t, statusPath, &chapterStatus)
-	if chapterStatus["canon_root"] != settlement.NewCanonRoot || chapterStatus["active_task_kind"] != "chapter" || chapterStatus["active_target"] != "chapter:1" {
-		t.Fatalf("chapter workspace status=%+v", chapterStatus)
+	if readyStatus["active_task_kind"] != nil || readyStatus["active_attempt_id"] != nil {
+		t.Fatalf("required project created production task before foundation ready: %+v", readyStatus)
+	}
+	if _, err := os.Stat(filepath.Join(workspace, "exchange", "READY.json")); !os.IsNotExist(err) {
+		t.Fatalf("required project must not publish READY before canon: %v", err)
 	}
 }
 
@@ -245,5 +305,44 @@ func TestWorkspaceStatusReportsInvalidCapability(t *testing.T) {
 	readJSONFile(t, filepath.Join(workspace, "exchange", "STATUS.json"), &status)
 	if status["capability"] != "invalid" || status["capability_problem"] == "" {
 		t.Fatalf("workspace status did not expose invalid capability: %+v", status)
+	}
+}
+
+func TestWorkspaceStatusTracksLegacyActiveAuthority(t *testing.T) {
+	project, _, workspace := newCapabilityPassedProject(t)
+	if err := project.Reconcile(); err != nil {
+		t.Fatal(err)
+	}
+
+	statusPath := filepath.Join(workspace, "exchange", "STATUS.json")
+	var foundationStatus map[string]any
+	readJSONFile(t, statusPath, &foundationStatus)
+	if foundationStatus["capability"] != "passed" ||
+		foundationStatus["design_mode"] != "legacy" ||
+		foundationStatus["active_task_kind"] != "foundation" ||
+		foundationStatus["active_attempt_id"] == "" {
+		t.Fatalf("foundation workspace status=%+v", foundationStatus)
+	}
+	if foundationStatus["design_head"] != nil ||
+		foundationStatus["design_checkpoint"] != nil ||
+		foundationStatus["foundation_design_root"] != nil {
+		t.Fatalf("legacy workspace leaked design authority=%+v", foundationStatus)
+	}
+
+	ready := readReady(t, workspace)
+	artifacts := validFoundationArtifacts()
+	settlement, err := project.SettleFoundation(FoundationSubmission{
+		Manifest:  manifestForReady(ready, artifacts),
+		Artifacts: artifacts,
+	})
+	if err != nil || settlement.Result != "ACCEPTED" {
+		t.Fatalf("foundation=%+v err=%v", settlement, err)
+	}
+	var chapterStatus map[string]any
+	readJSONFile(t, statusPath, &chapterStatus)
+	if chapterStatus["canon_root"] != settlement.NewCanonRoot ||
+		chapterStatus["active_task_kind"] != "chapter" ||
+		chapterStatus["active_target"] != "chapter:1" {
+		t.Fatalf("chapter workspace status=%+v", chapterStatus)
 	}
 }

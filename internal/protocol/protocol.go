@@ -10,14 +10,15 @@ import (
 
 const (
 	LegacyVersion      = "0.9"
-	CurrentVersion     = "1.0"
+	PreviousVersion    = "1.0"
+	CurrentVersion     = "1.1"
 	MaxJSONDepth       = 64
 	MaxJSONArrayLength = 10000
 	DefaultMaxTextSize = 8 << 20
 )
 
 func IsKnownVersion(version string) bool {
-	return version == LegacyVersion || version == CurrentVersion
+	return version == LegacyVersion || version == PreviousVersion || version == CurrentVersion
 }
 
 func DecodeJSON(data []byte, dst any) error {

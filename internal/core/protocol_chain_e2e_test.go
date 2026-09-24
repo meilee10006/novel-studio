@@ -44,6 +44,7 @@ func TestPublicFileProtocolFullChain(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	forceProtocolChainLegacyMode(t, local)
 	writeProtocolCapabilityAck(t, workspace)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -152,6 +153,7 @@ func TestPublicFileProtocolResumesAfterCoreRestart(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	forceProtocolChainLegacyMode(t, local)
 	writeProtocolCapabilityAck(t, workspace)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -199,6 +201,15 @@ func TestPublicFileProtocolResumesAfterCoreRestart(t *testing.T) {
 	if next.AttemptID == resumed.AttemptID || readProtocolStatus(t, workspace).CanonRoot == "" {
 		t.Fatalf("restart resume did not advance authority: resumed=%+v next=%+v status=%+v", resumed, next, readProtocolStatus(t, workspace))
 	}
+}
+
+func forceProtocolChainLegacyMode(t *testing.T, local string) {
+	t.Helper()
+	path := filepath.Join(local, "meta", "core", "project.json")
+	var state map[string]any
+	readProtocolJSON(t, path, &state)
+	state["design_mode"] = "legacy"
+	writeProtocolJSON(t, path, state)
 }
 
 func writeProtocolCapabilityAck(t *testing.T, workspace string) {

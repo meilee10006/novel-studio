@@ -44,26 +44,38 @@ func (p *Project) Migrate(backupDestination string) (MigrationResult, error) {
 		return MigrationResult{}, fmt.Errorf("unsupported local protocol version %q", state.ProtocolVersion)
 	}
 
-	schemaReceipt, err := p.store.LoadCoreMigrationReceipt(0, coreSchemaVersion)
-	if err != nil {
-		return MigrationResult{}, err
-	}
-	if schemaReceipt != nil && schemaReceipt.State == "prepared" {
-		return p.finishPreparedSchemaMigration(state, schemaReceipt)
+	for _, from := range []int{0, 1} {
+		receipt, err := p.store.LoadCoreMigrationReceipt(from, coreSchemaVersion)
+		if err != nil {
+			return MigrationResult{}, err
+		}
+		if receipt != nil && receipt.State == "prepared" {
+			return p.finishPreparedSchemaMigration(state, receipt)
+		}
 	}
 	if state.SchemaVersion != coreSchemaVersion {
-		return p.migrateSchemaLocked(state, backupDestination, schemaReceipt)
+		receipt, err := p.store.LoadCoreMigrationReceipt(state.SchemaVersion, coreSchemaVersion)
+		if err != nil {
+			return MigrationResult{}, err
+		}
+		return p.migrateSchemaLocked(state, backupDestination, receipt)
 	}
 
-	protocolReceipt, err := p.store.LoadCoreProtocolMigrationReceipt(protocol.LegacyVersion, protocol.CurrentVersion)
-	if err != nil {
-		return MigrationResult{}, err
-	}
-	if protocolReceipt != nil && protocolReceipt.State == "prepared" {
-		return p.finishPreparedProtocolMigration(state, protocolReceipt)
+	for _, from := range []string{protocol.LegacyVersion, protocol.PreviousVersion} {
+		receipt, err := p.store.LoadCoreProtocolMigrationReceipt(from, protocol.CurrentVersion)
+		if err != nil {
+			return MigrationResult{}, err
+		}
+		if receipt != nil && receipt.State == "prepared" {
+			return p.finishPreparedProtocolMigration(state, receipt)
+		}
 	}
 	if state.ProtocolVersion != protocol.CurrentVersion {
-		return p.migrateProtocolLocked(state, backupDestination, protocolReceipt)
+		receipt, err := p.store.LoadCoreProtocolMigrationReceipt(state.ProtocolVersion, protocol.CurrentVersion)
+		if err != nil {
+			return MigrationResult{}, err
+		}
+		return p.migrateProtocolLocked(state, backupDestination, receipt)
 	}
 
 	root, err := p.currentCanonRoot()
@@ -78,7 +90,7 @@ func (p *Project) Migrate(backupDestination string) (MigrationResult, error) {
 }
 
 func (p *Project) migrateSchemaLocked(state *domain.CoreProjectState, backupDestination string, receipt *domain.CoreMigrationReceipt) (MigrationResult, error) {
-	if state.SchemaVersion != 0 {
+	if state.SchemaVersion != 0 && state.SchemaVersion != 1 {
 		return MigrationResult{}, fmt.Errorf("no migration path from schema %d to %d", state.SchemaVersion, coreSchemaVersion)
 	}
 	backupDestination = strings.TrimSpace(backupDestination)
@@ -102,7 +114,7 @@ func (p *Project) migrateSchemaLocked(state *domain.CoreProjectState, backupDest
 		}
 		receipt = &domain.CoreMigrationReceipt{
 			SchemaVersion: coreSchemaVersion, State: "prepared", ProjectID: state.ProjectID,
-			FromSchema: 0, ToSchema: coreSchemaVersion,
+			FromSchema: state.SchemaVersion, ToSchema: coreSchemaVersion,
 			BackupPath: backupPath, CanonRootBefore: root,
 		}
 		if _, err := p.store.SaveCoreMigrationReceipt(receipt); err != nil {
@@ -110,6 +122,7 @@ func (p *Project) migrateSchemaLocked(state *domain.CoreProjectState, backupDest
 		}
 	}
 	state.SchemaVersion = coreSchemaVersion
+	state.DesignMode = domain.DesignModeLegacy
 	if err := p.store.SaveCoreProjectState(state); err != nil {
 		return MigrationResult{}, err
 	}
@@ -117,7 +130,9 @@ func (p *Project) migrateSchemaLocked(state *domain.CoreProjectState, backupDest
 }
 
 func (p *Project) finishPreparedSchemaMigration(state *domain.CoreProjectState, receipt *domain.CoreMigrationReceipt) (MigrationResult, error) {
-	if receipt == nil || receipt.State != "prepared" || receipt.FromSchema != 0 || receipt.ToSchema != coreSchemaVersion {
+	if receipt == nil || receipt.State != "prepared" ||
+		(receipt.FromSchema != 0 && receipt.FromSchema != 1) ||
+		receipt.ToSchema != coreSchemaVersion {
 		return MigrationResult{}, fmt.Errorf("invalid prepared migration receipt")
 	}
 	if state.ProjectID != receipt.ProjectID || state.SchemaVersion != coreSchemaVersion {
@@ -151,7 +166,8 @@ func (p *Project) finishPreparedSchemaMigration(state *domain.CoreProjectState, 
 }
 
 func (p *Project) migrateProtocolLocked(state *domain.CoreProjectState, backupDestination string, existing *domain.CoreProtocolMigrationReceipt) (MigrationResult, error) {
-	if state.ProtocolVersion != protocol.LegacyVersion {
+	if state.ProtocolVersion != protocol.LegacyVersion &&
+		state.ProtocolVersion != protocol.PreviousVersion {
 		return MigrationResult{}, fmt.Errorf("no protocol migration path from %q to %q", state.ProtocolVersion, protocol.CurrentVersion)
 	}
 	if existing != nil && existing.State == "committed" {
@@ -197,7 +213,9 @@ func (p *Project) migrateProtocolLocked(state *domain.CoreProjectState, backupDe
 }
 
 func (p *Project) finishPreparedProtocolMigration(state *domain.CoreProjectState, receipt *domain.CoreProtocolMigrationReceipt) (MigrationResult, error) {
-	if receipt == nil || receipt.State != "prepared" || receipt.FromProtocol != protocol.LegacyVersion || receipt.ToProtocol != protocol.CurrentVersion {
+	if receipt == nil || receipt.State != "prepared" ||
+		(receipt.FromProtocol != protocol.LegacyVersion && receipt.FromProtocol != protocol.PreviousVersion) ||
+		receipt.ToProtocol != protocol.CurrentVersion {
 		return MigrationResult{}, fmt.Errorf("invalid prepared protocol migration receipt")
 	}
 	if state.ProjectID != receipt.ProjectID || state.SchemaVersion != receipt.CoreSchemaVersion {
@@ -353,7 +371,13 @@ func validateMigrationBackup(backupPath string, state *domain.CoreProjectState, 
 	}
 	if manifest.CoreSchemaVersion != state.SchemaVersion || manifest.ProjectID != state.ProjectID ||
 		manifest.ProtocolVersion != state.ProtocolVersion || manifest.CanonRoot != canonRoot {
-		return fmt.Errorf("migration backup does not match current legacy project")
+		return fmt.Errorf(
+			"migration backup does not match current legacy project: schema=%d/%d project=%q/%q protocol=%q/%q canon=%q/%q",
+			manifest.CoreSchemaVersion, state.SchemaVersion,
+			manifest.ProjectID, state.ProjectID,
+			manifest.ProtocolVersion, state.ProtocolVersion,
+			manifest.CanonRoot, canonRoot,
+		)
 	}
 	if _, err := validateCoreBackupPayload(backupPath, manifest); err != nil {
 		return fmt.Errorf("validate migration backup: %w", err)

@@ -39,7 +39,7 @@ REWRITE 的 rewrite_feedback 与 violations 一一对应且顺序一致。每项
 control manifest：
 
 ~~~json
-{"schema_version":1,"project_id":"当前项目","message_id":"ctrl-001","base_canon_root":"从 STATUS.json 复制","protocol_version":"1.0","files":["control.json"]}
+{"schema_version":1,"project_id":"当前项目","message_id":"ctrl-001","base_canon_root":"从 STATUS.json 复制","protocol_version":"1.1","files":["control.json"]}
 ~~~
 
 future_plan 作者指令：
@@ -64,5 +64,13 @@ block_resolution.choice 必须与 BLOCKED result 中某个 options 值完全相�
 
 ## 新对话恢复
 
-新 ChatGPT 对话不依赖旧聊天记录。先读取 project.json、CHATGPT_PROTOCOL.md、exchange/STATUS.json、exchange/READY.json（若存在）以及当前 READY 对应的 outbox。Chapter/Revision 的 canonical Foundation 资料从 context.json.foundation_reference 读取；当前权威根从 STATUS.json.canon_root 读取。只根据这些 Core 生成文件继续工作。
+新 ChatGPT 对话不依赖旧聊天记录，恢复顺序固定为：
+
+project.json
+→ CHATGPT_PROTOCOL.md
+→ exchange/STATUS.json
+→ 如果 design_mode=required 且还没有 Canon：按 Design Head/候选继续，不读取 READY
+→ 如果 STATUS 有 active production attempt：读取 READY + outbox
+
+required pre-Canon 阶段没有 READY 是正常状态。STATUS.design_head / design_checkpoint 分别投影当前 Design root 和 story_locked / foundation_ready；Foundation ACCEPTED 后 foundation_design_root 记录首个 Canon 采用的 frozen Design root。legacy 项目的这些 Design authority 字段保持为空。Chapter/Revision 的 canonical Foundation 资料从 context.json.foundation_reference 读取；当前权威根从 STATUS.json.canon_root 读取。只根据这些 Core 生成文件继续工作。
 `

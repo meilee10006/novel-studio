@@ -11,13 +11,13 @@ const chatGPTProtocolPart1 = `# Novel Core × ChatGPT App 协议
 - JSON 对象中的键不得重复；重复键会被 Core 拒绝。
 - JSON 数值如果数学上是整数，该整数值必须能被 Core 精确保留；会在通用解码中发生精度损失的超大整数会被拒绝。
 - Core 写 project.json、CHATGPT_PROTOCOL.md、exchange/READY.json、exchange/STATUS.json、outbox、result、published、projection、backup。
-- ChatGPT 只写 exchange/inbox、exchange/control/inbox，以及能力检查要求的 setup 回执文件。
+- ChatGPT 只写 exchange/inbox、exchange/control/inbox、exchange/design/inbox，以及能力检查要求的 setup 回执文件。
 - 不修改 Core 写入的文件，不使用 Google Docs/Sheets 代替协议文件。
-- 当前任务只以 exchange/READY.json 为准；没有 READY 时不要自行推进小说状态。
+- production 任务只以 exchange/READY.json 为准；required Design 阶段没有 READY，必须按 STATUS 的 design_mode、design_head、design_checkpoint 与 exchange/design/inbox 继续。
 - exchange/STATUS.json 给出当前权威 canon_root、capability、活动 task/attempt/block，以及 export_ready/export_problems。export_ready 只表示确定性的导出前置条件已满足；真正 final export 仍会重新验证 Canon root 与活动 artifact inventory。control 的 base_canon_root 必须取 STATUS.json 的当前 canon_root，不要用历史 revision READY 的 base_canon_root 猜当前根。
 - 临近结局时必须读取 STATUS.export_problems；其中会列出尚未终态的伏笔/读者承诺、缺失或过期的 ending_resolution、活动 revision replay 等阻塞项。不要因为当前 task context 没带某个 obligation 就假设它已经关闭。
 - Drive 多文件同步不是原子事务。每次读取 READY 与 STATUS 后，必须确认 STATUS.active_attempt_id == READY.attempt_id、STATUS.active_target == READY.target，且 STATUS.block_id == READY.block_id（正常未阻塞时两边都为空）；如果不一致，说明文件仍在同步，等待后重新读取，不能据此提交或发 control。
-- 每次都先读取当前 READY 和对应 outbox/<task-id>/<attempt-id>/ 的 task.json、constraints.json、context.json、canon_excerpt.json、recent_prose.md。
+- STATUS 有 active production attempt 时，先读取当前 READY 和对应 outbox/<task-id>/<attempt-id>/ 的 task.json、constraints.json、context.json、canon_excerpt.json、recent_prose.md。
 - 首次创建对象时，Core-owned ID 字段必须完全省略；canon_id、foreshadow_id、promise_id、conflict_id 等字段键本身都不得出现，即使值为 null、数字或对象。永久 ID 只由 Core 在 ACCEPTED 时分配。
 
 ## 能力检查
@@ -25,10 +25,49 @@ const chatGPTProtocolPart1 = `# Novel Core × ChatGPT App 协议
 首次初始化后读取 setup/capability-challenge.json。把其中 project_id、protocol_version、nonce 原样写入 setup/capability-ack.json，并声明三项能力：
 
 ~~~json
-{"project_id":"...","protocol_version":"1.0","nonce":"...","capabilities":{"read":true,"write_utf8_json":true,"write_utf8_md":true}}
+{"project_id":"...","protocol_version":"1.1","nonce":"...","capabilities":{"read":true,"write_utf8_json":true,"write_utf8_md":true}}
 ~~~
 
 同时把 challenge.markdown_probe 的文本逐字写入 setup/capability-write-test.md。能力检查通过前不会生成正式 READY。
+
+## Design 模式与 pre-Canon 语义设计
+
+exchange/STATUS.json 的 design_mode 只有两种语义：required 表示新项目必须先完成语义设计，legacy 表示升级项目继续沿用既有 Foundation production 流程。required 且还没有 Canon 时，Design submission 写入 exchange/design/inbox/<submission_id>/，结果读取 exchange/design/result/<submission_id>.json。此阶段没有 READY；不要创建 Foundation production submission，也不要读取历史 READY 推断下一步。
+
+Design import 的 manifest.json 使用 machine schema 1，例如：
+
+~~~json
+{
+  "schema_version": 1,
+  "project_id": "book-1",
+  "submission_id": "design-001",
+  "protocol_version": "1.1",
+  "operation": "import",
+  "files": ["concept.json"]
+}
+~~~
+
+import 文件把不可变 semantic artifact 或 bundle 导入本地内容寻址 Design Store。artifact ref 与 bundle ref 都由 Core 返回；后续 inputs、sources、supersedes、bundle selections 只能引用已经成功导入的 ref，不要自行计算摘要。
+
+story_locked promote 必须显式提供 expected_design_root 做 CAS，并提供精确绑定当前 story_concept 的 story_review 与 author_confirmation：
+
+~~~json
+{
+  "schema_version": 1,
+  "project_id": "book-1",
+  "submission_id": "design-promote-001",
+  "protocol_version": "1.1",
+  "expected_design_root": "",
+  "checkpoint": "story_locked",
+  "bundle_ref": "design_bundle@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "evidence": {
+    "story_review": "story_review@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "author_confirmation": "author_confirmation@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+  }
+}
+~~~
+
+story_locked 之后，foundation_ready 必须保留已经锁定的 creative_brief、story_decisions、story_concept，并提交完整 Foundation Design bundle；evidence 必须精确只有 foundation_readiness_review，且其 subject_ref 必须是当前 bundle ref。foundation_ready 成功后 Design baseline 冻结，Core 会在本地通过 commit journal 自动把 approved Design Foundation 接入第一份 Canon，然后才发布 chapter:1 的 READY。
 
 ## 正式提交与 manifest.json
 
@@ -50,7 +89,7 @@ const chatGPTProtocolPart1 = `# Novel Core × ChatGPT App 协议
 
 不要重用旧 attempt 的 manifest。REWRITE、RETRY 或 block_resolution 后必须重新读取新的 READY。
 
-## Foundation 任务
+## legacy Foundation production 任务
 
 Foundation 必须提交 task.json.required_artifacts 列出的 7 个 JSON 文件。最小合法形状如下；可以增加创作字段，但不要省略这些硬字段。
 

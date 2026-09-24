@@ -1,6 +1,7 @@
 package core
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"strings"
@@ -246,104 +247,120 @@ func TestOpenProjectRejectsUnknownProtocolVersion(t *testing.T) {
 }
 
 func TestLegacyProtocolRequiresExplicitMigrationBeforeMutation(t *testing.T) {
-	project, local, _ := newCapabilityPassedProject(t)
-	state, err := project.store.LoadCoreProjectState()
-	if err != nil || state == nil {
-		t.Fatalf("project state=%+v err=%v", state, err)
-	}
-	state.ProtocolVersion = "0.9"
-	if err := project.store.SaveCoreProjectState(state); err != nil {
-		t.Fatal(err)
-	}
-	legacy, err := OpenProject(local)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := legacy.Reconcile(); err == nil || !strings.Contains(strings.ToLower(err.Error()), "migration") {
-		t.Fatalf("Reconcile err=%v, want explicit protocol migration requirement", err)
+	for _, from := range []string{protocol.LegacyVersion, protocol.PreviousVersion} {
+		t.Run(from, func(t *testing.T) {
+			project, local, _ := newCapabilityPassedProject(t)
+			state, err := project.store.LoadCoreProjectState()
+			if err != nil || state == nil {
+				t.Fatalf("project state=%+v err=%v", state, err)
+			}
+			state.ProtocolVersion = from
+			if err := project.store.SaveCoreProjectState(state); err != nil {
+				t.Fatal(err)
+			}
+			legacy, err := OpenProject(local)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := legacy.Reconcile(); err == nil ||
+				!strings.Contains(strings.ToLower(err.Error()), "migration") {
+				t.Fatalf("Reconcile err=%v, want explicit protocol migration requirement", err)
+			}
+		})
 	}
 }
 
 func TestMigrateKnownLegacyProtocolPreservesCanonAndRebindsAttempt(t *testing.T) {
-	project, local, workspace, ready := acceptedFoundationProject(t)
-	before, err := project.Status()
-	if err != nil {
-		t.Fatal(err)
-	}
-	state, err := project.store.LoadCoreProjectState()
-	if err != nil || state == nil {
-		t.Fatalf("project state=%+v err=%v", state, err)
-	}
-	state.ProtocolVersion = "0.9"
-	if err := project.store.SaveCoreProjectState(state); err != nil {
-		t.Fatal(err)
-	}
-	var workspaceProject map[string]any
-	workspaceProjectPath := filepath.Join(workspace, "project.json")
-	readJSONFile(t, workspaceProjectPath, &workspaceProject)
-	workspaceProject["protocol_version"] = "0.9"
-	writeJSONFile(t, workspaceProjectPath, workspaceProject)
+	for _, from := range []string{protocol.LegacyVersion, protocol.PreviousVersion} {
+		t.Run(from, func(t *testing.T) {
+			project, local, workspace, ready := acceptedFoundationProject(t)
+			before, err := project.Status()
+			if err != nil {
+				t.Fatal(err)
+			}
+			state, err := project.store.LoadCoreProjectState()
+			if err != nil || state == nil {
+				t.Fatalf("project state=%+v err=%v", state, err)
+			}
+			state.ProtocolVersion = from
+			state.DesignMode = domain.DesignModeLegacy
+			if err := project.store.SaveCoreProjectState(state); err != nil {
+				t.Fatal(err)
+			}
+			var workspaceProject map[string]any
+			workspaceProjectPath := filepath.Join(workspace, "project.json")
+			readJSONFile(t, workspaceProjectPath, &workspaceProject)
+			workspaceProject["protocol_version"] = from
+			writeJSONFile(t, workspaceProjectPath, workspaceProject)
 
-	legacy, err := OpenProject(local)
-	if err != nil {
-		t.Fatalf("OpenProject legacy protocol: %v", err)
-	}
-	backupDir := filepath.Join(t.TempDir(), "pre-protocol-backup")
-	result, err := legacy.Migrate(backupDir)
-	if err != nil {
-		t.Fatalf("Migrate protocol: %v", err)
-	}
-	if result.Result != "MIGRATED" || result.FromProtocol != "0.9" || result.ToProtocol != protocol.CurrentVersion {
-		t.Fatalf("protocol migration result=%+v", result)
-	}
-	if result.CanonRootBefore != before.CanonRoot || result.CanonRootAfter != before.CanonRoot {
-		t.Fatalf("protocol migration changed canon root: before=%s result=%+v", before.CanonRoot, result)
-	}
+			legacy, err := OpenProject(local)
+			if err != nil {
+				t.Fatalf("OpenProject legacy protocol: %v", err)
+			}
+			backupDir := filepath.Join(t.TempDir(), "pre-protocol-backup")
+			result, err := legacy.Migrate(backupDir)
+			if err != nil {
+				t.Fatalf("Migrate protocol: %v", err)
+			}
+			if result.Result != "MIGRATED" || result.FromProtocol != from ||
+				result.ToProtocol != protocol.CurrentVersion {
+				t.Fatalf("protocol migration result=%+v", result)
+			}
+			if result.CanonRootBefore != before.CanonRoot ||
+				result.CanonRootAfter != before.CanonRoot {
+				t.Fatalf("protocol migration changed canon root: before=%s result=%+v", before.CanonRoot, result)
+			}
 
-	state, err = legacy.store.LoadCoreProjectState()
-	if err != nil || state == nil || state.ProtocolVersion != protocol.CurrentVersion {
-		t.Fatalf("migrated project state=%+v err=%v", state, err)
-	}
-	production, err := legacy.store.LoadCoreProductionState()
-	if err != nil || production == nil || production.ActiveAttempt == nil {
-		t.Fatalf("production=%+v err=%v", production, err)
-	}
-	if production.ActiveAttempt.AttemptID == ready.AttemptID || production.ActiveAttempt.ProtocolVersion != protocol.CurrentVersion || production.ActiveAttempt.Reason != "protocol_upgrade" {
-		t.Fatalf("protocol migration did not rebind attempt: old=%+v new=%+v", ready, production.ActiveAttempt)
-	}
-	if _, err := os.Stat(filepath.Join(workspace, "exchange", "READY.json")); !os.IsNotExist(err) {
-		t.Fatalf("old READY survived protocol migration: %v", err)
-	}
-	var challenge capabilityChallenge
-	readJSONFile(t, filepath.Join(workspace, "setup", "capability-challenge.json"), &challenge)
-	if challenge.ProtocolVersion != protocol.CurrentVersion || challenge.Nonce != state.CapabilityNonce {
-		t.Fatalf("challenge=%+v state=%+v", challenge, state)
-	}
+			state, err = legacy.store.LoadCoreProjectState()
+			if err != nil || state == nil || state.ProtocolVersion != protocol.CurrentVersion ||
+				state.DesignMode != domain.DesignModeLegacy {
+				t.Fatalf("migrated project state=%+v err=%v", state, err)
+			}
+			production, err := legacy.store.LoadCoreProductionState()
+			if err != nil || production == nil || production.ActiveAttempt == nil {
+				t.Fatalf("production=%+v err=%v", production, err)
+			}
+			if production.ActiveAttempt.AttemptID == ready.AttemptID ||
+				production.ActiveAttempt.ProtocolVersion != protocol.CurrentVersion ||
+				production.ActiveAttempt.Reason != "protocol_upgrade" {
+				t.Fatalf("protocol migration did not rebind attempt: old=%+v new=%+v", ready, production.ActiveAttempt)
+			}
+			if production.ActiveTask == nil || production.ActiveTask.TaskID != ready.TaskID ||
+				production.ActiveTask.Target != ready.Target ||
+				production.ActiveTask.BaseCanonRoot != ready.BaseCanonRoot {
+				t.Fatalf("protocol migration changed active task: ready=%+v production=%+v", ready, production)
+			}
+			if _, err := os.Stat(filepath.Join(workspace, "exchange", "READY.json")); !os.IsNotExist(err) {
+				t.Fatalf("old READY survived protocol migration: %v", err)
+			}
+			var challenge capabilityChallenge
+			readJSONFile(t, filepath.Join(workspace, "setup", "capability-challenge.json"), &challenge)
+			if challenge.ProtocolVersion != protocol.CurrentVersion ||
+				challenge.Nonce != state.CapabilityNonce {
+				t.Fatalf("challenge=%+v state=%+v", challenge, state)
+			}
 
-	target := filepath.Join(t.TempDir(), "restored-legacy-protocol")
-	restored, err := RestoreBackup(backupDir, target)
-	if err != nil {
-		t.Fatalf("RestoreBackup legacy protocol: %v", err)
-	}
-	restoredState, err := restored.store.LoadCoreProjectState()
-	if err != nil || restoredState == nil || restoredState.ProtocolVersion != "0.9" {
-		t.Fatalf("restored legacy protocol state=%+v err=%v", restoredState, err)
-	}
+			target := filepath.Join(t.TempDir(), "restored-legacy-protocol")
+			restored, err := RestoreBackup(backupDir, target)
+			if err != nil {
+				t.Fatalf("RestoreBackup legacy protocol: %v", err)
+			}
+			restoredState, err := restored.store.LoadCoreProjectState()
+			if err != nil || restoredState == nil || restoredState.ProtocolVersion != from {
+				t.Fatalf("restored legacy protocol state=%+v err=%v", restoredState, err)
+			}
 
-	ack := map[string]any{
-		"project_id": state.ProjectID, "protocol_version": state.ProtocolVersion, "nonce": state.CapabilityNonce,
-		"capabilities": map[string]bool{"read": true, "write_utf8_json": true, "write_utf8_md": true},
-	}
-	writeJSONFile(t, filepath.Join(workspace, "setup", "capability-ack.json"), ack)
-	if err := os.WriteFile(filepath.Join(workspace, "setup", "capability-write-test.md"), []byte(state.MarkdownProbe), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := legacy.Reconcile(); err != nil {
-		t.Fatalf("Reconcile after protocol capability ack: %v", err)
-	}
-	next := readReady(t, workspace)
-	if next.AttemptID != production.ActiveAttempt.AttemptID || next.ProtocolVersion != protocol.CurrentVersion || next.TaskID != ready.TaskID {
-		t.Fatalf("READY after protocol migration=%+v production=%+v", next, production.ActiveAttempt)
+			writeCapabilityAckForTest(t, workspace)
+			if err := legacy.Reconcile(); err != nil {
+				t.Fatalf("Reconcile after protocol capability ack: %v", err)
+			}
+			next := readReady(t, workspace)
+			if next.AttemptID != production.ActiveAttempt.AttemptID ||
+				next.ProtocolVersion != protocol.CurrentVersion ||
+				next.TaskID != ready.TaskID {
+				t.Fatalf("READY after protocol migration=%+v production=%+v", next, production.ActiveAttempt)
+			}
+		})
 	}
 }
 
@@ -428,5 +445,110 @@ func TestPreparedProtocolMigrationRecoversIdempotently(t *testing.T) {
 	}
 	if second.Result != "NOOP" || second.CanonRootAfter != before.CanonRoot {
 		t.Fatalf("second migration=%+v", second)
+	}
+}
+
+func TestMigrateSchemaOneToTwoPreservesProductionBytesAndSetsLegacyMode(t *testing.T) {
+	project, local, _, _ := acceptedFoundationProject(t)
+	state, err := project.store.LoadCoreProjectState()
+	if err != nil {
+		t.Fatal(err)
+	}
+	state.SchemaVersion = 1
+	state.DesignMode = ""
+	if err := project.store.SaveCoreProjectState(state); err != nil {
+		t.Fatal(err)
+	}
+	productionPath := filepath.Join(local, "meta", "core", "production.json")
+	before, err := os.ReadFile(productionPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	backup := filepath.Join(t.TempDir(), "schema-one")
+	result, err := project.Migrate(backup)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.FromSchema != 1 || result.ToSchema != coreSchemaVersion {
+		t.Fatalf("result=%+v", result)
+	}
+	afterState, err := project.store.LoadCoreProjectState()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if afterState.SchemaVersion != coreSchemaVersion || afterState.DesignMode != domain.DesignModeLegacy {
+		t.Fatalf("state=%+v", afterState)
+	}
+	after, err := os.ReadFile(productionPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(before, after) {
+		t.Fatalf("schema migration changed production bytes\nbefore=%s\nafter=%s", before, after)
+	}
+}
+
+func TestCurrentReleaseMigratesInTwoExplicitStages(t *testing.T) {
+	project, _, _, ready := acceptedFoundationProject(t)
+
+	state, err := project.store.LoadCoreProjectState()
+	if err != nil {
+		t.Fatal(err)
+	}
+	state.SchemaVersion = 1
+	state.ProtocolVersion = protocol.PreviousVersion
+	state.DesignMode = ""
+	if err := project.store.SaveCoreProjectState(state); err != nil {
+		t.Fatal(err)
+	}
+
+	before, err := project.store.LoadCoreProductionState()
+	if err != nil {
+		t.Fatal(err)
+	}
+	beforeTaskID := before.ActiveTask.TaskID
+	beforeTarget := before.ActiveTask.Target
+	beforeRoot := before.CanonRoot
+
+	schemaBackup := filepath.Join(t.TempDir(), "before-schema-2")
+	first, err := project.Migrate(schemaBackup)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.FromSchema != 1 || first.ToSchema != 2 {
+		t.Fatalf("schema migration=%+v", first)
+	}
+
+	middle, err := project.store.LoadCoreProjectState()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if middle.DesignMode != domain.DesignModeLegacy ||
+		middle.ProtocolVersion != protocol.PreviousVersion {
+		t.Fatalf("middle state=%+v", middle)
+	}
+
+	protocolBackup := filepath.Join(t.TempDir(), "before-protocol-1-1")
+	second, err := project.Migrate(protocolBackup)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.FromProtocol != protocol.PreviousVersion ||
+		second.ToProtocol != protocol.CurrentVersion {
+		t.Fatalf("protocol migration=%+v", second)
+	}
+
+	after, err := project.store.LoadCoreProductionState()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.ActiveTask.TaskID != beforeTaskID ||
+		after.ActiveTask.Target != beforeTarget ||
+		after.CanonRoot != beforeRoot {
+		t.Fatalf("migration changed business progress: before=%+v after=%+v", before, after)
+	}
+	if after.ActiveAttempt.AttemptID == ready.AttemptID {
+		t.Fatal("protocol migration did not rebind active attempt")
 	}
 }

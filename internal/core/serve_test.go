@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/chenhongyang/novel-studio/internal/domain"
 )
 
 func TestServePollsAndSettlesWithoutFileEvent(t *testing.T) {
@@ -255,6 +257,17 @@ func TestDesignFoundationReconcileSettlesIntoCanonAndPublishesChapterReady(t *te
 	if _, err := os.Stat(filepath.Join(workspace, "exchange", "READY.json")); !os.IsNotExist(err) {
 		t.Fatalf("foundation_ready unexpectedly has READY before reconcile: %v", err)
 	}
+	preStatus, err := project.Status()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if preStatus.DesignMode != domain.DesignModeRequired ||
+		preStatus.DesignHead != fixture.FoundationRoot ||
+		preStatus.DesignCheckpoint != domain.DesignCheckpointFoundationReady ||
+		preStatus.FoundationDesignRoot != "" ||
+		preStatus.CanonRoot != "" {
+		t.Fatalf("pre-canon status=%+v fixture=%+v", preStatus, fixture)
+	}
 
 	if err := project.Reconcile(); err != nil {
 		t.Fatal(err)
@@ -270,6 +283,17 @@ func TestDesignFoundationReconcileSettlesIntoCanonAndPublishesChapterReady(t *te
 	}
 	if accepted[0].FoundationDesignRoot != fixture.FoundationRoot {
 		t.Fatalf("receipt foundation design root=%q want %q", accepted[0].FoundationDesignRoot, fixture.FoundationRoot)
+	}
+
+	status, err := project.Status()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status.DesignMode != domain.DesignModeRequired ||
+		status.DesignHead != fixture.FoundationRoot ||
+		status.DesignCheckpoint != domain.DesignCheckpointFoundationReady ||
+		status.FoundationDesignRoot != fixture.FoundationRoot {
+		t.Fatalf("status=%+v fixture=%+v", status, fixture)
 	}
 
 	state, err := project.store.LoadCoreProductionState()
@@ -293,4 +317,54 @@ func TestDesignFoundationReconcileSettlesIntoCanonAndPublishesChapterReady(t *te
 	)); !os.IsNotExist(err) {
 		t.Fatalf("internal foundation created external result: %v", err)
 	}
+}
+
+func TestServePollsRequiredDesignInboxWithoutFileEvent(t *testing.T) {
+	local := t.TempDir()
+	workspace := t.TempDir()
+	project, err := InitProject(InitOptions{
+		ProjectID:     "serve-design-idle",
+		LocalRoot:     local,
+		WorkspaceRoot: workspace,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeCapabilityAckForTest(t, workspace)
+	project.submissionQuietPeriod = 0
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- project.Serve(ctx, 10*time.Millisecond) }()
+	defer func() {
+		cancel()
+		if err := <-done; err != nil {
+			t.Fatalf("Serve: %v", err)
+		}
+	}()
+
+	submissionID := "design-serve-import"
+	writeDesignSubmissionForTest(t, project, submissionID, "import", map[string]any{
+		"brief.json": artifactImportEnvelope("creative_brief", nil, validCreativeBriefPayload()),
+	})
+	resultPath := filepath.Join(workspace, "exchange", "design", "result", submissionID+".json")
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		var result map[string]any
+		if err := readJSONFileIfExists(resultPath, &result); err == nil && result["result"] == "IMPORTED" {
+			if _, err := os.Stat(filepath.Join(workspace, "exchange", "READY.json")); !os.IsNotExist(err) {
+				t.Fatalf("required design import published production READY: %v", err)
+			}
+			status, err := project.Status()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if status.DesignMode != "required" || status.CanonRoot != "" || status.ActiveAttemptID != "" {
+				t.Fatalf("status=%+v", status)
+			}
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("serve did not process required design inbox on polling scan")
 }

@@ -223,23 +223,18 @@ func newCapabilityPassedProject(t *testing.T) (*Project, string, string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var challenge struct {
-		ProjectID       string `json:"project_id"`
-		ProtocolVersion string `json:"protocol_version"`
-		Nonce           string `json:"nonce"`
-		MarkdownProbe   string `json:"markdown_probe"`
-	}
-	readJSONFile(t, filepath.Join(workspace, "setup", "capability-challenge.json"), &challenge)
-	ack := map[string]any{
-		"project_id": challenge.ProjectID, "protocol_version": challenge.ProtocolVersion, "nonce": challenge.Nonce,
-		"capabilities": map[string]bool{"read": true, "write_utf8_json": true, "write_utf8_md": true},
-	}
-	writeJSONFile(t, filepath.Join(workspace, "setup", "capability-ack.json"), ack)
-	if err := os.WriteFile(filepath.Join(workspace, "setup", "capability-write-test.md"), []byte(challenge.MarkdownProbe), 0o644); err != nil {
+	state, err := project.store.LoadCoreProjectState()
+	if err != nil {
 		t.Fatal(err)
 	}
+	state.DesignMode = domain.DesignModeLegacy
+	if err := project.store.SaveCoreProjectState(state); err != nil {
+		t.Fatal(err)
+	}
+	writeCapabilityAckForTest(t, workspace)
 	return project, local, workspace
 }
+
 func validFoundationArtifacts() map[string][]byte {
 	return map[string][]byte{
 		"foundation.json":       []byte(`{"title":"测试书","protagonist":{"entity_type":"character","local_ref":"same"},"opening_location":{"entity_type":"location","local_ref":"same"}}`),

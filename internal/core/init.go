@@ -15,7 +15,7 @@ import (
 	"github.com/chenhongyang/novel-studio/internal/store"
 )
 
-const coreSchemaVersion = 1
+const coreSchemaVersion = 2
 
 var projectIDPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,63}$`)
 
@@ -94,6 +94,7 @@ func InitProject(opts InitOptions) (*Project, error) {
 			WorkspaceRoot:   workspaceResolved,
 			CapabilityNonce: nonce,
 			MarkdownProbe:   "novel-core-capability:" + nonce + "\n",
+			DesignMode:      domain.DesignModeRequired,
 		}
 		if err := st.SaveCoreProjectState(state); err != nil {
 			return nil, fmt.Errorf("save local project metadata: %w", err)
@@ -106,7 +107,9 @@ func InitProject(opts InitOptions) (*Project, error) {
 
 	for _, dir := range []string{
 		"setup", "exchange/outbox", "exchange/inbox", "exchange/result",
-		"exchange/control/inbox", "exchange/control/result", "published", "projection", "backup",
+		"exchange/control/inbox", "exchange/control/result",
+		"exchange/design/inbox", "exchange/design/result",
+		"published", "projection", "backup",
 	} {
 		if err := os.MkdirAll(filepath.Join(workspaceResolved, dir), 0o755); err != nil {
 			return nil, err

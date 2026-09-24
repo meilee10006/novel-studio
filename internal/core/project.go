@@ -23,20 +23,24 @@ type Project struct {
 }
 
 type Status struct {
-	Root              string   `json:"root"`
-	Initialized       bool     `json:"initialized"`
-	Warnings          []string `json:"warnings,omitempty"`
-	ProjectID         string   `json:"project_id,omitempty"`
-	ProtocolVersion   string   `json:"protocol_version,omitempty"`
-	Capability        string   `json:"capability,omitempty"`
-	CapabilityProblem string   `json:"capability_problem,omitempty"`
-	CanonRoot         string   `json:"canon_root,omitempty"`
-	ActiveTaskKind    string   `json:"active_task_kind,omitempty"`
-	ActiveTarget      string   `json:"active_target,omitempty"`
-	ActiveAttemptID   string   `json:"active_attempt_id,omitempty"`
-	BlockID           string   `json:"block_id,omitempty"`
-	ExportReady       bool     `json:"export_ready"`
-	ExportProblems    []string `json:"export_problems,omitempty"`
+	Root                 string   `json:"root"`
+	Initialized          bool     `json:"initialized"`
+	Warnings             []string `json:"warnings,omitempty"`
+	ProjectID            string   `json:"project_id,omitempty"`
+	ProtocolVersion      string   `json:"protocol_version,omitempty"`
+	Capability           string   `json:"capability,omitempty"`
+	CapabilityProblem    string   `json:"capability_problem,omitempty"`
+	DesignMode           string   `json:"design_mode,omitempty"`
+	DesignHead           string   `json:"design_head,omitempty"`
+	DesignCheckpoint     string   `json:"design_checkpoint,omitempty"`
+	FoundationDesignRoot string   `json:"foundation_design_root,omitempty"`
+	CanonRoot            string   `json:"canon_root,omitempty"`
+	ActiveTaskKind       string   `json:"active_task_kind,omitempty"`
+	ActiveTarget         string   `json:"active_target,omitempty"`
+	ActiveAttemptID      string   `json:"active_attempt_id,omitempty"`
+	BlockID              string   `json:"block_id,omitempty"`
+	ExportReady          bool     `json:"export_ready"`
+	ExportProblems       []string `json:"export_problems,omitempty"`
 }
 
 type Verification struct {
@@ -46,19 +50,23 @@ type Verification struct {
 }
 
 type workspaceStatus struct {
-	SchemaVersion     int      `json:"schema_version"`
-	ProjectID         string   `json:"project_id"`
-	ProtocolVersion   string   `json:"protocol_version"`
-	Capability        string   `json:"capability"`
-	CapabilityProblem string   `json:"capability_problem,omitempty"`
-	CanonRoot         string   `json:"canon_root,omitempty"`
-	ActiveTaskKind    string   `json:"active_task_kind,omitempty"`
-	ActiveTarget      string   `json:"active_target,omitempty"`
-	ActiveAttemptID   string   `json:"active_attempt_id,omitempty"`
-	BlockID           string   `json:"block_id,omitempty"`
-	RevisionReplay    bool     `json:"revision_replay,omitempty"`
-	ExportReady       bool     `json:"export_ready"`
-	ExportProblems    []string `json:"export_problems,omitempty"`
+	SchemaVersion        int      `json:"schema_version"`
+	ProjectID            string   `json:"project_id"`
+	ProtocolVersion      string   `json:"protocol_version"`
+	Capability           string   `json:"capability"`
+	CapabilityProblem    string   `json:"capability_problem,omitempty"`
+	DesignMode           string   `json:"design_mode,omitempty"`
+	DesignHead           string   `json:"design_head,omitempty"`
+	DesignCheckpoint     string   `json:"design_checkpoint,omitempty"`
+	FoundationDesignRoot string   `json:"foundation_design_root,omitempty"`
+	CanonRoot            string   `json:"canon_root,omitempty"`
+	ActiveTaskKind       string   `json:"active_task_kind,omitempty"`
+	ActiveTarget         string   `json:"active_target,omitempty"`
+	ActiveAttemptID      string   `json:"active_attempt_id,omitempty"`
+	BlockID              string   `json:"block_id,omitempty"`
+	RevisionReplay       bool     `json:"revision_replay,omitempty"`
+	ExportReady          bool     `json:"export_ready"`
+	ExportProblems       []string `json:"export_problems,omitempty"`
 }
 
 func (p *Project) writeWorkspaceStatus(project *domain.CoreProjectState, production *domain.CoreProductionState) error {
@@ -68,8 +76,15 @@ func (p *Project) writeWorkspaceStatus(project *domain.CoreProjectState, product
 	capability, problem := capabilityStatus(project)
 	out := workspaceStatus{
 		SchemaVersion: coreSchemaVersion, ProjectID: project.ProjectID, ProtocolVersion: project.ProtocolVersion,
-		Capability: capability, CapabilityProblem: problem,
+		Capability: capability, CapabilityProblem: problem, DesignMode: project.DesignMode,
 	}
+	designHead, designCheckpoint, foundationDesignRoot, err := p.designStatusProjection(project)
+	if err != nil {
+		return err
+	}
+	out.DesignHead = designHead
+	out.DesignCheckpoint = designCheckpoint
+	out.FoundationDesignRoot = foundationDesignRoot
 	if production != nil {
 		out.CanonRoot = production.CanonRoot
 		if production.ActiveTask != nil {
@@ -90,6 +105,33 @@ func (p *Project) writeWorkspaceStatus(project *domain.CoreProjectState, product
 	}
 	out.ExportReady, out.ExportProblems = ready, problems
 	return writeWorkspaceJSON(project.WorkspaceRoot, "exchange/STATUS.json", out)
+}
+
+func (p *Project) designStatusProjection(
+	project *domain.CoreProjectState,
+) (designHead, designCheckpoint, foundationDesignRoot string, err error) {
+	if project == nil || project.DesignMode != domain.DesignModeRequired {
+		return "", "", "", nil
+	}
+	head, err := p.store.LoadCoreDesignHead()
+	if err != nil {
+		return "", "", "", err
+	}
+	if head != nil {
+		designHead = head.DesignRoot
+		designCheckpoint = head.Checkpoint
+	}
+	receipts, err := p.store.ListCoreReceipts()
+	if err != nil {
+		return "", "", "", err
+	}
+	for _, receipt := range receipts {
+		if receipt.Result == "ACCEPTED" && receipt.FoundationDesignRoot != "" {
+			foundationDesignRoot = receipt.FoundationDesignRoot
+			break
+		}
+	}
+	return designHead, designCheckpoint, foundationDesignRoot, nil
 }
 
 func (p *Project) deterministicExportReadiness(production *domain.CoreProductionState) (bool, []string, error) {
@@ -155,7 +197,15 @@ func (p *Project) Status() (Status, error) {
 		out.Initialized = true
 		out.ProjectID = state.ProjectID
 		out.ProtocolVersion = state.ProtocolVersion
+		out.DesignMode = state.DesignMode
 		out.Capability, out.CapabilityProblem = capabilityStatus(state)
+		designHead, designCheckpoint, foundationDesignRoot, err := p.designStatusProjection(state)
+		if err != nil {
+			return Status{}, fmt.Errorf("load design status: %w", err)
+		}
+		out.DesignHead = designHead
+		out.DesignCheckpoint = designCheckpoint
+		out.FoundationDesignRoot = foundationDesignRoot
 	}
 	production, err := p.store.LoadCoreProductionState()
 	if err != nil {

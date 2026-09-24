@@ -5,9 +5,14 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"time"
+
+	"github.com/chenhongyang/novel-studio/internal/domain"
 )
+
+var designSubmissionIDPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,127}$`)
 
 func (p *Project) Serve(ctx context.Context, scanInterval time.Duration) error {
 	if ctx == nil {
@@ -43,12 +48,30 @@ func (p *Project) servePassLocked() error {
 	if err := p.reconcileLocked(); err != nil {
 		return err
 	}
+	project, err := p.store.LoadCoreProjectState()
+	if err != nil || project == nil {
+		if err == nil {
+			err = fmt.Errorf("project is not initialized")
+		}
+		return err
+	}
 	production, err := p.store.LoadCoreProductionState()
 	if err != nil {
 		return err
 	}
-	// A successful reconcile with no active attempt is the capability-pending
-	// idle state. A later scan will create the first attempt after the ack lands.
+	if project.DesignMode == domain.DesignModeRequired &&
+		(production == nil || production.CanonRoot == "") {
+		if err := p.serveDesignInboxLocked(project); err != nil {
+			return err
+		}
+	}
+	if err := p.reconcileLocked(); err != nil {
+		return err
+	}
+	production, err = p.store.LoadCoreProductionState()
+	if err != nil {
+		return err
+	}
 	if production == nil || production.ActiveTask == nil || production.ActiveAttempt == nil {
 		return nil
 	}
@@ -59,6 +82,67 @@ func (p *Project) servePassLocked() error {
 		return err
 	}
 	_ = p.writeNotionProjectionLocked()
+	return nil
+}
+
+func (p *Project) serveDesignInboxLocked(project *domain.CoreProjectState) error {
+	if project == nil || project.DesignMode != domain.DesignModeRequired {
+		return nil
+	}
+	capability, _ := capabilityStatus(project)
+	if capability != "passed" {
+		return nil
+	}
+	production, err := p.store.LoadCoreProductionState()
+	if err != nil {
+		return err
+	}
+	if production != nil && production.CanonRoot != "" {
+		return nil
+	}
+	head, err := p.store.LoadCoreDesignHead()
+	if err != nil {
+		return err
+	}
+	if head != nil && head.Checkpoint == domain.DesignCheckpointFoundationReady {
+		return nil
+	}
+
+	dir := filepath.Join(project.WorkspaceRoot, "exchange", "design", "inbox")
+	entries, err := os.ReadDir(dir)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	ids := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		if entry.Type()&os.ModeSymlink != 0 || !entry.IsDir() ||
+			!designSubmissionIDPattern.MatchString(entry.Name()) {
+			continue
+		}
+		ids = append(ids, entry.Name())
+	}
+	sort.Strings(ids)
+	for _, submissionID := range ids {
+		status, err := p.scanDesignSubmissionLocked(submissionID)
+		if err != nil {
+			return err
+		}
+		if status.State == "READY_TO_VALIDATE" {
+			if _, err := p.processDesignSubmissionLocked(submissionID); err != nil {
+				return err
+			}
+			head, err := p.store.LoadCoreDesignHead()
+			if err != nil {
+				return err
+			}
+			if head != nil && head.Checkpoint == domain.DesignCheckpointFoundationReady {
+				return nil
+			}
+		}
+	}
 	return nil
 }
 

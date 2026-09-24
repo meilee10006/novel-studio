@@ -34,19 +34,27 @@ func (p *Project) acquireProjectMutationLock() (func(), error) {
 		release()
 		return nil, fmt.Errorf("local protocol version %q requires explicit migration to %q", state.ProtocolVersion, protocol.CurrentVersion)
 	}
-	if receipt, err := p.store.LoadCoreMigrationReceipt(0, coreSchemaVersion); err != nil {
-		release()
-		return nil, err
-	} else if receipt != nil && receipt.State == "prepared" {
-		release()
-		return nil, fmt.Errorf("prepared schema migration requires recovery before mutation")
+	for _, from := range []int{0, 1} {
+		receipt, err := p.store.LoadCoreMigrationReceipt(from, coreSchemaVersion)
+		if err != nil {
+			release()
+			return nil, err
+		}
+		if receipt != nil && receipt.State == "prepared" {
+			release()
+			return nil, fmt.Errorf("prepared schema migration requires recovery before mutation")
+		}
 	}
-	if receipt, err := p.store.LoadCoreProtocolMigrationReceipt(protocol.LegacyVersion, protocol.CurrentVersion); err != nil {
-		release()
-		return nil, err
-	} else if receipt != nil && receipt.State == "prepared" {
-		release()
-		return nil, fmt.Errorf("prepared protocol migration requires recovery before mutation")
+	for _, from := range []string{protocol.LegacyVersion, protocol.PreviousVersion} {
+		receipt, err := p.store.LoadCoreProtocolMigrationReceipt(from, protocol.CurrentVersion)
+		if err != nil {
+			release()
+			return nil, err
+		}
+		if receipt != nil && receipt.State == "prepared" {
+			release()
+			return nil, fmt.Errorf("prepared protocol migration requires recovery before mutation")
+		}
 	}
 	return release, nil
 }
