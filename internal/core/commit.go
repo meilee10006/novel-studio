@@ -29,7 +29,14 @@ func (p *Project) recoverPendingCommit() error {
 		}
 		return err
 	}
-	_, err = p.applyChapterCommit(project, journal)
+	switch journal.Kind {
+	case "", "chapter", "revision":
+		_, err = p.applyChapterCommit(project, journal)
+	case "foundation":
+		_, err = p.applyFoundationCommit(project, journal)
+	default:
+		err = fmt.Errorf("unsupported pending commit kind %q", journal.Kind)
+	}
 	return err
 }
 
@@ -146,7 +153,7 @@ func (p *Project) prepareChapterCommit(project *domain.CoreProjectState, state *
 	next.ActiveTask, next.ActiveAttempt = nextTask, nextAttempt
 
 	journal := &domain.CoreCommitJournal{
-		SchemaVersion: coreSchemaVersion, State: "prepared",
+		SchemaVersion: coreSchemaVersion, State: "prepared", Kind: task.Kind,
 		TaskID: task.TaskID, AttemptID: attempt.AttemptID, Chapter: chapter,
 		PreviousRoot: parentRoot, NewRoot: newRoot,
 		ArtifactNames: artifactNames, CanonState: canonState, CanonHead: canonHead,

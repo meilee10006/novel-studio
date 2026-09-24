@@ -152,19 +152,23 @@ func (p *Project) settleFoundationLocked(sub FoundationSubmission) (FoundationSe
 	if len(violations) > 0 {
 		return p.rejectFoundation(projectState, state, task, attempt, violations)
 	}
-	return p.acceptFoundation(
+	journal, err := p.prepareFoundationCommit(
 		projectState,
 		state,
 		task,
 		attempt,
-		sub,
-		prepared.Canonical,
-		prepared.Mappings,
-		prepared.Longform,
-		prepared.Planning,
+		prepared,
+		"",
 	)
+	if err != nil {
+		return FoundationSettlement{}, err
+	}
+	return p.applyFoundationCommit(projectState, journal)
 }
 func validateSubmissionIdentity(project *domain.CoreProjectState, task *domain.CoreTask, attempt *domain.CoreAttempt, manifest protocol.SubmissionManifest) error {
+	if attemptInputSource(attempt) != "drive" {
+		return fmt.Errorf("active attempt does not accept Drive submission")
+	}
 	if manifest.SchemaVersion != protocol.MachineSchemaVersion {
 		return fmt.Errorf("unsupported submission schema version %d", manifest.SchemaVersion)
 	}
@@ -196,4 +200,70 @@ func validateSubmissionIdentity(project *domain.CoreProjectState, task *domain.C
 		}
 	}
 	return nil
+}
+
+func (p *Project) settleDesignFoundationAttemptLocked() (FoundationSettlement, error) {
+	project, err := p.store.LoadCoreProjectState()
+	if err != nil || project == nil {
+		if err == nil {
+			err = fmt.Errorf("project is not initialized")
+		}
+		return FoundationSettlement{}, err
+	}
+	if project.DesignMode != domain.DesignModeRequired {
+		return FoundationSettlement{}, fmt.Errorf("internal design foundation requires required design mode")
+	}
+	state, err := p.store.LoadCoreProductionState()
+	if err != nil || state == nil {
+		if err == nil {
+			err = fmt.Errorf("production state is missing")
+		}
+		return FoundationSettlement{}, err
+	}
+	if state.CanonRoot != "" {
+		return FoundationSettlement{}, fmt.Errorf("internal design foundation requires pre-canon state")
+	}
+	head, err := p.store.LoadCoreDesignHead()
+	if err != nil {
+		return FoundationSettlement{}, err
+	}
+	if head == nil || head.Checkpoint != domain.DesignCheckpointFoundationReady || head.DesignRoot == "" {
+		return FoundationSettlement{}, fmt.Errorf("internal design foundation requires foundation_ready head")
+	}
+	task, attempt := state.ActiveTask, state.ActiveAttempt
+	if task == nil || attempt == nil || task.Kind != "foundation" {
+		return FoundationSettlement{}, fmt.Errorf("internal design foundation attempt is not active")
+	}
+	if attemptInputSource(attempt) != "design" {
+		return FoundationSettlement{}, fmt.Errorf("foundation attempt input source is not design")
+	}
+	if attempt.InputRef != head.DesignRoot {
+		return FoundationSettlement{}, fmt.Errorf("foundation attempt input ref does not match design head")
+	}
+	files, err := p.store.ReadCoreSnapshot(attempt.AttemptID, foundationArtifactNames)
+	if err != nil {
+		return FoundationSettlement{}, err
+	}
+	prepared, violations, err := prepareFoundationArtifacts(files, state)
+	if err != nil {
+		return FoundationSettlement{}, fmt.Errorf("foundation-ready snapshot integrity: %w", err)
+	}
+	if len(violations) != 0 {
+		return FoundationSettlement{}, fmt.Errorf(
+			"foundation-ready snapshot integrity violations: %s",
+			strings.Join(violations, "; "),
+		)
+	}
+	journal, err := p.prepareFoundationCommit(
+		project,
+		state,
+		task,
+		attempt,
+		prepared,
+		head.DesignRoot,
+	)
+	if err != nil {
+		return FoundationSettlement{}, err
+	}
+	return p.applyFoundationCommit(project, journal)
 }

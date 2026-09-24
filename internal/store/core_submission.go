@@ -89,3 +89,36 @@ func compareExistingSnapshot(base string, files map[string][]byte) error {
 	}
 	return nil
 }
+
+func (s *CoreStore) ReadCoreSnapshot(attemptID string, names []string) (map[string][]byte, error) {
+	if attemptID == "" {
+		return nil, fmt.Errorf("snapshot attempt id is required")
+	}
+	base := filepath.Join("meta", "core", "snapshots", attemptID)
+	entries, err := os.ReadDir(s.io.path(base))
+	if err != nil {
+		return nil, err
+	}
+	required := make(map[string]bool, len(names))
+	for _, name := range names {
+		if name == "" || filepath.Base(name) != name || required[name] {
+			return nil, fmt.Errorf("invalid required snapshot artifact %q", name)
+		}
+		required[name] = true
+	}
+	if len(entries) != len(required) {
+		return nil, fmt.Errorf("snapshot artifact set differs from required files")
+	}
+	out := make(map[string][]byte, len(required))
+	for _, entry := range entries {
+		if entry.IsDir() || entry.Type()&os.ModeSymlink != 0 || !required[entry.Name()] {
+			return nil, fmt.Errorf("snapshot artifact set differs from required files")
+		}
+		data, err := s.io.ReadFile(filepath.Join(base, entry.Name()))
+		if err != nil {
+			return nil, err
+		}
+		out[entry.Name()] = data
+	}
+	return out, nil
+}

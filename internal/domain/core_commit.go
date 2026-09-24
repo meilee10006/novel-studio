@@ -4,6 +4,7 @@ package domain
 type CoreCommitJournal struct {
 	SchemaVersion int                 `json:"schema_version"`
 	State         string              `json:"state"`
+	Kind          string              `json:"kind,omitempty"`
 	TaskID        string              `json:"task_id"`
 	AttemptID     string              `json:"attempt_id"`
 	Chapter       int                 `json:"chapter"`

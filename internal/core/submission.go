@@ -30,6 +30,9 @@ func (p *Project) scanActiveSubmissionLocked() (SubmissionStatus, error) {
 		return SubmissionStatus{}, err
 	}
 	task, attempt := production.ActiveTask, production.ActiveAttempt
+	if attemptInputSource(attempt) != "drive" {
+		return SubmissionStatus{}, fmt.Errorf("active attempt does not accept Drive submission")
+	}
 	record, err := p.store.LoadCoreSubmissionRecord(attempt.AttemptID)
 	if err != nil {
 		return SubmissionStatus{}, err

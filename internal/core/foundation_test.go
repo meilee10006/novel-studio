@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/chenhongyang/novel-studio/internal/domain"
 	"github.com/chenhongyang/novel-studio/internal/protocol"
 )
 
@@ -24,6 +25,12 @@ type readyView struct {
 	CompletionNonce string `json:"completion_nonce"`
 	Status          string `json:"status"`
 	BlockID         string `json:"block_id,omitempty"`
+}
+
+func TestAttemptInputSourceTreatsEmptyLegacyValueAsDrive(t *testing.T) {
+	if got := attemptInputSource(&domain.CoreAttempt{}); got != "drive" {
+		t.Fatalf("input source=%q", got)
+	}
 }
 
 func TestPrepareFoundationArtifactsDoesNotConsumeEntitySequence(t *testing.T) {

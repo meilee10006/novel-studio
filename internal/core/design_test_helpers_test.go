@@ -468,3 +468,45 @@ func importDesignArtifactWithSourcesForTest(
 	}
 	return result.Refs["artifact.json"]
 }
+
+func makeFoundationReadyProjectForTest(
+	t *testing.T,
+) (*Project, string, string, foundationDesignFixture) {
+	t.Helper()
+	project, local, workspace, fixture := makeStoryLockedProjectForTest(t)
+	bundleRef, reviewRef := importValidFoundationDesignForTest(
+		t,
+		project,
+		fixture.BriefRef,
+		fixture.DecisionsRef,
+		fixture.ConceptRef,
+	)
+	result := promoteForTest(
+		t,
+		project,
+		nextDesignSubmissionIDForTest(),
+		fixture.StoryRoot,
+		domain.DesignCheckpointFoundationReady,
+		bundleRef,
+		map[string]string{"foundation_readiness_review": reviewRef},
+	)
+	if result.Result != "PROMOTED" || result.NewDesignRoot == "" {
+		t.Fatalf("foundation ready result=%+v", result)
+	}
+	fixture.FoundationRoot = result.NewDesignRoot
+	fixture.BundleRef = bundleRef
+	fixture.ReviewRef = reviewRef
+	return project, local, workspace, fixture
+}
+
+func foundationAcceptedReceiptsForTest(
+	receipts []domain.CoreReceipt,
+) []domain.CoreReceipt {
+	var out []domain.CoreReceipt
+	for _, receipt := range receipts {
+		if receipt.Result == "ACCEPTED" && receipt.PreviousRoot == "" {
+			out = append(out, receipt)
+		}
+	}
+	return out
+}

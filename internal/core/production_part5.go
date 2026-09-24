@@ -5,68 +5,217 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"github.com/chenhongyang/novel-studio/internal/domain"
-	"github.com/chenhongyang/novel-studio/internal/protocol"
 	"path/filepath"
 	"sort"
 	"time"
+
+	"github.com/chenhongyang/novel-studio/internal/domain"
+	"github.com/chenhongyang/novel-studio/internal/protocol"
 )
 
-func (p *Project) acceptFoundation(project *domain.CoreProjectState, state *domain.CoreProductionState, task *domain.CoreTask, attempt *domain.CoreAttempt, sub FoundationSubmission, artifacts map[string][]byte, mappings []IDMapping, longform domain.CoreLongformState, planning domain.CorePlanningState) (FoundationSettlement, error) {
-	artifactDigests := digestArtifacts(artifacts)
+func (p *Project) prepareFoundationCommit(
+	project *domain.CoreProjectState,
+	state *domain.CoreProductionState,
+	task *domain.CoreTask,
+	attempt *domain.CoreAttempt,
+	prepared preparedFoundation,
+	foundationDesignRoot string,
+) (*domain.CoreCommitJournal, error) {
+	if project == nil || state == nil || task == nil || attempt == nil {
+		return nil, fmt.Errorf("foundation commit inputs are required")
+	}
+	artifactDigests := digestArtifacts(prepared.Canonical)
 	submissionDigest, err := digestArtifactManifest(artifactDigests)
 	if err != nil {
-		return FoundationSettlement{}, err
+		return nil, err
 	}
 	newRevision := state.Revision + 1
-	canonState := &domain.CoreCanonState{SchemaVersion: coreSchemaVersion, Revision: newRevision, ProjectID: project.ProjectID, LastTaskID: task.TaskID, LastAttemptID: attempt.AttemptID, Longform: longform, Planning: planning}
+	canonState := domain.CoreCanonState{
+		SchemaVersion: coreSchemaVersion,
+		Revision:      newRevision,
+		ProjectID:     project.ProjectID,
+		LastTaskID:    task.TaskID,
+		LastAttemptID: attempt.AttemptID,
+		Longform:      prepared.Longform,
+		Planning:      prepared.Planning,
+	}
 	stateDigest, err := digestJSON(canonState)
 	if err != nil {
-		return FoundationSettlement{}, err
+		return nil, err
 	}
 	newRoot, err := computeCanonRoot(newRevision, state.CanonRoot, stateDigest, artifactDigests)
 	if err != nil {
-		return FoundationSettlement{}, err
+		return nil, err
 	}
-	head := &domain.CoreCanonHead{SchemaVersion: coreSchemaVersion, Revision: newRevision, ParentRoot: state.CanonRoot, Root: newRoot, StateDigest: stateDigest, ArtifactDigests: artifactDigests}
-	if err := p.store.SaveCoreCanon(canonState, head, artifacts); err != nil {
-		return FoundationSettlement{}, err
+	canonHead := domain.CoreCanonHead{
+		SchemaVersion:   coreSchemaVersion,
+		Revision:        newRevision,
+		ParentRoot:      state.CanonRoot,
+		Root:            newRoot,
+		StateDigest:     stateDigest,
+		ArtifactDigests: artifactDigests,
 	}
-	validationDigest, _ := digestJSON(map[string]any{"result": "ACCEPTED", "violations": []string{}})
-	receipt := &domain.CoreReceipt{
-		SchemaVersion: coreSchemaVersion, ProjectID: project.ProjectID,
-		TaskID: task.TaskID, AttemptID: attempt.AttemptID, PreviousRoot: state.CanonRoot,
-		TaskDigest: attempt.TaskDigest, SubmissionDigest: submissionDigest, ArtifactDigests: artifactDigests,
-		ValidationDigest: validationDigest, Result: "ACCEPTED", NewRoot: newRoot,
-		IDMappings: mappings, CommittedAt: time.Now().UTC().Format(time.RFC3339Nano),
-	}
-	rel, err := p.store.SaveCoreReceipt(receipt)
+	validationDigest, err := digestJSON(map[string]any{
+		"result":     "ACCEPTED",
+		"violations": []string{},
+	})
 	if err != nil {
-		return FoundationSettlement{}, err
+		return nil, err
 	}
-	state.Revision, state.CanonRoot = newRevision, newRoot
-	state.NextEntitySeq += len(mappings)
-	chapterTask := newTask(state, "chapter", "chapter:1", newRoot)
-	addRollingPlanningObligation(chapterTask, planning, 1)
-	chapterAttempt, err := newAttempt(state, chapterTask, "initial", chapterArtifactNames, project.ProtocolVersion)
+	receipt := domain.CoreReceipt{
+		SchemaVersion:        coreSchemaVersion,
+		ProjectID:            project.ProjectID,
+		FoundationDesignRoot: foundationDesignRoot,
+		TaskID:               task.TaskID,
+		AttemptID:            attempt.AttemptID,
+		PreviousRoot:         state.CanonRoot,
+		TaskDigest:           attempt.TaskDigest,
+		SubmissionDigest:     submissionDigest,
+		ArtifactDigests:      artifactDigests,
+		ValidationDigest:     validationDigest,
+		Result:               "ACCEPTED",
+		NewRoot:              newRoot,
+		IDMappings:           prepared.Mappings,
+		CommittedAt:          time.Now().UTC().Format(time.RFC3339Nano),
+	}
+
+	next := *state
+	next.Revision = newRevision
+	next.CanonRoot = newRoot
+	next.NextEntitySeq += len(prepared.Mappings)
+	chapterTask := newTask(&next, "chapter", "chapter:1", newRoot)
+	addRollingPlanningObligation(chapterTask, prepared.Planning, 1)
+	chapterAttempt, err := newAttempt(
+		&next,
+		chapterTask,
+		"initial",
+		chapterArtifactNames,
+		project.ProtocolVersion,
+	)
 	if err != nil {
-		return FoundationSettlement{}, err
+		return nil, err
 	}
-	state.ActiveTask, state.ActiveAttempt = chapterTask, chapterAttempt
-	if err := p.store.SaveCoreProductionState(state); err != nil {
-		return FoundationSettlement{}, err
+	next.ActiveTask = chapterTask
+	next.ActiveAttempt = chapterAttempt
+
+	artifactNames := append([]string(nil), foundationArtifactNames...)
+	sort.Strings(artifactNames)
+	journal := &domain.CoreCommitJournal{
+		SchemaVersion: coreSchemaVersion,
+		State:         "prepared",
+		Kind:          "foundation",
+		TaskID:        task.TaskID,
+		AttemptID:     attempt.AttemptID,
+		PreviousRoot:  state.CanonRoot,
+		NewRoot:       newRoot,
+		ArtifactNames: artifactNames,
+		CanonState:    canonState,
+		CanonHead:     canonHead,
+		Receipt:       receipt,
+		NextState:     next,
 	}
-	if err := writeWorkspaceJSON(project.WorkspaceRoot, filepath.Join("exchange", "result", attempt.AttemptID+".json"), map[string]any{
-		"schema_version": protocol.MachineSchemaVersion, "task_id": task.TaskID,
-		"attempt_id": attempt.AttemptID, "result": "ACCEPTED", "new_canon_root": newRoot, "id_mappings": mappings,
-	}); err != nil {
-		return FoundationSettlement{}, err
+	if err := p.store.SaveCorePreparedArtifacts(attempt.AttemptID, prepared.Canonical); err != nil {
+		return nil, err
 	}
-	if err := p.writeActiveAttempt(project, state); err != nil {
-		return FoundationSettlement{}, err
+	if err := p.store.SaveCoreCommitJournal(journal); err != nil {
+		return nil, err
 	}
-	return FoundationSettlement{Result: "ACCEPTED", NewCanonRoot: newRoot, IDMappings: mappings, ReceiptPath: filepath.Join(p.root, rel)}, nil
+	return journal, nil
 }
+
+func (p *Project) applyFoundationCommit(
+	project *domain.CoreProjectState,
+	journal *domain.CoreCommitJournal,
+) (FoundationSettlement, error) {
+	if project == nil || journal == nil {
+		return FoundationSettlement{}, fmt.Errorf("foundation commit journal is required")
+	}
+	if journal.Kind != "foundation" {
+		return FoundationSettlement{}, fmt.Errorf("commit journal kind %q is not foundation", journal.Kind)
+	}
+	artifacts := make(map[string][]byte, len(journal.ArtifactNames))
+	for _, name := range journal.ArtifactNames {
+		data, err := p.store.ReadCorePreparedArtifact(journal.AttemptID, name)
+		if err != nil {
+			return FoundationSettlement{}, err
+		}
+		artifacts[name] = data
+	}
+
+	journal.State = "applying"
+	if err := p.store.SaveCoreCommitJournal(journal); err != nil {
+		return FoundationSettlement{}, err
+	}
+	if err := p.store.SaveCoreCanon(&journal.CanonState, &journal.CanonHead, artifacts); err != nil {
+		return FoundationSettlement{}, err
+	}
+	if err := p.maybeCommitFault("canon"); err != nil {
+		return FoundationSettlement{}, err
+	}
+
+	rel, err := p.store.SaveCoreReceipt(&journal.Receipt)
+	if err != nil {
+		return FoundationSettlement{}, err
+	}
+	if err := p.maybeCommitFault("receipt"); err != nil {
+		return FoundationSettlement{}, err
+	}
+	if err := p.store.SaveCoreProductionState(&journal.NextState); err != nil {
+		return FoundationSettlement{}, err
+	}
+	if err := p.maybeCommitFault("production"); err != nil {
+		return FoundationSettlement{}, err
+	}
+
+	if journal.Receipt.FoundationDesignRoot == "" {
+		record, err := p.store.LoadCoreSubmissionRecord(journal.AttemptID)
+		if err != nil {
+			return FoundationSettlement{}, err
+		}
+		if record != nil {
+			record.State = "SETTLED"
+			record.Result = "ACCEPTED"
+			record.NewCanonRoot = journal.NewRoot
+			record.ReceiptPath = rel
+			record.Problem = ""
+			if err := p.store.SaveCoreSubmissionRecord(record); err != nil {
+				return FoundationSettlement{}, err
+			}
+		}
+		if err := writeWorkspaceJSON(
+			project.WorkspaceRoot,
+			filepath.Join("exchange", "result", journal.AttemptID+".json"),
+			map[string]any{
+				"schema_version": protocol.MachineSchemaVersion,
+				"task_id":        journal.TaskID,
+				"attempt_id":     journal.AttemptID,
+				"result":         "ACCEPTED",
+				"new_canon_root": journal.NewRoot,
+				"id_mappings":    journal.Receipt.IDMappings,
+			},
+		); err != nil {
+			return FoundationSettlement{}, err
+		}
+	}
+
+	if err := p.writeActiveAttempt(project, &journal.NextState); err != nil {
+		return FoundationSettlement{}, err
+	}
+	if err := p.maybeCommitFault("ready"); err != nil {
+		return FoundationSettlement{}, err
+	}
+	journal.State = "committed"
+	if err := p.store.SaveCoreCommitJournal(journal); err != nil {
+		return FoundationSettlement{}, err
+	}
+	return FoundationSettlement{
+		Result:       "ACCEPTED",
+		NewCanonRoot: journal.NewRoot,
+		IDMappings:   journal.Receipt.IDMappings,
+		ReceiptPath:  filepath.Join(p.root, rel),
+	}, nil
+}
+
 func digestArtifacts(artifacts map[string][]byte) map[string]string {
 	out := make(map[string]string, len(artifacts))
 	for name, data := range artifacts {

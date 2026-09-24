@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -176,5 +178,119 @@ func TestServeWaitsWhileCapabilityPending(t *testing.T) {
 		}
 	case <-time.After(time.Second):
 		t.Fatal("Serve did not stop after context cancellation")
+	}
+}
+
+func TestInternalDesignFoundationAttemptRejectsDriveSubmission(t *testing.T) {
+	project, _, workspace, _ := makeFoundationReadyProjectForTest(t)
+	projectState, err := project.store.LoadCoreProjectState()
+	if err != nil {
+		t.Fatal(err)
+	}
+	head := mustDesignHeadForTest(t, project)
+	state := newCoreProductionState()
+	if err := project.ensureDesignFoundationAttemptLocked(projectState, state, head); err != nil {
+		t.Fatal(err)
+	}
+
+	stored, err := project.store.LoadCoreProductionState()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored == nil || stored.ActiveAttempt == nil ||
+		attemptInputSource(stored.ActiveAttempt) != "design" ||
+		stored.ActiveAttempt.InputRef != head.DesignRoot {
+		t.Fatalf("stored production=%+v head=%+v", stored, head)
+	}
+	if _, err := os.Stat(filepath.Join(workspace, "exchange", "READY.json")); !os.IsNotExist(err) {
+		t.Fatalf("internal foundation published READY: %v", err)
+	}
+	if _, err := project.ScanActiveSubmission(); err == nil ||
+		!strings.Contains(err.Error(), "does not accept Drive submission") {
+		t.Fatalf("ScanActiveSubmission err=%v", err)
+	}
+}
+
+func TestRequiredDesignReconcileWaitsForFoundationReady(t *testing.T) {
+	t.Run("no design head", func(t *testing.T) {
+		project, _, workspace := newRequiredDesignProjectForTest(t)
+		if err := project.Reconcile(); err != nil {
+			t.Fatal(err)
+		}
+		state, err := project.store.LoadCoreProductionState()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if state != nil {
+			t.Fatalf("required project created production state before design head: %+v", state)
+		}
+		if _, err := os.Stat(filepath.Join(workspace, "exchange", "READY.json")); !os.IsNotExist(err) {
+			t.Fatalf("required project published READY before design head: %v", err)
+		}
+	})
+
+	t.Run("story locked", func(t *testing.T) {
+		project, _, workspace, fixture := makeStoryLockedProjectForTest(t)
+		if fixture.StoryRoot == "" {
+			t.Fatal("story root is empty")
+		}
+		if err := project.Reconcile(); err != nil {
+			t.Fatal(err)
+		}
+		state, err := project.store.LoadCoreProductionState()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if state != nil {
+			t.Fatalf("required project created production state at story_locked: %+v", state)
+		}
+		if _, err := os.Stat(filepath.Join(workspace, "exchange", "READY.json")); !os.IsNotExist(err) {
+			t.Fatalf("story_locked project published Foundation READY: %v", err)
+		}
+	})
+}
+
+func TestDesignFoundationReconcileSettlesIntoCanonAndPublishesChapterReady(t *testing.T) {
+	project, _, workspace, fixture := makeFoundationReadyProjectForTest(t)
+	if _, err := os.Stat(filepath.Join(workspace, "exchange", "READY.json")); !os.IsNotExist(err) {
+		t.Fatalf("foundation_ready unexpectedly has READY before reconcile: %v", err)
+	}
+
+	if err := project.Reconcile(); err != nil {
+		t.Fatal(err)
+	}
+
+	receipts, err := project.store.ListCoreReceipts()
+	if err != nil {
+		t.Fatal(err)
+	}
+	accepted := foundationAcceptedReceiptsForTest(receipts)
+	if len(accepted) != 1 {
+		t.Fatalf("foundation accepted receipts=%+v all=%+v", accepted, receipts)
+	}
+	if accepted[0].FoundationDesignRoot != fixture.FoundationRoot {
+		t.Fatalf("receipt foundation design root=%q want %q", accepted[0].FoundationDesignRoot, fixture.FoundationRoot)
+	}
+
+	state, err := project.store.LoadCoreProductionState()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state == nil || state.CanonRoot == "" ||
+		state.ActiveTask == nil || state.ActiveTask.Kind != "chapter" || state.ActiveTask.Target != "chapter:1" ||
+		state.ActiveAttempt == nil || attemptInputSource(state.ActiveAttempt) != "drive" {
+		t.Fatalf("production state=%+v", state)
+	}
+	ready := readReady(t, workspace)
+	if ready.TaskKind != "chapter" || ready.Target != "chapter:1" ||
+		ready.AttemptID != state.ActiveAttempt.AttemptID ||
+		ready.BaseCanonRoot != state.CanonRoot {
+		t.Fatalf("READY=%+v state=%+v", ready, state)
+	}
+
+	if _, err := os.Stat(filepath.Join(
+		workspace, "exchange", "result", accepted[0].AttemptID+".json",
+	)); !os.IsNotExist(err) {
+		t.Fatalf("internal foundation created external result: %v", err)
 	}
 }

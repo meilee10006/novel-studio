@@ -24,6 +24,8 @@ type CoreAttempt struct {
 	TaskDigest        string   `json:"task_digest"`
 	CompletionNonce   string   `json:"completion_nonce"`
 	RequiredArtifacts []string `json:"required_artifacts"`
+	InputSource       string   `json:"input_source,omitempty"`
+	InputRef          string   `json:"input_ref,omitempty"`
 }
 
 type CoreBlock struct {
@@ -85,20 +87,21 @@ type CorePlanningState struct {
 }
 
 type CoreReceipt struct {
-	SchemaVersion    int               `json:"schema_version"`
-	ProjectID        string            `json:"project_id"`
-	TaskID           string            `json:"task_id"`
-	AttemptID        string            `json:"attempt_id"`
-	PreviousRoot     string            `json:"previous_root"`
-	TaskDigest       string            `json:"task_digest"`
-	SubmissionDigest string            `json:"submission_digest"`
-	ArtifactDigests  map[string]string `json:"artifact_digests"`
-	ValidationDigest string            `json:"validation_digest"`
-	Result           string            `json:"result"`
-	PlanningStatus   string            `json:"planning_status,omitempty"`
-	NewRoot          string            `json:"new_root"`
-	IDMappings       []CoreIDMapping   `json:"id_mappings,omitempty"`
-	CommittedAt      string            `json:"committed_at"`
+	SchemaVersion        int               `json:"schema_version"`
+	ProjectID            string            `json:"project_id"`
+	FoundationDesignRoot string            `json:"foundation_design_root,omitempty"`
+	TaskID               string            `json:"task_id"`
+	AttemptID            string            `json:"attempt_id"`
+	PreviousRoot         string            `json:"previous_root"`
+	TaskDigest           string            `json:"task_digest"`
+	SubmissionDigest     string            `json:"submission_digest"`
+	ArtifactDigests      map[string]string `json:"artifact_digests"`
+	ValidationDigest     string            `json:"validation_digest"`
+	Result               string            `json:"result"`
+	PlanningStatus       string            `json:"planning_status,omitempty"`
+	NewRoot              string            `json:"new_root"`
+	IDMappings           []CoreIDMapping   `json:"id_mappings,omitempty"`
+	CommittedAt          string            `json:"committed_at"`
 }
 
 type CoreCanonState struct {
