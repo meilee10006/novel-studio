@@ -208,7 +208,7 @@ func TestReleaseChecklistMarksProtocolOneZeroAcceptanceHistorical(t *testing.T) 
 		"protocol 1.0 / core schema 1",
 		"protocol 1.1 / core schema 2",
 		"不得继承旧 PASS",
-		"Real ChatGPT App + Google Drive protocol 1.1 product chain | NOT RUN",
+		"Real ChatGPT App + Google Drive protocol 1.1 product chain |",
 	} {
 		if !strings.Contains(text, want) {
 			t.Errorf("release checklist missing semantic-design acceptance marker %q", want)

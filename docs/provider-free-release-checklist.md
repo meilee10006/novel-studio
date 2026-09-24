@@ -14,9 +14,35 @@ Automated E2E may validate Core mechanics, but it does not replace the real ordi
 | Check | Status |
 | --- | --- |
 | Fresh required semantic-design automated E2E | PASS |
-| Real ChatGPT App + Google Drive protocol 1.1 product chain | NOT RUN |
-| New-session recovery from protocol 1.1 project files | NOT RUN |
-| protocol 1.1 verify + backup/restore product acceptance | NOT RUN |
+| Real ChatGPT App + Google Drive protocol 1.1 product chain | PASS |
+| New-session recovery from protocol 1.1 project files | PASS |
+| protocol 1.1 verify + backup/restore product acceptance | PASS |
+
+### Protocol 1.1 real product acceptance record
+
+Acceptance completed on 2026-09-25 (+08:00) against the real Google Drive workspace:
+
+`Google Drive/Novel Core Semantic Design Acceptance 2026-09-24/novel-core-workspace/`
+
+- `project_id`: `semantic-product-acceptance-20260924`
+- core schema: `2`
+- protocol version: `1.1`
+- `design_mode`: `required`
+- final `design_root`: `db18ebd3e51bcbf91f7bb0d01be0a31b715b61e9a4e3acdca2f4006ecff726b8`
+- final `canon_root`: `4845e5e8db57a16f6ee7bf74b1e587c080dd6b9d31610405b167652eb534cb89`
+- active production authority after first Canon: `chapter:1` / `attempt-000002`
+- story-lock result: `exchange/design/result/accept-s7-story-promote.json`
+- foundation-ready result: `exchange/design/result/accept-f10-foundation-promote.json`
+- story-lock receipt: `meta/core/design/receipts/accept-s7-story-promote.json`
+- foundation-ready receipt: `meta/core/design/receipts/accept-f10-foundation-promote.json`
+- Foundation ACCEPTED receipt: `meta/core/receipts/attempt-000001.json`
+- production pointer after internal Foundation settlement: `exchange/READY.json`
+
+The ordinary ChatGPT App new-session recovery check was performed without old chat context or a handoff summary. The new session read only the real project files (`project.json`, `CHATGPT_PROTOCOL.md`, `exchange/STATUS.json`, `exchange/READY.json`, plus the referenced current outbox) and independently recovered the same project/protocol/design/Canon roots and the same active `chapter:1` attempt.
+
+`novel-core verify` passed on the original acceptance project. A verified backup containing 100 Core files restored successfully to a new project root; the restored project preserved both final roots above and passed `novel-core verify`. Core serve and the real Drive transport were then restarted, and `STATUS.json` / `READY.json` resumed with the same authority.
+
+One fail-closed case occurred during the product run: the initial `accept-s1-brief` submission used Design manifest schema version `2` instead of machine schema version `1`, and Core rejected it as `INVALID` with `unsupported design manifest schema version 2`. It was corrected and resubmitted as `accept-s1-brief-v2`; no invalid submission was promoted or admitted to Design authority. No unresolved acceptance failures remain.
 
 ## Automated acceptance
 
