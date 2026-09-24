@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -342,5 +343,321 @@ func TestDesignImportBundleRejectsSlotTypeMismatch(t *testing.T) {
 	}
 	if result.Result != "INVALID" || !strings.Contains(result.Problem, "requires artifact type") {
 		t.Fatalf("slot mismatch result=%+v", result)
+	}
+}
+
+func TestStoryLockedRequiresExactReviewAndAuthorConfirmation(t *testing.T) {
+	project, _, _ := newRequiredDesignProjectForTest(t)
+
+	briefRef := importDesignArtifactForTest(t, project, "creative_brief", nil, validCreativeBriefPayload())
+	decisionsRef := importDesignArtifactForTest(t, project, "story_decisions", nil, validStoryDecisionsPayload())
+	conceptRef := importDesignArtifactForTest(
+		t, project, "story_concept", []string{briefRef, decisionsRef}, validStoryConceptPayload(),
+	)
+	bundleRef := importDesignBundleForTest(t, project, map[string]string{
+		"creative_brief":  briefRef,
+		"story_decisions": decisionsRef,
+		"story_concept":   conceptRef,
+	})
+
+	reviewRef := importDesignArtifactForTest(t, project, "story_review", nil, map[string]any{
+		"review_type":               "story_review",
+		"subject_ref":               conceptRef,
+		"policy_version":            1,
+		"verdict":                   "PASS",
+		"findings":                  []any{},
+		"created_from_context_refs": []any{briefRef, decisionsRef},
+	})
+	approvalRef := importDesignArtifactForTest(t, project, "author_confirmation", nil, map[string]any{
+		"subject_ref": conceptRef,
+		"decision":    "APPROVED",
+	})
+
+	result := promoteForTest(
+		t, project, "design-promote-story-001", "",
+		domain.DesignCheckpointStoryLocked,
+		bundleRef,
+		map[string]string{
+			"story_review":        reviewRef,
+			"author_confirmation": approvalRef,
+		},
+	)
+	if result.Result != "PROMOTED" || result.NewDesignRoot == "" {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
+func TestStoryLockedRejectsReviewForDifferentConcept(t *testing.T) {
+	project, _, _ := newRequiredDesignProjectForTest(t)
+	briefRef := importDesignArtifactForTest(t, project, "creative_brief", nil, validCreativeBriefPayload())
+	decisionsRef := importDesignArtifactForTest(t, project, "story_decisions", nil, validStoryDecisionsPayload())
+
+	oldPayload := validStoryConceptPayload()
+	oldPayload["story"] = "旧故事版本"
+	oldConceptRef := importDesignArtifactForTest(
+		t, project, "story_concept", []string{briefRef, decisionsRef}, oldPayload,
+	)
+	currentConceptRef := importDesignArtifactForTest(
+		t, project, "story_concept", []string{briefRef, decisionsRef}, validStoryConceptPayload(),
+	)
+	bundleRef := importDesignBundleForTest(t, project, map[string]string{
+		"creative_brief":  briefRef,
+		"story_decisions": decisionsRef,
+		"story_concept":   currentConceptRef,
+	})
+	reviewRef := importDesignArtifactForTest(t, project, "story_review", nil, map[string]any{
+		"review_type":               "story_review",
+		"subject_ref":               oldConceptRef,
+		"policy_version":            1,
+		"verdict":                   "PASS",
+		"findings":                  []any{},
+		"created_from_context_refs": []any{briefRef, decisionsRef},
+	})
+	approvalRef := importDesignArtifactForTest(t, project, "author_confirmation", nil, map[string]any{
+		"subject_ref": currentConceptRef,
+		"decision":    "APPROVED",
+	})
+
+	result := promoteForTest(
+		t, project, "design-promote-story-stale-review", "",
+		domain.DesignCheckpointStoryLocked, bundleRef,
+		map[string]string{
+			"story_review":        reviewRef,
+			"author_confirmation": approvalRef,
+		},
+	)
+	if result.Result != "INVALID" || !strings.Contains(result.Problem, "story_review") {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
+func TestStoryLockedRejectsAuthorConfirmationForDifferentConcept(t *testing.T) {
+	project, _, _ := newRequiredDesignProjectForTest(t)
+	briefRef := importDesignArtifactForTest(t, project, "creative_brief", nil, validCreativeBriefPayload())
+	decisionsRef := importDesignArtifactForTest(t, project, "story_decisions", nil, validStoryDecisionsPayload())
+
+	oldPayload := validStoryConceptPayload()
+	oldPayload["story"] = "旧故事版本"
+	oldConceptRef := importDesignArtifactForTest(t, project, "story_concept", []string{briefRef, decisionsRef}, oldPayload)
+	currentConceptRef := importDesignArtifactForTest(t, project, "story_concept", []string{briefRef, decisionsRef}, validStoryConceptPayload())
+	bundleRef := importDesignBundleForTest(t, project, map[string]string{
+		"creative_brief":  briefRef,
+		"story_decisions": decisionsRef,
+		"story_concept":   currentConceptRef,
+	})
+	reviewRef := importDesignArtifactForTest(t, project, "story_review", nil, map[string]any{
+		"review_type":               "story_review",
+		"subject_ref":               currentConceptRef,
+		"policy_version":            1,
+		"verdict":                   "PASS",
+		"findings":                  []any{},
+		"created_from_context_refs": []any{briefRef, decisionsRef},
+	})
+	approvalRef := importDesignArtifactForTest(t, project, "author_confirmation", nil, map[string]any{
+		"subject_ref": oldConceptRef,
+		"decision":    "APPROVED",
+	})
+
+	result := promoteForTest(
+		t, project, "design-promote-story-stale-confirmation", "",
+		domain.DesignCheckpointStoryLocked, bundleRef,
+		map[string]string{
+			"story_review":        reviewRef,
+			"author_confirmation": approvalRef,
+		},
+	)
+	if result.Result != "INVALID" || !strings.Contains(result.Problem, "author_confirmation") {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
+func TestStoryLockedRejectsBlockingOpenDecision(t *testing.T) {
+	project, _, _ := newRequiredDesignProjectForTest(t)
+	briefRef := importDesignArtifactForTest(t, project, "creative_brief", nil, validCreativeBriefPayload())
+	decisionsPayload := validStoryDecisionsPayload()
+	decisionsPayload["decisions"] = []any{
+		map[string]any{
+			"id":        "story-decision-001",
+			"status":    "open",
+			"statement": "仍待作者确认",
+			"blocking":  true,
+		},
+	}
+	decisionsRef := importDesignArtifactForTest(t, project, "story_decisions", nil, decisionsPayload)
+	conceptRef := importDesignArtifactForTest(t, project, "story_concept", []string{briefRef, decisionsRef}, validStoryConceptPayload())
+	bundleRef := importDesignBundleForTest(t, project, map[string]string{
+		"creative_brief":  briefRef,
+		"story_decisions": decisionsRef,
+		"story_concept":   conceptRef,
+	})
+	reviewRef := importDesignArtifactForTest(t, project, "story_review", nil, map[string]any{
+		"review_type": "story_review", "subject_ref": conceptRef, "policy_version": 1, "verdict": "PASS",
+		"findings": []any{}, "created_from_context_refs": []any{briefRef, decisionsRef},
+	})
+	approvalRef := importDesignArtifactForTest(t, project, "author_confirmation", nil, map[string]any{
+		"subject_ref": conceptRef, "decision": "APPROVED",
+	})
+
+	result := promoteForTest(
+		t, project, "design-promote-story-blocking-open", "",
+		domain.DesignCheckpointStoryLocked, bundleRef,
+		map[string]string{"story_review": reviewRef, "author_confirmation": approvalRef},
+	)
+	if result.Result != "INVALID" || !strings.Contains(result.Problem, "blocking") {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
+func TestStoryLockedRejectsInvalidCreativeBriefShape(t *testing.T) {
+	project, _, _ := newRequiredDesignProjectForTest(t)
+	briefPayload := validCreativeBriefPayload()
+	briefPayload["preferences"] = []any{"故事主线优先", "故事主线优先"}
+	briefRef := importDesignArtifactForTest(t, project, "creative_brief", nil, briefPayload)
+	decisionsRef := importDesignArtifactForTest(t, project, "story_decisions", nil, validStoryDecisionsPayload())
+	conceptRef := importDesignArtifactForTest(t, project, "story_concept", []string{briefRef, decisionsRef}, validStoryConceptPayload())
+	bundleRef := importDesignBundleForTest(t, project, map[string]string{
+		"creative_brief":  briefRef,
+		"story_decisions": decisionsRef,
+		"story_concept":   conceptRef,
+	})
+	reviewRef := importDesignArtifactForTest(t, project, "story_review", nil, map[string]any{
+		"review_type": "story_review", "subject_ref": conceptRef, "policy_version": 1, "verdict": "PASS",
+		"findings": []any{}, "created_from_context_refs": []any{briefRef, decisionsRef},
+	})
+	approvalRef := importDesignArtifactForTest(t, project, "author_confirmation", nil, map[string]any{
+		"subject_ref": conceptRef, "decision": "APPROVED",
+	})
+
+	result := promoteForTest(
+		t, project, "design-promote-story-bad-brief", "",
+		domain.DesignCheckpointStoryLocked, bundleRef,
+		map[string]string{"story_review": reviewRef, "author_confirmation": approvalRef},
+	)
+	if result.Result != "INVALID" || !strings.Contains(result.Problem, "creative_brief") {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
+func TestStoryLockedRejectsEmptyStoryConceptField(t *testing.T) {
+	project, _, _ := newRequiredDesignProjectForTest(t)
+	briefRef := importDesignArtifactForTest(t, project, "creative_brief", nil, validCreativeBriefPayload())
+	decisionsRef := importDesignArtifactForTest(t, project, "story_decisions", nil, validStoryDecisionsPayload())
+	conceptPayload := validStoryConceptPayload()
+	conceptPayload["central_conflict"] = ""
+	conceptRef := importDesignArtifactForTest(t, project, "story_concept", []string{briefRef, decisionsRef}, conceptPayload)
+	bundleRef := importDesignBundleForTest(t, project, map[string]string{
+		"creative_brief":  briefRef,
+		"story_decisions": decisionsRef,
+		"story_concept":   conceptRef,
+	})
+	reviewRef := importDesignArtifactForTest(t, project, "story_review", nil, map[string]any{
+		"review_type": "story_review", "subject_ref": conceptRef, "policy_version": 1, "verdict": "PASS",
+		"findings": []any{}, "created_from_context_refs": []any{briefRef, decisionsRef},
+	})
+	approvalRef := importDesignArtifactForTest(t, project, "author_confirmation", nil, map[string]any{
+		"subject_ref": conceptRef, "decision": "APPROVED",
+	})
+
+	result := promoteForTest(
+		t, project, "design-promote-story-empty-concept", "",
+		domain.DesignCheckpointStoryLocked, bundleRef,
+		map[string]string{"story_review": reviewRef, "author_confirmation": approvalRef},
+	)
+	if result.Result != "INVALID" || !strings.Contains(result.Problem, "story_concept") {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
+func TestDesignPromoteRejectsStaleExpectedRoot(t *testing.T) {
+	project, _, _ := newRequiredDesignProjectForTest(t)
+	bundleRef, evidence := validStoryLockInputsForTest(t, project)
+
+	first := promoteForTest(
+		t, project, "design-promote-cas-1", "",
+		domain.DesignCheckpointStoryLocked, bundleRef, evidence,
+	)
+	if first.Result != "PROMOTED" {
+		t.Fatalf("first=%+v", first)
+	}
+
+	stale := promoteForTest(
+		t, project, "design-promote-cas-2", "",
+		domain.DesignCheckpointStoryLocked, bundleRef, evidence,
+	)
+	if stale.Result != "STALE_DESIGN_HEAD" {
+		t.Fatalf("stale=%+v", stale)
+	}
+	if stale.NewDesignRoot != first.NewDesignRoot {
+		t.Fatalf("stale current root=%q want %q", stale.NewDesignRoot, first.NewDesignRoot)
+	}
+}
+
+func TestDesignPromoteReplayUsesSettledSubmissionResult(t *testing.T) {
+	project, _, _ := newRequiredDesignProjectForTest(t)
+	bundleRef, evidence := validStoryLockInputsForTest(t, project)
+
+	first := promoteForTest(
+		t, project, "design-promote-replay", "",
+		domain.DesignCheckpointStoryLocked, bundleRef, evidence,
+	)
+	second := promoteForTest(
+		t, project, "design-promote-replay", "",
+		domain.DesignCheckpointStoryLocked, bundleRef, evidence,
+	)
+	if !reflect.DeepEqual(first, second) {
+		t.Fatalf("replay changed result: first=%+v second=%+v", first, second)
+	}
+}
+
+func TestStoryLockedCanAdvanceToNewStoryLockedWithCurrentExpectedRoot(t *testing.T) {
+	project, _, _ := newRequiredDesignProjectForTest(t)
+	firstBundle, firstEvidence := validStoryLockInputsForTest(t, project)
+	first := promoteForTest(
+		t, project, "design-promote-relock-1", "",
+		domain.DesignCheckpointStoryLocked, firstBundle, firstEvidence,
+	)
+	if first.Result != "PROMOTED" {
+		t.Fatalf("first=%+v", first)
+	}
+
+	briefRef := importDesignArtifactForTest(t, project, "creative_brief", nil, validCreativeBriefPayload())
+	decisionsRef := importDesignArtifactForTest(t, project, "story_decisions", nil, validStoryDecisionsPayload())
+	nextConcept := validStoryConceptPayload()
+	nextConcept["story"] = "重新锁定后的故事版本"
+	conceptRef := importDesignArtifactForTest(t, project, "story_concept", []string{briefRef, decisionsRef}, nextConcept)
+	bundleRef := importDesignBundleForTest(t, project, map[string]string{
+		"creative_brief":  briefRef,
+		"story_decisions": decisionsRef,
+		"story_concept":   conceptRef,
+	})
+	reviewRef := importDesignArtifactForTest(t, project, "story_review", nil, map[string]any{
+		"review_type":               "story_review",
+		"subject_ref":               conceptRef,
+		"policy_version":            1,
+		"verdict":                   "PASS",
+		"findings":                  []any{},
+		"created_from_context_refs": []any{briefRef, decisionsRef},
+	})
+	approvalRef := importDesignArtifactForTest(t, project, "author_confirmation", nil, map[string]any{
+		"subject_ref": conceptRef,
+		"decision":    "APPROVED",
+	})
+	second := promoteForTest(
+		t, project, "design-promote-relock-2", first.NewDesignRoot,
+		domain.DesignCheckpointStoryLocked, bundleRef,
+		map[string]string{
+			"story_review":        reviewRef,
+			"author_confirmation": approvalRef,
+		},
+	)
+	if second.Result != "PROMOTED" || second.PreviousDesignRoot != first.NewDesignRoot {
+		t.Fatalf("second=%+v first=%+v", second, first)
+	}
+	commit, err := project.store.LoadCoreDesignCommit(second.NewDesignRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if commit == nil || commit.ParentDesignRoot != first.NewDesignRoot {
+		t.Fatalf("second commit=%+v", commit)
 	}
 }

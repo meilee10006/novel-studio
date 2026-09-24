@@ -154,6 +154,9 @@ func (p *Project) processDesignSubmissionLocked(submissionID string) (domain.Cor
 	if record.State == "INVALID" {
 		return designResultFromRecord(record), nil
 	}
+	if record.State == "APPLYING" {
+		return p.finishPreparedDesignPromote(&record)
+	}
 	if record.State != "READY_TO_VALIDATE" {
 		return domain.CoreDesignSubmissionResult{}, fmt.Errorf("design submission is not ready to validate")
 	}
@@ -182,10 +185,258 @@ func (p *Project) processDesignSubmissionLocked(submissionID string) (domain.Cor
 	if canonHead != nil {
 		return p.rejectDesignSubmission(&record, "design authority is frozen after Canon exists")
 	}
-	if record.Operation != "import" {
+	switch record.Operation {
+	case "import":
+		return p.processDesignImport(project, &record)
+	case "promote":
+		return p.processDesignPromote(project, &record)
+	default:
 		return domain.CoreDesignSubmissionResult{}, fmt.Errorf("unsupported design operation")
 	}
-	return p.processDesignImport(project, &record)
+}
+
+func (p *Project) processDesignPromote(project *domain.CoreProjectState, record *domain.CoreDesignSubmissionRecord) (domain.CoreDesignSubmissionResult, error) {
+	manifestRaw, err := p.store.ReadCoreDesignSnapshotFile(record.SubmissionID, "manifest.json")
+	if err != nil {
+		return domain.CoreDesignSubmissionResult{}, err
+	}
+	var manifest protocol.DesignManifest
+	if err := protocol.DecodeJSON(manifestRaw, &manifest); err != nil {
+		return domain.CoreDesignSubmissionResult{}, err
+	}
+	if err := validateDesignManifest(project, record.SubmissionID, manifest); err != nil {
+		return p.rejectDesignSubmission(record, err.Error())
+	}
+	promoteRaw, err := p.store.ReadCoreDesignSnapshotFile(record.SubmissionID, "promote.json")
+	if err != nil {
+		return domain.CoreDesignSubmissionResult{}, err
+	}
+	all := map[string][]byte{"manifest.json": manifestRaw, "promote.json": promoteRaw}
+	snapshotDigest, err := digestArtifactManifest(digestArtifacts(all))
+	if err != nil {
+		return domain.CoreDesignSubmissionResult{}, err
+	}
+	if snapshotDigest != record.SnapshotDigest {
+		return domain.CoreDesignSubmissionResult{}, fmt.Errorf("local design snapshot digest mismatch")
+	}
+
+	var request protocol.DesignPromoteRequest
+	if err := protocol.DecodeJSON(promoteRaw, &request); err != nil {
+		return p.rejectDesignSubmission(record, err.Error())
+	}
+	if request.SchemaVersion != protocol.MachineSchemaVersion ||
+		request.ProjectID != project.ProjectID ||
+		request.SubmissionID != record.SubmissionID ||
+		request.ProtocolVersion != project.ProtocolVersion {
+		return p.rejectDesignSubmission(record, "design promote request identity does not match locked submission")
+	}
+	if request.BundleRef == "" {
+		return p.rejectDesignSubmission(record, "design promote request bundle_ref is required")
+	}
+	return p.promoteDesignLocked(request, record)
+}
+
+func (p *Project) promoteDesignLocked(request protocol.DesignPromoteRequest, record *domain.CoreDesignSubmissionRecord) (domain.CoreDesignSubmissionResult, error) {
+	head, err := p.store.LoadCoreDesignHead()
+	if err != nil {
+		return domain.CoreDesignSubmissionResult{}, err
+	}
+	currentRoot := ""
+	if head != nil {
+		currentRoot = head.DesignRoot
+	}
+
+	if head == nil {
+		if request.ExpectedDesignRoot != "" {
+			return p.settleDesignPromoteOutcome(record, domain.CoreDesignSubmissionResult{
+				SchemaVersion: coreSchemaVersion, SubmissionID: record.SubmissionID,
+				Result: "STALE_DESIGN_HEAD", NewDesignRoot: currentRoot,
+				Problem: "expected design root does not match current design head",
+			}, "SETTLED")
+		}
+	} else {
+		if head.Checkpoint != domain.DesignCheckpointStoryLocked {
+			return p.settleDesignPromoteOutcome(record, domain.CoreDesignSubmissionResult{
+				SchemaVersion: coreSchemaVersion, SubmissionID: record.SubmissionID,
+				Result: "INVALID", PreviousDesignRoot: currentRoot,
+				Problem: "current design head is not story_locked",
+			}, "INVALID")
+		}
+		if request.ExpectedDesignRoot != head.DesignRoot {
+			return p.settleDesignPromoteOutcome(record, domain.CoreDesignSubmissionResult{
+				SchemaVersion: coreSchemaVersion, SubmissionID: record.SubmissionID,
+				Result: "STALE_DESIGN_HEAD", NewDesignRoot: currentRoot,
+				Problem: "expected design root does not match current design head",
+			}, "SETTLED")
+		}
+	}
+
+	if request.Checkpoint != domain.DesignCheckpointStoryLocked {
+		return p.settleDesignPromoteOutcome(record, domain.CoreDesignSubmissionResult{
+			SchemaVersion: coreSchemaVersion, SubmissionID: record.SubmissionID,
+			Result: "INVALID", PreviousDesignRoot: currentRoot,
+			Problem: "unsupported design checkpoint for this task",
+		}, "INVALID")
+	}
+	if err := p.validateStoryLocked(request.BundleRef, request.Evidence); err != nil {
+		return p.settleDesignPromoteOutcome(record, domain.CoreDesignSubmissionResult{
+			SchemaVersion: coreSchemaVersion, SubmissionID: record.SubmissionID,
+			Result: "INVALID", PreviousDesignRoot: currentRoot, Problem: err.Error(),
+		}, "INVALID")
+	}
+
+	commit := domain.CoreDesignCommit{
+		SchemaVersion:           coreSchemaVersion,
+		Checkpoint:              domain.DesignCheckpointStoryLocked,
+		ParentDesignRoot:        currentRoot,
+		BundleRef:               request.BundleRef,
+		Evidence:                cloneStringMap(request.Evidence),
+		CheckpointPolicyVersion: storyLockedCheckpointPolicyVersion,
+	}
+	root, err := computeDesignRoot(commit)
+	if err != nil {
+		return domain.CoreDesignSubmissionResult{}, err
+	}
+	record.State = "APPLYING"
+	record.PreviousDesignRoot = currentRoot
+	record.PreparedCommit = &commit
+	record.PreparedDesignRoot = root
+	record.Problem = ""
+	record.Result = ""
+	record.NewDesignRoot = ""
+	record.ReceiptPath = ""
+	if err := p.store.SaveCoreDesignSubmissionRecord(record); err != nil {
+		return domain.CoreDesignSubmissionResult{}, err
+	}
+	return p.finishPreparedDesignPromote(record)
+}
+
+func (p *Project) finishPreparedDesignPromote(record *domain.CoreDesignSubmissionRecord) (domain.CoreDesignSubmissionResult, error) {
+	if record == nil || record.PreparedCommit == nil || record.PreparedDesignRoot == "" {
+		return domain.CoreDesignSubmissionResult{}, fmt.Errorf("prepared design promote is incomplete")
+	}
+	project, err := p.store.LoadCoreProjectState()
+	if err != nil {
+		return domain.CoreDesignSubmissionResult{}, err
+	}
+	if project == nil {
+		return domain.CoreDesignSubmissionResult{}, fmt.Errorf("project is not initialized")
+	}
+	if err := p.store.SaveCoreDesignCommit(record.PreparedDesignRoot, record.PreparedCommit); err != nil {
+		return domain.CoreDesignSubmissionResult{}, err
+	}
+
+	head, err := p.store.LoadCoreDesignHead()
+	if err != nil {
+		return domain.CoreDesignSubmissionResult{}, err
+	}
+	currentRoot := ""
+	if head != nil {
+		currentRoot = head.DesignRoot
+	}
+	switch currentRoot {
+	case record.PreviousDesignRoot:
+		next := &domain.CoreDesignHead{
+			SchemaVersion: coreSchemaVersion,
+			DesignRoot:    record.PreparedDesignRoot,
+			Checkpoint:    record.PreparedCommit.Checkpoint,
+		}
+		if err := p.store.CompareAndSwapCoreDesignHead(record.PreviousDesignRoot, next); err != nil {
+			head, loadErr := p.store.LoadCoreDesignHead()
+			if loadErr != nil {
+				return domain.CoreDesignSubmissionResult{}, loadErr
+			}
+			if head == nil || head.DesignRoot != record.PreparedDesignRoot {
+				return p.settleDesignPromoteOutcome(record, domain.CoreDesignSubmissionResult{
+					SchemaVersion: coreSchemaVersion, SubmissionID: record.SubmissionID,
+					Result: "INVALID", PreviousDesignRoot: record.PreviousDesignRoot,
+					Problem: "design head changed while prepared promote was recovering",
+				}, "INVALID")
+			}
+		}
+	case record.PreparedDesignRoot:
+		// HEAD already advanced; continue receipt/result settlement.
+	default:
+		return p.settleDesignPromoteOutcome(record, domain.CoreDesignSubmissionResult{
+			SchemaVersion: coreSchemaVersion, SubmissionID: record.SubmissionID,
+			Result: "INVALID", PreviousDesignRoot: record.PreviousDesignRoot,
+			Problem: "design head changed while prepared promote was recovering",
+		}, "INVALID")
+	}
+
+	receipt, err := p.store.LoadCoreDesignReceipt(record.SubmissionID)
+	if err != nil {
+		return domain.CoreDesignSubmissionResult{}, err
+	}
+	if receipt == nil {
+		receipt = &domain.CoreDesignReceipt{
+			SchemaVersion:      coreSchemaVersion,
+			SubmissionID:       record.SubmissionID,
+			Operation:          "promote",
+			Result:             "PROMOTED",
+			SnapshotDigest:     record.SnapshotDigest,
+			PreviousDesignRoot: record.PreviousDesignRoot,
+			NewDesignRoot:      record.PreparedDesignRoot,
+			CommittedAt:        time.Now().UTC().Format(time.RFC3339Nano),
+		}
+	}
+	receiptRel, err := p.store.SaveCoreDesignReceipt(receipt)
+	if err != nil {
+		return domain.CoreDesignSubmissionResult{}, err
+	}
+	result := domain.CoreDesignSubmissionResult{
+		SchemaVersion:      coreSchemaVersion,
+		SubmissionID:       record.SubmissionID,
+		Result:             "PROMOTED",
+		PreviousDesignRoot: record.PreviousDesignRoot,
+		NewDesignRoot:      record.PreparedDesignRoot,
+		ReceiptRef:         receiptRel,
+	}
+	if err := writeWorkspaceJSON(project.WorkspaceRoot, filepath.Join("exchange", "design", "result", record.SubmissionID+".json"), result); err != nil {
+		return domain.CoreDesignSubmissionResult{}, err
+	}
+	record.State = "SETTLED"
+	record.Result = result.Result
+	record.NewDesignRoot = result.NewDesignRoot
+	record.ReceiptPath = receiptRel
+	record.Problem = ""
+	if err := p.store.SaveCoreDesignSubmissionRecord(record); err != nil {
+		return domain.CoreDesignSubmissionResult{}, err
+	}
+	return result, nil
+}
+
+func (p *Project) settleDesignPromoteOutcome(record *domain.CoreDesignSubmissionRecord, result domain.CoreDesignSubmissionResult, state string) (domain.CoreDesignSubmissionResult, error) {
+	project, err := p.store.LoadCoreProjectState()
+	if err != nil {
+		return domain.CoreDesignSubmissionResult{}, err
+	}
+	if project == nil {
+		return domain.CoreDesignSubmissionResult{}, fmt.Errorf("project is not initialized")
+	}
+	if err := writeWorkspaceJSON(project.WorkspaceRoot, filepath.Join("exchange", "design", "result", record.SubmissionID+".json"), result); err != nil {
+		return domain.CoreDesignSubmissionResult{}, err
+	}
+	record.State = state
+	record.Result = result.Result
+	record.PreviousDesignRoot = result.PreviousDesignRoot
+	record.NewDesignRoot = result.NewDesignRoot
+	record.Problem = result.Problem
+	if err := p.store.SaveCoreDesignSubmissionRecord(record); err != nil {
+		return domain.CoreDesignSubmissionResult{}, err
+	}
+	return result, nil
+}
+
+func cloneStringMap(in map[string]string) map[string]string {
+	if in == nil {
+		return nil
+	}
+	out := make(map[string]string, len(in))
+	for key, value := range in {
+		out[key] = value
+	}
+	return out
 }
 
 func (p *Project) processDesignImport(project *domain.CoreProjectState, record *domain.CoreDesignSubmissionRecord) (domain.CoreDesignSubmissionResult, error) {
@@ -382,6 +633,9 @@ func validateDesignManifest(project *domain.CoreProjectState, submissionID strin
 	}
 	if len(manifest.Files) == 0 {
 		return fmt.Errorf("design submission has no files")
+	}
+	if manifest.Operation == "promote" && (len(manifest.Files) != 1 || manifest.Files[0] != "promote.json") {
+		return fmt.Errorf("promote design submission must contain only promote.json")
 	}
 	return nil
 }

@@ -112,7 +112,16 @@ func promoteForTest(t *testing.T, p *Project, submissionID, expectedRoot, checkp
 		"evidence":             evidence,
 	}
 	writeDesignSubmissionForTest(t, p, submissionID, "promote", map[string]any{"promote.json": request})
-	lockDesignSubmissionForTest(t, p, submissionID)
+	if _, err := p.ScanDesignSubmission(submissionID); err != nil {
+		t.Fatal(err)
+	}
+	status, err := p.ScanDesignSubmission(submissionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status.State != "READY_TO_VALIDATE" && status.State != "SETTLED" && status.State != "INVALID" {
+		t.Fatalf("promote submission state=%+v", status)
+	}
 	result, err := p.ProcessDesignSubmission(submissionID)
 	if err != nil {
 		t.Fatal(err)
@@ -190,5 +199,38 @@ func writeDesignSubmissionForTest(t *testing.T, p *Project, submissionID, operat
 	}
 	if err := os.WriteFile(filepath.Join(base, "manifest.json"), raw, 0o644); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func validStoryLockInputsForTest(
+	t *testing.T,
+	p *Project,
+) (bundleRef string, evidence map[string]string) {
+	t.Helper()
+	briefRef := importDesignArtifactForTest(t, p, "creative_brief", nil, validCreativeBriefPayload())
+	decisionsRef := importDesignArtifactForTest(t, p, "story_decisions", nil, validStoryDecisionsPayload())
+	conceptRef := importDesignArtifactForTest(
+		t, p, "story_concept", []string{briefRef, decisionsRef}, validStoryConceptPayload(),
+	)
+	bundleRef = importDesignBundleForTest(t, p, map[string]string{
+		"creative_brief":  briefRef,
+		"story_decisions": decisionsRef,
+		"story_concept":   conceptRef,
+	})
+	reviewRef := importDesignArtifactForTest(t, p, "story_review", nil, map[string]any{
+		"review_type":               "story_review",
+		"subject_ref":               conceptRef,
+		"policy_version":            1,
+		"verdict":                   "PASS",
+		"findings":                  []any{},
+		"created_from_context_refs": []any{briefRef, decisionsRef},
+	})
+	approvalRef := importDesignArtifactForTest(t, p, "author_confirmation", nil, map[string]any{
+		"subject_ref": conceptRef,
+		"decision":    "APPROVED",
+	})
+	return bundleRef, map[string]string{
+		"story_review":        reviewRef,
+		"author_confirmation": approvalRef,
 	}
 }

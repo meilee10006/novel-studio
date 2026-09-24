@@ -64,6 +64,8 @@ type CoreDesignSubmissionRecord struct {
 	PreviousDesignRoot string            `json:"previous_design_root,omitempty"`
 	NewDesignRoot      string            `json:"new_design_root,omitempty"`
 	ReceiptPath        string            `json:"receipt_path,omitempty"`
+	PreparedCommit     *CoreDesignCommit `json:"prepared_commit,omitempty"`
+	PreparedDesignRoot string            `json:"prepared_design_root,omitempty"`
 }
 
 type CoreDesignSubmissionResult struct {

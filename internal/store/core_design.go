@@ -176,3 +176,63 @@ func (s *CoreStore) ReadCoreDesignSnapshotFile(submissionID, name string) ([]byt
 	}
 	return s.io.ReadFile(filepath.Join(coreDesignSnapshotPath(submissionID), name))
 }
+
+func coreDesignReceiptPath(submissionID string) string {
+	return filepath.Join("meta", "core", "design", "receipts", submissionID+".json")
+}
+
+func (s *CoreStore) CompareAndSwapCoreDesignHead(expectedRoot string, head *domain.CoreDesignHead) error {
+	if head == nil || head.DesignRoot == "" {
+		return fmt.Errorf("design head with root is required")
+	}
+	data, err := json.MarshalIndent(head, "", "  ")
+	if err != nil {
+		return err
+	}
+	return s.io.WithWriteLock(func() error {
+		currentRoot := ""
+		existing, err := s.io.ReadFileUnlocked(coreDesignHeadPath)
+		if err == nil {
+			var current domain.CoreDesignHead
+			if err := json.Unmarshal(existing, &current); err != nil {
+				return err
+			}
+			currentRoot = current.DesignRoot
+		} else if !os.IsNotExist(err) {
+			return err
+		}
+		if currentRoot != expectedRoot {
+			return fmt.Errorf("design head CAS mismatch: current=%q expected=%q", currentRoot, expectedRoot)
+		}
+		return s.io.WriteFileUnlocked(coreDesignHeadPath, data)
+	})
+}
+
+func (s *CoreStore) SaveCoreDesignReceipt(receipt *domain.CoreDesignReceipt) (string, error) {
+	if receipt == nil || receipt.SubmissionID == "" || receipt.SubmissionID == "." || receipt.SubmissionID == ".." || filepath.Base(receipt.SubmissionID) != receipt.SubmissionID {
+		return "", fmt.Errorf("valid design receipt submission id is required")
+	}
+	rel := coreDesignReceiptPath(receipt.SubmissionID)
+	data, err := json.MarshalIndent(receipt, "", "  ")
+	if err != nil {
+		return "", err
+	}
+	if err := s.saveImmutableCoreDesignFile(rel, data); err != nil {
+		return "", err
+	}
+	return rel, nil
+}
+
+func (s *CoreStore) LoadCoreDesignReceipt(submissionID string) (*domain.CoreDesignReceipt, error) {
+	if submissionID == "" || submissionID == "." || submissionID == ".." || filepath.Base(submissionID) != submissionID {
+		return nil, fmt.Errorf("invalid design receipt submission id %q", submissionID)
+	}
+	var receipt domain.CoreDesignReceipt
+	if err := s.io.ReadJSON(coreDesignReceiptPath(submissionID), &receipt); err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &receipt, nil
+}
