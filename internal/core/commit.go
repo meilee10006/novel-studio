@@ -143,8 +143,8 @@ func (p *Project) prepareChapterCommit(project *domain.CoreProjectState, state *
 	}
 	addRollingPlanningObligation(nextTask, planning, chapter+1)
 	if planningRepair {
-		required = append(required, "planning_patch.json")
-		nextTask.Constraints = append(nextTask.Constraints, domain.CoreTaskConstraint{Kind: "planning_repair_required", Instruction: "Provide a valid next Arc plan before this chapter can be accepted."})
+		required = append(required, "planning_patch.json", "arc_rehearsal.json")
+		nextTask.Constraints = append(nextTask.Constraints, domain.CoreTaskConstraint{Kind: "planning_repair_required", Instruction: "Provide a valid next Arc plan with arc_rehearsal.json before this chapter can be accepted."})
 	}
 	nextAttempt, err := newAttempt(&next, nextTask, nextReason, required, project.ProtocolVersion)
 	if err != nil {

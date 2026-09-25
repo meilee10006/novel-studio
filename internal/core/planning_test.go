@@ -9,8 +9,9 @@ import (
 )
 
 func TestInvalidPlanningPatchDoesNotRejectLegalChapter(t *testing.T) {
-	project, workspace, ready := planningChapterReadyProject(t, 3, 1)
-	artifacts := validChapterArtifacts(1)
+	project, workspace, _ := planningChapterReadyProject(t, 3, 1)
+	ready := enableLegacyChapterForActiveAttempt(t, project)
+	artifacts := longformChapterArtifacts(1, nil)
 	artifacts["planning_patch.json"] = []byte(`{"next_arc":{"id":"arc-2","start_chapter":9,"end_chapter":10,"goal":"错误起点"}}`)
 	got := submitAndSettleChapter(t, project, workspace, ready, artifacts)
 	if got.Result != "ACCEPTED" || got.PlanningStatus != "rejected" {
@@ -34,6 +35,7 @@ func TestValidPlanningPatchAdvancesArcWithoutRepair(t *testing.T) {
 	project, workspace, ready := planningChapterReadyProject(t, 1, 1)
 	artifacts := validChapterArtifacts(1)
 	artifacts["planning_patch.json"] = []byte(`{"next_arc":{"id":"arc-2","start_chapter":2,"end_chapter":4,"goal":"进入人物互疑阶段"}}`)
+	artifacts["arc_rehearsal.json"] = validArcRehearsal(t, artifacts["planning_patch.json"])
 	got := submitAndSettleChapter(t, project, workspace, ready, artifacts)
 	if got.Result != "ACCEPTED" || got.PlanningStatus != "accepted" {
 		t.Fatalf("settlement=%+v", got)
@@ -113,6 +115,7 @@ func TestPlanningPatchBeforeBoundaryStaysQueued(t *testing.T) {
 	project, workspace, ready := planningChapterReadyProject(t, 3, 1)
 	artifacts := validChapterArtifacts(1)
 	artifacts["planning_patch.json"] = []byte(`{"next_arc":{"id":"arc-2","start_chapter":4,"end_chapter":6,"goal":"第二弧目标"}}`)
+	artifacts["arc_rehearsal.json"] = validArcRehearsal(t, artifacts["planning_patch.json"])
 	got := submitAndSettleChapter(t, project, workspace, ready, artifacts)
 	if got.Result != "ACCEPTED" || got.PlanningStatus != "accepted" {
 		t.Fatalf("settlement=%+v", got)
@@ -154,7 +157,9 @@ func assertNextTaskRequiresPlanningRepair(t *testing.T, workspace string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(taskRaw), "planning_patch.json") || !strings.Contains(string(constraintsRaw), "planning_repair_required") {
+	if !strings.Contains(string(taskRaw), "planning_patch.json") ||
+		!strings.Contains(string(taskRaw), "arc_rehearsal.json") ||
+		!strings.Contains(string(constraintsRaw), "planning_repair_required") {
 		t.Fatalf("repair requirement missing task=%s constraints=%s", taskRaw, constraintsRaw)
 	}
 }
@@ -196,6 +201,7 @@ func TestPlanningRepairAcceptsNextArcOnFirstChapterAfterBoundary(t *testing.T) {
 	nextReady := readReady(t, workspace)
 	artifacts := longformChapterArtifacts(2, nil)
 	artifacts["planning_patch.json"] = []byte(`{"next_arc":{"id":"arc-2","start_chapter":2,"end_chapter":4,"goal":"边界后修复规划"}}`)
+	artifacts["arc_rehearsal.json"] = validArcRehearsal(t, artifacts["planning_patch.json"])
 	second := submitAndSettleChapter(t, project, workspace, nextReady, artifacts)
 	if second.Result != "ACCEPTED" || second.PlanningStatus != "accepted" {
 		t.Fatalf("second settlement=%+v", second)

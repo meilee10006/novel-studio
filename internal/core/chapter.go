@@ -142,6 +142,16 @@ func (p *Project) settleActiveSnapshotLocked() (ChapterSettlement, error) {
 	if len(longformViolations) > 0 {
 		return p.rejectChapter(project, state, task, attempt, record, files, longformViolations)
 	}
+	qualityPlanning := isQualityChapterAttempt(attempt)
+	_, planningPatchPresent := files["planning_patch.json"]
+	_, rehearsalPresent := files["arc_rehearsal.json"]
+	if qualityPlanning && planningPatchPresent != rehearsalPresent {
+		if planningPatchPresent {
+			return p.rejectChapter(project, state, task, attempt, record, files, []string{"arc_rehearsal.json is required when planning_patch.json is submitted"}, "rejected")
+		}
+		return p.rejectChapter(project, state, task, attempt, record, files, []string{"planning_patch.json is required when arc_rehearsal.json is submitted"}, "rejected")
+	}
+
 	planningStatus, nextPlanning, planningCanonical, planningRepair, planningViolations, err := validateChapterPlanning(files, validationCanon.Planning, chapter, requiresArtifact(attempt, "planning_patch.json"))
 	if err != nil {
 		return ChapterSettlement{}, err
@@ -150,6 +160,16 @@ func (p *Project) settleActiveSnapshotLocked() (ChapterSettlement, error) {
 		return p.rejectChapter(project, state, task, attempt, record, files, planningViolations, planningStatus)
 	}
 	if planningStatus == "accepted" {
+		if qualityPlanning && rehearsalPresent {
+			rehearsalCanonical, rehearsalViolations, err := validateArcRehearsal(files["arc_rehearsal.json"], files["planning_patch.json"])
+			if err != nil {
+				return ChapterSettlement{}, err
+			}
+			if len(rehearsalViolations) > 0 {
+				return p.rejectChapter(project, state, task, attempt, record, files, rehearsalViolations, "rejected")
+			}
+			canonical["arc_rehearsal.json"] = rehearsalCanonical
+		}
 		canonical["planning_patch.json"] = planningCanonical
 	}
 	block, blockViolations, err := detectAuthorDecision(files, task, attempt)
