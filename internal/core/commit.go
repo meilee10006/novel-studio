@@ -118,7 +118,7 @@ func (p *Project) prepareChapterCommit(project *domain.CoreProjectState, state *
 		next.SupersededChapters = mergeSuperseded(state.SupersededChapters, state.RevisionReplay.Superseded)
 	}
 
-	required := append([]string(nil), chapterArtifactNames...)
+	required := append([]string(nil), qualityChapterArtifactNames...)
 	var nextTask *domain.CoreTask
 	nextReason := "initial"
 	switch task.Kind {

@@ -85,8 +85,18 @@ func (p *Project) settleActiveSnapshotLocked() (ChapterSettlement, error) {
 	if len(violations) > 0 {
 		return p.rejectChapter(project, state, task, attempt, record, files, violations)
 	}
+	if requiresArtifact(attempt, "chapter_plan.json") {
+		planCanonical, planViolations, err := validateChapterPlan(files["chapter_plan.json"], task)
+		if err != nil {
+			return ChapterSettlement{}, err
+		}
+		if len(planViolations) > 0 {
+			return p.rejectChapter(project, state, task, attempt, record, files, planViolations)
+		}
+		canonical["chapter_plan.json"] = planCanonical
+	}
 	if requiresArtifact(attempt, "chapter_review.json") {
-		reviewCanonical, reviewViolations, err := validateChapterReview(files["chapter_review.json"], files["chapter.md"])
+		reviewCanonical, reviewViolations, err := validateChapterReview(files["chapter_review.json"], files["chapter.md"], requiresArtifact(attempt, "chapter_plan.json"))
 		if err != nil {
 			return ChapterSettlement{}, err
 		}

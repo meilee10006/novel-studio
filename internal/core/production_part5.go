@@ -89,7 +89,7 @@ func (p *Project) prepareFoundationCommit(
 		&next,
 		chapterTask,
 		"initial",
-		chapterArtifactNames,
+		qualityChapterArtifactNames,
 		project.ProtocolVersion,
 	)
 	if err != nil {

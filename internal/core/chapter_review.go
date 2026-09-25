@@ -18,7 +18,7 @@ var requiredChapterReviewDimensions = []string{
 	"ending_hook",
 }
 
-func validateChapterReview(raw, chapterBody []byte) ([]byte, []string, error) {
+func validateChapterReview(raw, chapterBody []byte, requirePlan bool) ([]byte, []string, error) {
 	var review map[string]any
 	if err := protocol.DecodeJSON(raw, &review); err != nil {
 		return nil, nil, fmt.Errorf("chapter_review.json: %w", err)
@@ -27,6 +27,13 @@ func validateChapterReview(raw, chapterBody []byte) ([]byte, []string, error) {
 	var violations []string
 	if cleanString(review["subject_ref"]) != "chapter.md" {
 		violations = append(violations, "chapter_review.subject_ref must be chapter.md")
+	}
+	if rawPlanRef, exists := review["plan_ref"]; exists {
+		if cleanString(rawPlanRef) != "chapter_plan.json" {
+			violations = append(violations, "chapter_review.plan_ref must be chapter_plan.json")
+		}
+	} else if requirePlan {
+		violations = append(violations, "chapter_review.plan_ref is required")
 	}
 
 	dimensions, ok := review["dimensions"].(map[string]any)

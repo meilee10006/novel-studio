@@ -20,6 +20,10 @@ var chapterArtifactNames = []string{
 	"chapter.md", "chapter_contract.json", "events.json",
 	"self_review.json", "state_delta.json",
 }
+var qualityChapterArtifactNames = []string{
+	"chapter.md", "chapter_contract.json", "chapter_plan.json",
+	"chapter_review.json", "events.json", "self_review.json", "state_delta.json",
+}
 
 type IDMapping = domain.CoreIDMapping
 type FoundationSubmission struct {

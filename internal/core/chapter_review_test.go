@@ -17,7 +17,8 @@ var chapterReviewDimensions = []string{
 }
 
 func TestLegacyActiveChapterAttemptStillAcceptsWithoutChapterReview(t *testing.T) {
-	project, _, workspace, ready := acceptedFoundationProject(t)
+	project, _, workspace, _ := acceptedFoundationProject(t)
+	ready := enableLegacyChapterForActiveAttempt(t, project)
 	got := submitAndSettleChapter(t, project, workspace, ready, longformChapterArtifacts(1, nil))
 	if got.Result != "ACCEPTED" {
 		t.Fatalf("legacy settlement=%+v", got)
@@ -178,6 +179,34 @@ func TestQualityChapterReviewReviseForcesRewriteWithoutMovingCanon(t *testing.T)
 	}
 }
 
+func enableLegacyChapterForActiveAttempt(t *testing.T, project *Project) readyView {
+	t.Helper()
+	projectState, err := project.store.LoadCoreProjectState()
+	if err != nil {
+		t.Fatal(err)
+	}
+	state, err := project.store.LoadCoreProductionState()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if projectState == nil || state == nil || state.ActiveTask == nil || state.ActiveAttempt == nil {
+		t.Fatal("active production is missing")
+	}
+	attempt, err := newAttempt(state, state.ActiveTask, "legacy-compat-test", chapterArtifactNames, projectState.ProtocolVersion)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state.ActiveAttempt = attempt
+	state.ActiveBlock = nil
+	if err := project.store.SaveCoreProductionState(state); err != nil {
+		t.Fatal(err)
+	}
+	if err := project.writeActiveAttempt(projectState, state); err != nil {
+		t.Fatal(err)
+	}
+	return readReady(t, projectState.WorkspaceRoot)
+}
+
 func enableChapterReviewForActiveAttempt(t *testing.T, project *Project) readyView {
 	t.Helper()
 	projectState, err := project.store.LoadCoreProjectState()
@@ -191,7 +220,7 @@ func enableChapterReviewForActiveAttempt(t *testing.T, project *Project) readyVi
 	if projectState == nil || state == nil || state.ActiveTask == nil || state.ActiveAttempt == nil {
 		t.Fatal("active production is missing")
 	}
-	required := append([]string(nil), state.ActiveAttempt.RequiredArtifacts...)
+	required := append([]string(nil), chapterArtifactNames...)
 	required = append(required, "chapter_review.json")
 	attempt, err := newAttempt(state, state.ActiveTask, "quality-review-test", required, projectState.ProtocolVersion)
 	if err != nil {

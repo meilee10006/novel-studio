@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -190,19 +191,43 @@ func newChapterReadyProject(t *testing.T) (*Project, string, string) {
 }
 
 func validChapterArtifacts(chapter int) map[string][]byte {
+	plan, _ := json.Marshal(map[string]any{
+		"chapter": chapter, "base_canon_root": "__READY_BASE_CANON_ROOT__",
+		"objective": "推进本章主线", "reader_payoff": "给读者明确推进结果",
+		"beats":              []map[string]any{{"id": "beat-1", "intent": "建立压力"}, {"id": "beat-2", "intent": "行动并形成结果"}},
+		"ending_hook_intent": "推出下一章问题",
+	})
+	review := validChapterReviewMap("pass")
+	review["plan_ref"] = "chapter_plan.json"
+	reviewRaw, _ := json.Marshal(review)
 	return map[string][]byte{
 		"chapter.md":            []byte("第一章正文。主角来到起点。"),
 		"chapter_contract.json": []byte(`{"chapter":1,"declared_pov":"character-000001"}`),
+		"chapter_plan.json":     plan,
+		"chapter_review.json":   reviewRaw,
 		"events.json":           []byte(`{"events":[{"local_id":"e1","kind":"onscreen","evidence_anchor":"主角来到起点"}]}`),
 		"self_review.json":      []byte(`{"ok":true}`),
 		"state_delta.json":      []byte(`{"changes":[]}`),
 	}
 }
+func cloneArtifactBytes(input map[string][]byte) map[string][]byte {
+	out := make(map[string][]byte, len(input))
+	for name, data := range input {
+		out[name] = append([]byte(nil), data...)
+	}
+	return out
+}
+
 func writeSubmission(t *testing.T, workspace string, ready readyView, artifacts map[string][]byte, manifestOnly bool) {
 	t.Helper()
 	inbox := filepath.Join(workspace, "exchange", "inbox", ready.TaskID, ready.AttemptID)
 	if err := os.MkdirAll(inbox, 0o755); err != nil {
 		t.Fatal(err)
+	}
+	if raw, ok := artifacts["chapter_plan.json"]; ok {
+		patched := []byte(strings.ReplaceAll(string(raw), "__READY_BASE_CANON_ROOT__", ready.BaseCanonRoot))
+		artifacts = cloneArtifactBytes(artifacts)
+		artifacts["chapter_plan.json"] = patched
 	}
 	manifest := manifestForReady(ready, artifacts)
 	manifestRaw, err := json.Marshal(manifest)

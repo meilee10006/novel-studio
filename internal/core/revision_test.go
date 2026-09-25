@@ -128,8 +128,18 @@ func revisionChapterArtifacts(chapter int, marker string) map[string][]byte {
 	body := marker + "。主角看见门口的灯。"
 	contract, _ := json.Marshal(map[string]any{"chapter": chapter, "declared_pov": "character-000001"})
 	events, _ := json.Marshal(map[string]any{"events": []map[string]any{{"local_id": "e1", "kind": "onscreen", "evidence_anchor": "主角看见门口的灯"}}})
+	plan, _ := json.Marshal(map[string]any{
+		"chapter": chapter, "base_canon_root": "__READY_BASE_CANON_ROOT__",
+		"objective": "修订并推进本章", "reader_payoff": "保持修订后的剧情推进",
+		"beats":              []map[string]any{{"id": "beat-1", "intent": "承接前态"}, {"id": "beat-2", "intent": "完成修订目标"}},
+		"ending_hook_intent": "保持后续驱动力",
+	})
+	review := validChapterReviewMap("pass")
+	review["plan_ref"] = "chapter_plan.json"
+	reviewRaw, _ := json.Marshal(review)
 	return map[string][]byte{
 		"chapter.md": []byte(body), "chapter_contract.json": contract,
+		"chapter_plan.json": plan, "chapter_review.json": reviewRaw,
 		"events.json": events, "self_review.json": []byte(`{"ok":true}`), "state_delta.json": []byte(`{"changes":[]}`),
 	}
 }

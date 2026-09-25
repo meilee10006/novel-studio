@@ -703,7 +703,24 @@ func writeProtocolChapter(t *testing.T, workspace string, ready protocolChainRea
 	locationID := world[0].(map[string]any)["canon_id"].(string)
 
 	contract := map[string]any{"chapter": chapter, "declared_pov": characterID}
+	plan := map[string]any{
+		"chapter": chapter, "base_canon_root": ready.BaseCanonRoot,
+		"objective": "推进当前章节主线", "reader_payoff": "形成明确剧情推进",
+		"beats": []any{
+			map[string]any{"id": "beat-1", "intent": "建立当前压力"},
+			map[string]any{"id": "beat-2", "intent": "行动并形成结果"},
+		},
+		"ending_hook_intent": "推出下一章问题",
+	}
 	review := map[string]any{"ok": true}
+	qualityDimensions := map[string]any{}
+	for _, name := range []string{"story_progress", "reader_payoff", "pacing", "character_consistency", "world_consistency", "continuity", "ending_hook"} {
+		qualityDimensions[name] = map[string]any{"status": "pass", "note": "protocol E2E quality check"}
+	}
+	chapterReview := map[string]any{
+		"subject_ref": "chapter.md", "plan_ref": "chapter_plan.json", "verdict": "pass",
+		"dimensions": qualityDimensions, "issues": []any{},
+	}
 	changes := []any{}
 	if mode == "rewrite" {
 		contract["chapter"] = chapter + 100
@@ -726,12 +743,14 @@ func writeProtocolChapter(t *testing.T, workspace string, ready protocolChainRea
 		t.Fatal(err)
 	}
 	writeProtocolJSON(t, filepath.Join(base, "chapter_contract.json"), contract)
+	writeProtocolJSON(t, filepath.Join(base, "chapter_plan.json"), plan)
+	writeProtocolJSON(t, filepath.Join(base, "chapter_review.json"), chapterReview)
 	writeProtocolJSON(t, filepath.Join(base, "events.json"), map[string]any{"events": []any{map[string]any{
 		"local_id": fmt.Sprintf("e%d", chapter), "kind": "onscreen", "evidence_anchor": anchor, "observers": []string{characterID}, "actors": []string{characterID},
 	}}})
 	writeProtocolJSON(t, filepath.Join(base, "state_delta.json"), map[string]any{"changes": changes})
 	writeProtocolJSON(t, filepath.Join(base, "self_review.json"), review)
-	writeProtocolManifest(t, filepath.Join(base, "manifest.json"), ready, []string{"chapter.md", "chapter_contract.json", "events.json", "state_delta.json", "self_review.json"})
+	writeProtocolManifest(t, filepath.Join(base, "manifest.json"), ready, []string{"chapter.md", "chapter_contract.json", "chapter_plan.json", "chapter_review.json", "events.json", "state_delta.json", "self_review.json"})
 	_ = locationID
 }
 

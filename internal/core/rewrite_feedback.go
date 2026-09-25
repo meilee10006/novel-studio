@@ -70,6 +70,8 @@ func classifyRewriteViolation(violation string, task *domain.CoreTask) rewriteFe
 	switch {
 	case strings.Contains(lower, "chapter body"):
 		return rewriteFeedbackClass{"chapter.body.invalid", "chapter.md", "chapter.md contains a non-empty chapter body"}
+	case strings.Contains(lower, "chapter_plan"):
+		return rewriteFeedbackClass{"chapter_plan.invalid", "chapter_plan.json", "chapter_plan.json matches the active chapter and base Canon with at least two valid beats"}
 	case strings.Contains(lower, "chapter_review") && strings.Contains(lower, "verdict=revise"):
 		return rewriteFeedbackClass{"chapter_review.revise", "chapter_review.json", "chapter_review.json records verdict=pass for the replacement draft"}
 	case strings.Contains(lower, "chapter_review"):

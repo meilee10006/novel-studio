@@ -293,7 +293,7 @@ func (p *Project) prepareHistoricalRevision(project *domain.CoreProjectState, re
 	next.RevisionReplay = replay
 	task := newTaskPreservingPending(next, "revision", fmt.Sprintf("chapter:%d", message.Chapter), baseRoot)
 	task.Constraints = append(task.Constraints, constraint)
-	attempt, err := newAttempt(next, task, "initial", chapterArtifactNames, project.ProtocolVersion)
+	attempt, err := newAttempt(next, task, "initial", qualityChapterArtifactNames, project.ProtocolVersion)
 	if err != nil {
 		return ControlResult{}, err
 	}
