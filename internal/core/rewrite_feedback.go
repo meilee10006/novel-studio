@@ -70,6 +70,10 @@ func classifyRewriteViolation(violation string, task *domain.CoreTask) rewriteFe
 	switch {
 	case strings.Contains(lower, "chapter body"):
 		return rewriteFeedbackClass{"chapter.body.invalid", "chapter.md", "chapter.md contains a non-empty chapter body"}
+	case strings.Contains(lower, "chapter_review") && strings.Contains(lower, "verdict=revise"):
+		return rewriteFeedbackClass{"chapter_review.revise", "chapter_review.json", "chapter_review.json records verdict=pass for the replacement draft"}
+	case strings.Contains(lower, "chapter_review"):
+		return rewriteFeedbackClass{"chapter_review.invalid", "chapter_review.json", "chapter_review.json satisfies deterministic exact-snapshot review validation"}
 	case strings.Contains(lower, "self_review") || strings.Contains(lower, "author_decision_required") || strings.Contains(lower, "author decision"):
 		return rewriteFeedbackClass{"self_review.invalid", "self_review.json", "self_review.json satisfies deterministic review validation"}
 	case strings.Contains(lower, "chapter_contract.hard_constraints") || strings.Contains(lower, "duplicate hard constraint id"):

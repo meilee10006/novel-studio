@@ -85,6 +85,16 @@ func (p *Project) settleActiveSnapshotLocked() (ChapterSettlement, error) {
 	if len(violations) > 0 {
 		return p.rejectChapter(project, state, task, attempt, record, files, violations)
 	}
+	if requiresArtifact(attempt, "chapter_review.json") {
+		reviewCanonical, reviewViolations, err := validateChapterReview(files["chapter_review.json"], files["chapter.md"])
+		if err != nil {
+			return ChapterSettlement{}, err
+		}
+		if len(reviewViolations) > 0 {
+			return p.rejectChapter(project, state, task, attempt, record, files, reviewViolations)
+		}
+		canonical["chapter_review.json"] = reviewCanonical
+	}
 	canonRaw, err := p.store.ReadCoreCanonStateBytes()
 	if err != nil {
 		return ChapterSettlement{}, err
