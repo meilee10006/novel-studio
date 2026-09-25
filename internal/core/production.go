@@ -1,10 +1,14 @@
 package core
 
 import (
+	"bytes"
+	"errors"
 	"fmt"
+	"os"
+	"sort"
+
 	"github.com/chenhongyang/novel-studio/internal/domain"
 	"github.com/chenhongyang/novel-studio/internal/protocol"
-	"sort"
 )
 
 var foundationArtifactNames = []string{
@@ -72,6 +76,9 @@ func (p *Project) reconcileLocked() error {
 	}
 	if projectState == nil {
 		return fmt.Errorf("project is not initialized")
+	}
+	if err := refreshChatGPTProtocolProjection(projectState); err != nil {
+		return err
 	}
 	capability, problem := capabilityStatus(projectState)
 	if capability != "passed" {
@@ -299,4 +306,23 @@ func (p *Project) ensureDesignFoundationAttemptLocked(
 		return err
 	}
 	return p.store.SaveCoreSnapshot(state.ActiveAttempt.AttemptID, files)
+}
+
+func refreshChatGPTProtocolProjection(projectState *domain.CoreProjectState) error {
+	if projectState == nil {
+		return fmt.Errorf("project state is required")
+	}
+	const rel = "CHATGPT_PROTOCOL.md"
+	want := []byte(protocol.RenderChatGPTProtocol(projectState.ProjectID))
+	got, err := protocol.ReadUTF8(projectState.WorkspaceRoot, rel, protocol.DefaultMaxTextSize)
+	switch {
+	case err == nil && bytes.Equal(got, want):
+		return nil
+	case err == nil:
+		return protocol.WriteUTF8Atomic(projectState.WorkspaceRoot, rel, want, 0o644)
+	case errors.Is(err, os.ErrNotExist):
+		return protocol.WriteUTF8Atomic(projectState.WorkspaceRoot, rel, want, 0o644)
+	default:
+		return err
+	}
 }

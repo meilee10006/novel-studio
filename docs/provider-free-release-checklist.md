@@ -44,6 +44,19 @@ The ordinary ChatGPT App new-session recovery check was performed without old ch
 
 One fail-closed case occurred during the product run: the initial `accept-s1-brief` submission used Design manifest schema version `2` instead of machine schema version `1`, and Core rejected it as `INVALID` with `unsupported design manifest schema version 2`. It was corrected and resubmitted as `accept-s1-brief-v2`; no invalid submission was promoted or admitted to Design authority. No unresolved acceptance failures remain.
 
+## Protocol 1.1 chapter-quality artifact acceptance
+
+The chapter-quality extension keeps protocol 1.1 / machine schema 1 and negotiates the additional files through each attempt's existing `required_artifacts` + `task_digest`. Automated coverage does not inherit the semantic-design product PASS.
+
+| Check | Status |
+| --- | --- |
+| Fresh chapter-quality automated E2E | PASS |
+| Real ChatGPT App + Google Drive chapter-quality product chain | NOT RUN |
+| New-session recovery for chapter-quality project files | NOT RUN |
+| chapter-quality verify + backup/restore product acceptance | NOT RUN |
+
+The automated E2E proves the Core/file-protocol chain: explicit chapter plan → exact-snapshot reviewer `revise` → REWRITE without Canon movement → replacement ACCEPTED → rolling Arc rehearsal with at least two alternatives → selected planning patch ACCEPTED → next chapter READY. Real ordinary ChatGPT App + Google Drive acceptance remains a separate release boundary.
+
 ## Automated acceptance
 
 | Check | Status |

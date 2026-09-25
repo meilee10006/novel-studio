@@ -215,3 +215,41 @@ func TestReleaseChecklistMarksProtocolOneZeroAcceptanceHistorical(t *testing.T) 
 		}
 	}
 }
+
+func TestChapterQualityDocumentationSeparatesAutomatedAndProductAcceptance(t *testing.T) {
+	root := filepath.Clean(filepath.Join("..", ".."))
+
+	readmeRaw, err := os.ReadFile(filepath.Join(root, "README.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	readme := string(readmeRaw)
+	for _, want := range []string{
+		"chapter_plan.json",
+		"chapter_review.json",
+		"arc_rehearsal.json",
+		"required_artifacts",
+		"plan → draft → review",
+	} {
+		if !strings.Contains(readme, want) {
+			t.Errorf("README.md missing chapter-quality guidance %q", want)
+		}
+	}
+
+	checklistRaw, err := os.ReadFile(filepath.Join(root, "docs", "provider-free-release-checklist.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	checklist := string(checklistRaw)
+	for _, want := range []string{
+		"## Protocol 1.1 chapter-quality artifact acceptance",
+		"| Fresh chapter-quality automated E2E | PASS |",
+		"| Real ChatGPT App + Google Drive chapter-quality product chain | NOT RUN |",
+		"| New-session recovery for chapter-quality project files | NOT RUN |",
+		"| chapter-quality verify + backup/restore product acceptance | NOT RUN |",
+	} {
+		if !strings.Contains(checklist, want) {
+			t.Errorf("release checklist missing chapter-quality acceptance marker %q", want)
+		}
+	}
+}

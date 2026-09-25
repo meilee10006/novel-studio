@@ -132,10 +132,15 @@ func TestSemanticDesignProtocolChainCreatesFirstCanonWithoutFoundationTaskReady(
 		[]string{conceptRef, charactersRef, worldRef},
 		protocolFoundationPayload("foundation.json"),
 	)
+	bookPlanPayload := protocolFoundationPayload("book_plan.json").(map[string]any)
+	bookPlanPayload["current_arc"] = map[string]any{
+		"id": "arc-1", "start_chapter": 1, "end_chapter": 2,
+		"goal": "完成首轮危机并推出更高压竞争", "planning_lead_chapters": 1,
+	}
 	bookPlanRef := driveImportArtifactForProtocolChain(
 		t, project, workspace, "e2e-book-plan", "book_plan",
 		[]string{conceptRef, charactersRef, worldRef, endingRef},
-		protocolFoundationPayload("book_plan.json"),
+		bookPlanPayload,
 	)
 	styleRef := driveImportArtifactForProtocolChain(
 		t, project, workspace, "e2e-style", "style_profile",
@@ -212,6 +217,69 @@ func TestSemanticDesignProtocolChainCreatesFirstCanonWithoutFoundationTaskReady(
 	if ready.BaseCanonRoot != status.CanonRoot {
 		t.Fatalf("READY=%+v status=%+v", ready, status)
 	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- project.Serve(ctx, 20*time.Millisecond) }()
+	defer func() {
+		cancel()
+		if done == nil {
+			return
+		}
+		select {
+		case err := <-done:
+			if err != nil {
+				t.Fatalf("Serve: %v", err)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatal("Serve did not stop")
+		}
+	}()
+
+	chapterOneBase := status.CanonRoot
+	reviewAttempt := ready.AttemptID
+	writeProtocolChapter(t, workspace, ready, "review-revise")
+	waitProtocolResultWithRecord(
+		t, local, workspace,
+		filepath.Join(workspace, "exchange", "result", reviewAttempt+".json"),
+		reviewAttempt, "REWRITE",
+	)
+	afterReview := readProtocolStatus(t, workspace)
+	if afterReview.CanonRoot != chapterOneBase {
+		t.Fatalf("review rewrite moved Canon: before=%s after=%s", chapterOneBase, afterReview.CanonRoot)
+	}
+	ready = waitProtocolReady(t, workspace, func(r protocolChainReady) bool {
+		return r.Target == "chapter:1" && r.AttemptID != reviewAttempt
+	})
+	writeProtocolChapter(t, workspace, ready, "normal")
+	ready = waitProtocolReady(t, workspace, func(r protocolChainReady) bool { return r.Target == "chapter:2" })
+	if readProtocolStatus(t, workspace).CanonRoot == chapterOneBase {
+		t.Fatal("replacement chapter did not advance Canon")
+	}
+
+	planningAttempt := ready.AttemptID
+	writeProtocolChapter(t, workspace, ready, "planning")
+	waitProtocolResult(t, filepath.Join(workspace, "exchange", "result", planningAttempt+".json"), "ACCEPTED")
+	var planningResult struct {
+		PlanningStatus string `json:"planning_status"`
+	}
+	readProtocolJSON(t, filepath.Join(workspace, "exchange", "result", planningAttempt+".json"), &planningResult)
+	if planningResult.PlanningStatus != "accepted" {
+		t.Fatalf("planning result=%+v", planningResult)
+	}
+	_ = waitProtocolReady(t, workspace, func(r protocolChainReady) bool { return r.Target == "chapter:3" })
+
+	cancel()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("Serve: %v", err)
+		}
+		done = nil
+	case <-time.After(5 * time.Second):
+		t.Fatal("Serve did not stop before verify")
+	}
+
 	verification, err := project.Verify()
 	if err != nil || !verification.OK {
 		t.Fatalf("verification=%+v err=%v", verification, err)
@@ -721,6 +789,11 @@ func writeProtocolChapter(t *testing.T, workspace string, ready protocolChainRea
 		"subject_ref": "chapter.md", "plan_ref": "chapter_plan.json", "verdict": "pass",
 		"dimensions": qualityDimensions, "issues": []any{},
 	}
+	if mode == "review-revise" {
+		chapterReview["verdict"] = "revise"
+		qualityDimensions["pacing"].(map[string]any)["status"] = "revise"
+		qualityDimensions["pacing"].(map[string]any)["note"] = "中段推进停滞，需要压缩"
+	}
 	changes := []any{}
 	if mode == "rewrite" {
 		contract["chapter"] = chapter + 100
@@ -750,7 +823,38 @@ func writeProtocolChapter(t *testing.T, workspace string, ready protocolChainRea
 	}}})
 	writeProtocolJSON(t, filepath.Join(base, "state_delta.json"), map[string]any{"changes": changes})
 	writeProtocolJSON(t, filepath.Join(base, "self_review.json"), review)
-	writeProtocolManifest(t, filepath.Join(base, "manifest.json"), ready, []string{"chapter.md", "chapter_contract.json", "chapter_plan.json", "chapter_review.json", "events.json", "state_delta.json", "self_review.json"})
+	files := []string{"chapter.md", "chapter_contract.json", "chapter_plan.json", "chapter_review.json", "events.json", "state_delta.json", "self_review.json"}
+	if mode == "planning" {
+		nextArc := map[string]any{
+			"id": "arc-2", "start_chapter": 3, "end_chapter": 4,
+			"goal": "进入更高压竞争并放大选择代价",
+		}
+		writeProtocolJSON(t, filepath.Join(base, "planning_patch.json"), map[string]any{"next_arc": nextArc})
+		writeProtocolJSON(t, filepath.Join(base, "arc_rehearsal.json"), map[string]any{
+			"subject_ref": "planning_patch.json",
+			"scenarios": []any{
+				map[string]any{
+					"id": "route-a", "next_arc": nextArc,
+					"opportunity": "放大阶段性收益与升级压力",
+					"risk":        "竞争结构可能与上一 Arc 过近",
+				},
+				map[string]any{
+					"id": "route-b",
+					"next_arc": map[string]any{
+						"id": "arc-2b", "start_chapter": 3, "end_chapter": 5,
+						"goal": "转向关系冲突与身份暴露",
+					},
+					"opportunity": "切换冲突类型保持新鲜感",
+					"risk":        "信息揭示过快会损失后续空间",
+				},
+			},
+			"selected_scenario_id": "route-a",
+			"selection_reason":     "当前读者期待更需要阶段性结果与升级压力",
+		})
+		files = append(files, "planning_patch.json", "arc_rehearsal.json")
+	}
+	sort.Strings(files)
+	writeProtocolManifest(t, filepath.Join(base, "manifest.json"), ready, files)
 	_ = locationID
 }
 
@@ -809,6 +913,29 @@ func waitProtocolReady(t *testing.T, workspace string, accept func(protocolChain
 	return protocolChainReady{}
 }
 
+func waitProtocolResultWithRecord(t *testing.T, local, workspace, path, attemptID, want string) {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		var result struct {
+			Result string
+		}
+		if readProtocolJSONIfExists(path, &result) == nil && result.Result == want {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	record := readProtocolTextIfExists(filepath.Join(local, "meta", "core", "reconcile", attemptID+".json"))
+	t.Fatalf(
+		"result did not become %s: result=%s reconcile=%s ready=%s status=%s",
+		want,
+		readProtocolTextIfExists(path),
+		record,
+		readProtocolTextIfExists(filepath.Join(workspace, "exchange", "READY.json")),
+		readProtocolTextIfExists(filepath.Join(workspace, "exchange", "STATUS.json")),
+	)
+}
+
 func waitProtocolResult(t *testing.T, path, want string) {
 	t.Helper()
 	deadline := time.Now().Add(10 * time.Second)
@@ -821,7 +948,14 @@ func waitProtocolResult(t *testing.T, path, want string) {
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	t.Fatalf("result did not become %s: %s", want, readProtocolTextIfExists(path))
+	workspace := filepath.Clean(filepath.Join(filepath.Dir(path), "..", ".."))
+	t.Fatalf(
+		"result did not become %s: result=%s ready=%s status=%s",
+		want,
+		readProtocolTextIfExists(path),
+		readProtocolTextIfExists(filepath.Join(workspace, "exchange", "READY.json")),
+		readProtocolTextIfExists(filepath.Join(workspace, "exchange", "STATUS.json")),
+	)
 }
 
 func readProtocolStatus(t *testing.T, workspace string) protocolChainStatus {
