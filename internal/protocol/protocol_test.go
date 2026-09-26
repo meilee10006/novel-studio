@@ -243,6 +243,8 @@ func TestChatGPTProtocolDescribesChapterQualityArtifactChain(t *testing.T) {
 		"character_consistency",
 		"world_consistency",
 		"verdict=revise",
+		"review-driven REWRITE 会替换整个被拒 attempt",
+		"result.rewrite_feedback.allowed_scope",
 		"arc_rehearsal.json",
 		"至少两个候选",
 		"selected_scenario_id",

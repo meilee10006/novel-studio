@@ -177,6 +177,18 @@ func TestQualityChapterReviewReviseForcesRewriteWithoutMovingCanon(t *testing.T)
 	if len(got.RewriteFeedback) == 0 || got.RewriteFeedback[0].Code != "chapter_review.revise" {
 		t.Fatalf("feedback=%+v", got.RewriteFeedback)
 	}
+	scope := map[string]bool{}
+	for _, name := range got.RewriteFeedback[0].AllowedScope {
+		scope[name] = true
+	}
+	if len(scope) != len(requiredBefore) {
+		t.Fatalf("review rewrite scope=%v required=%v", got.RewriteFeedback[0].AllowedScope, requiredBefore)
+	}
+	for _, name := range requiredBefore {
+		if !scope[name] {
+			t.Fatalf("review rewrite scope missing %s: %v", name, got.RewriteFeedback[0].AllowedScope)
+		}
+	}
 }
 
 func enableLegacyChapterForActiveAttempt(t *testing.T, project *Project) readyView {

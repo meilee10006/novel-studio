@@ -164,6 +164,18 @@ func TestQualityRejectedOptionalPlanningDoesNotRejectLegalChapterWhenRehearsalPr
 	}
 }
 
+func TestReviewEnabledAttemptUsesQualityPlanningCoupling(t *testing.T) {
+	project, workspace, _ := planningChapterReadyProject(t, 3, 1)
+	ready := enableChapterReviewForActiveAttempt(t, project)
+	artifacts := longformChapterArtifacts(1, nil)
+	artifacts["planning_patch.json"] = []byte(`{"next_arc":{"id":"arc-2","start_chapter":4,"end_chapter":6,"goal":"第二弧目标"}}`)
+
+	got := submitAndSettleChapter(t, project, workspace, ready, artifacts)
+	if got.Result != "REWRITE" || !containsViolation(got.Violations, "arc_rehearsal.json") {
+		t.Fatalf("review-enabled planning coupling settlement=%+v", got)
+	}
+}
+
 func TestLegacyPlanningPatchDoesNotRequireArcRehearsal(t *testing.T) {
 	project, workspace, _ := planningChapterReadyProject(t, 3, 1)
 	ready := enableLegacyChapterForActiveAttempt(t, project)

@@ -95,5 +95,9 @@ func validateArcRehearsal(raw, planningPatch []byte) ([]byte, []string, error) {
 }
 
 func isQualityChapterAttempt(attempt *domain.CoreAttempt) bool {
-	return requiresArtifact(attempt, "chapter_plan.json") && requiresArtifact(attempt, "chapter_review.json")
+	// chapter_review.json is the compatibility marker for a quality-enabled
+	// attempt. A review-only attempt can exist while older active contracts are
+	// being preserved, so requiring chapter_plan.json here would silently
+	// weaken the planning/rehearsal coupling promised by the protocol.
+	return requiresArtifact(attempt, "chapter_review.json")
 }

@@ -42,6 +42,44 @@ func TestBackupRestoreRoundTripPreservesCanon(t *testing.T) {
 	}
 }
 
+func TestBackupRestoreRoundTripPreservesChapterQualityArtifacts(t *testing.T) {
+	project, workspace, ready := planningChapterReadyProject(t, 3, 1)
+	patch := []byte(`{"next_arc":{"id":"arc-2","start_chapter":4,"end_chapter":6,"goal":"第二弧目标"}}`)
+	artifacts := validChapterArtifacts(1)
+	artifacts["planning_patch.json"] = patch
+	artifacts["arc_rehearsal.json"] = validArcRehearsal(t, patch)
+
+	settled := submitAndSettleChapter(t, project, workspace, ready, artifacts)
+	if settled.Result != "ACCEPTED" || settled.PlanningStatus != "accepted" {
+		t.Fatalf("chapter settlement=%+v", settled)
+	}
+	if verification, err := project.Verify(); err != nil || !verification.OK {
+		t.Fatalf("source verify=%+v err=%v", verification, err)
+	}
+
+	backupDir := filepath.Join(t.TempDir(), "quality-backup")
+	if _, err := project.CreateBackup(backupDir); err != nil {
+		t.Fatal(err)
+	}
+	restored, err := RestoreBackup(backupDir, filepath.Join(t.TempDir(), "quality-restored"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{
+		"chapters/000001/chapter_plan.json",
+		"chapters/000001/chapter_review.json",
+		"chapters/000001/planning_patch.json",
+		"chapters/000001/arc_rehearsal.json",
+	} {
+		if _, err := restored.store.ReadCoreCanonArtifact(name); err != nil {
+			t.Fatalf("restored quality artifact %s: %v", name, err)
+		}
+	}
+	if verification, err := restored.Verify(); err != nil || !verification.OK {
+		t.Fatalf("restored verify=%+v err=%v", verification, err)
+	}
+}
+
 func TestRestoreRejectsTamperedBackup(t *testing.T) {
 	project, _, workspace, ready := acceptedFoundationProject(t)
 	if got := submitAndSettleChapter(t, project, workspace, ready, revisionChapterArtifacts(1, "第一章备份正文")); got.Result != "ACCEPTED" {

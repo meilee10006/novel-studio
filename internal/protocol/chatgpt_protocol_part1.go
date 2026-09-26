@@ -193,7 +193,7 @@ chapter_review.json 必须绑定同一 snapshot 内的 chapter.md；质量链还
 }
 ~~~
 
-如果 reviewer 明确给出 verdict=revise，Core 会使用现有 REWRITE 语义保留同一 task、创建新 attempt、保持 Canon 不动；不要用旧 attempt 的 review 或 manifest 修补新 attempt。blocking issue 的 evidence_anchor 必须逐字出现在当前 chapter.md 中。文学判断仍由 ChatGPT/作者完成，Core 只验证 review 的结构、精确 snapshot 引用和 verdict 自洽性。
+如果 reviewer 明确给出 verdict=revise，Core 会使用现有 REWRITE 语义保留同一 task、创建新 attempt、保持 Canon 不动。review-driven REWRITE 会替换整个被拒 attempt；按 result.rewrite_feedback.allowed_scope 和新 task.json.required_artifacts 重写 replacement plan/draft/派生产物，并重新生成 chapter_review.json。不要用旧 attempt 的 review 或 manifest 修补新 attempt。blocking issue 的 evidence_anchor 必须逐字出现在当前 chapter.md 中。文学判断仍由 ChatGPT/作者完成，Core 只验证 review 的结构、精确 snapshot 引用和 verdict 自洽性。
 
 历史最小 1.0 chapter_contract 仍可读取，例如 {"chapter":1,"declared_pov":"character-000001"}；为获得完整的确定性保护，新提交应使用完整 chapter_contract。新增字段采用“出现则严格机械验证”，Core 不判断文学质量。
 

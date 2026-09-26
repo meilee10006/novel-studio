@@ -83,9 +83,47 @@ func chapterNumberFromTarget(target string) (int, error) {
 	}
 	return n, nil
 }
+func expandChapterReviewRewriteScope(feedback []RewriteFeedback, attempt *domain.CoreAttempt, files map[string][]byte) {
+	if attempt == nil {
+		return
+	}
+	hasReviewRewrite := false
+	for _, item := range feedback {
+		if item.Code == "chapter_review.revise" {
+			hasReviewRewrite = true
+			break
+		}
+	}
+	if !hasReviewRewrite {
+		return
+	}
+
+	seen := map[string]bool{}
+	scope := make([]string, 0, len(attempt.RequiredArtifacts)+2)
+	for _, name := range attempt.RequiredArtifacts {
+		if name != "" && !seen[name] {
+			seen[name] = true
+			scope = append(scope, name)
+		}
+	}
+	for _, name := range []string{"planning_patch.json", "arc_rehearsal.json"} {
+		if _, submitted := files[name]; submitted && !seen[name] {
+			seen[name] = true
+			scope = append(scope, name)
+		}
+	}
+	sort.Strings(scope)
+	for i := range feedback {
+		if feedback[i].Code == "chapter_review.revise" {
+			feedback[i].AllowedScope = append([]string(nil), scope...)
+		}
+	}
+}
+
 func (p *Project) rejectChapter(project *domain.CoreProjectState, state *domain.CoreProductionState, task *domain.CoreTask, attempt *domain.CoreAttempt, record *domain.CoreSubmissionRecord, files map[string][]byte, violations []string, planningStatuses ...string) (ChapterSettlement, error) {
 	sort.Strings(violations)
 	feedback := buildRewriteFeedback(violations, task)
+	expandChapterReviewRewriteScope(feedback, attempt, files)
 	planningStatus := ""
 	if len(planningStatuses) > 0 {
 		planningStatus = planningStatuses[0]
