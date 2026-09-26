@@ -36,14 +36,14 @@ Transport 实现示例：macOS/Windows 可继续使用 Google Drive Desktop；Li
 ```bash
 git clone https://github.com/meilee10006/novel-studio.git
 cd novel-studio
-git switch provider-free-novel-core
+git switch main
 ./scripts/run-local.sh --help
 ```
 
 Release 安装：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/meilee10006/novel-studio/provider-free-novel-core/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/meilee10006/novel-studio/main/scripts/install.sh | sh
 novel-core --version
 ```
 

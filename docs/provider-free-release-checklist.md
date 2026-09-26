@@ -46,16 +46,16 @@ One fail-closed case occurred during the product run: the initial `accept-s1-bri
 
 ## Protocol 1.1 chapter-quality artifact acceptance
 
-The chapter-quality extension keeps protocol 1.1 / machine schema 1 and negotiates the additional files through each attempt's existing `required_artifacts` + `task_digest`. Automated coverage does not inherit the semantic-design product PASS.
+The chapter-quality extension keeps protocol 1.1 / machine schema 1 and negotiates the additional files through each attempt's existing `required_artifacts` + `task_digest`. Development readiness is established only by GitHub review and CI on the exact release SHA; stale automated PASS from an older SHA must not be copied forward.
 
 | Check | Status |
 | --- | --- |
-| Fresh chapter-quality automated E2E | PASS |
+| Exact-SHA chapter-quality development CI | See current GitHub pull-request checks |
 | Real ChatGPT App + Google Drive chapter-quality product chain | NOT RUN |
 | New-session recovery for chapter-quality project files | NOT RUN |
 | chapter-quality verify + backup/restore product acceptance | NOT RUN |
 
-The automated E2E proves the Core/file-protocol chain: explicit chapter plan → exact-snapshot reviewer `revise` → REWRITE without Canon movement → replacement ACCEPTED → rolling Arc rehearsal with at least two alternatives → selected planning patch ACCEPTED → next chapter READY. Real ordinary ChatGPT App + Google Drive acceptance remains a separate release boundary.
+The three real-machine rows are post-release product validation. They are intentionally separate from development `RELEASE_READY` and do not block it. If post-release validation exposes a source defect, that defect returns to GitHub development rather than being patched on the production machine.
 
 ## Automated acceptance
 

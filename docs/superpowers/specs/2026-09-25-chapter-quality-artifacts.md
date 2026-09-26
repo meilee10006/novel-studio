@@ -1,6 +1,6 @@
 # Chapter Quality Artifacts Design
 
-**Status:** Proposed for implementation
+**Status:** Implementation complete; exact-SHA development release gates pending
 **Date:** 2026-09-25
 **Branch:** `chapter-quality-artifacts`
 
@@ -36,6 +36,14 @@ This phase does not add:
 - sealed render packets;
 - embedding/Qdrant;
 - Dashboard.
+
+### 2.1 Development release boundary
+
+This specification's development phase ends at an exact Git SHA once the spec and plan match the implementation, implementation and regression tests are complete, review has no blocking findings, and the GitHub pull-request CI for that exact SHA passes.
+
+Real-machine deployment, service start/restart, reboot, deployed health/smoke checks, and ordinary ChatGPT App + Google Drive product acceptance are post-release operational validation. They do not block development `RELEASE_READY`.
+
+If post-release validation discovers a source defect, that defect returns to a new GitHub development task and must pass the same code/review/CI boundary. Production tooling must not patch or complete source implementation outside GitHub.
 
 ## 3. Compatibility strategy
 
@@ -307,9 +315,9 @@ New JSON files use the existing UTF-8, JSON depth, array length, file size, trav
 
 No review note, issue description, opportunity, risk, or selection reason is interpreted as executable instructions by Core.
 
-## 12. Product acceptance
+## 12. Development acceptance and post-release validation
 
-Automated tests must prove:
+Development automated tests must prove:
 
 1. legacy active five-file attempt still settles;
 2. new chapter attempt requires plan/review;
@@ -324,22 +332,9 @@ Automated tests must prove:
 11. accepted quality artifacts survive verify/backup/restore;
 12. historical revision uses the same quality artifact contract.
 
-Before declaring product PASS, use ordinary ChatGPT App + real Google Drive to run at least:
+The development release gate additionally requires the exact release SHA to pass GitHub pull-request CI, including repository tests, vet, provider-free dependency checks, race-sensitive Core tests, container build/smoke, and diff hygiene.
 
-```text
-quality-enabled chapter
-→ explicit chapter plan
-→ draft
-→ reviewer returns revise
-→ Core REWRITE
-→ replacement plan/draft/review passes
-→ next chapter READY
-→ rolling planning window
-→ two Arc rehearsal alternatives
-→ selected planning patch accepted
-→ new ChatGPT session recovers from project files
-→ verify
-```
+Ordinary ChatGPT App + real Google Drive validation remains valuable post-release product validation, including new-session recovery and real-machine verify/backup/restore. It is tracked separately from development readiness and does not delay `RELEASE_READY`.
 
 ## 13. Success criterion
 
@@ -349,4 +344,5 @@ The phase succeeds if it demonstrably improves the writing process without reint
 - every newly accepted chapter has an explicit review of that exact immutable snapshot;
 - reviewer-requested revision cannot be silently accepted;
 - next-Arc authority cannot be updated on a quality-enabled attempt without an explicit multi-option rehearsal;
-- all authority still flows through existing Canon + Task/Attempt/Receipt.
+- all authority still flows through existing Canon + Task/Attempt/Receipt;
+- the reviewed exact Git SHA passes all required GitHub development CI checks and is recorded as `RELEASE_READY` before any production deployment begins.

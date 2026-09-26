@@ -3,19 +3,23 @@
 **Date:** 2026-09-25
 **Spec:** `docs/superpowers/specs/2026-09-25-chapter-quality-artifacts.md`
 **Branch:** `chapter-quality-artifacts`
+**Development state:** Tasks 1–4 are implemented; development convergence/release gates remain.
 
 ## Global constraints
 
-- Base is `origin/main` at semantic-design product acceptance.
+- Base is exact `main@ea3861ff53b27eb568d0a630718cd4d6c34a56ec` at semantic-design product acceptance.
 - Local-first; no provider/model/Agent runtime.
 - Do not add TaskKind unless an implementation task proves existing chapter/revision attempts cannot express the lifecycle.
-- Preserve existing active 1.1 attempts.
+- Preserve existing active 1.1 attempts and any unknown or parallel branch work; no reset, clean, reclone, history rewrite, or force push.
 - TDD: failing public-behavior test before implementation.
 - Stable task commits are pushed promptly.
-- Ordinary CI is asynchronous; do not wait/poll it.
-- Real ChatGPT App + Google Drive is a final integration boundary, not a substitute for automated tests.
+- GitHub pull-request CI must pass for the exact release SHA before `RELEASE_READY`.
+- Real-machine deployment, service start/restart, reboot, deployed health/smoke, and ordinary ChatGPT App + Google Drive product acceptance are post-release operations, not unfinished development.
+- Any source defect found after release returns to GitHub development; production tooling does not perform source fixes.
 
-## Task 1 — Exact-snapshot chapter review quality gate
+## Task 1 — Exact-snapshot chapter review quality gate — COMPLETE
+
+Evidence: `ab067df9e05c6356993f387f85379655367f7da4`.
 
 ### Tests first
 
@@ -44,7 +48,9 @@ Add chapter-review tests covering:
 
 `feat: add exact snapshot chapter review gate`
 
-## Task 2 — Planner / Drafter artifact separation
+## Task 2 — Planner / Drafter artifact separation — COMPLETE
+
+Evidence: `9e68ba878007a298df8da383888d7176c245daaf`.
 
 ### Tests first
 
@@ -72,7 +78,9 @@ Cover:
 
 `feat: require chapter plans for new production attempts`
 
-## Task 3 — Arc rehearsal before authoritative rolling planning
+## Task 3 — Arc rehearsal before authoritative rolling planning — COMPLETE
+
+Evidence: `6e93a19e41e32eaadd55d68c3f10a23ccae35a10`.
 
 ### Tests first
 
@@ -99,7 +107,9 @@ Cover quality-enabled attempts:
 
 `feat: rehearse arc alternatives before planning updates`
 
-## Task 4 — Protocol projection, docs, recovery, and whole-chain E2E
+## Task 4 — Protocol projection, docs, recovery, and whole-chain E2E — COMPLETE
+
+Evidence: `a726005edc0876dc2f076c12bf08a039a375f223`.
 
 ### Tests first
 
@@ -132,37 +142,31 @@ git diff --check
 
 `test: validate chapter quality artifact chain`
 
-## Task 5 — Real ChatGPT App + Google Drive product acceptance
+## Task 5 — Development convergence and release gates
 
-Use a fresh real project or a verified disposable acceptance project.
+### Completed review corrections
 
-Required chain:
+- Align the quality-enabled marker with the spec: `chapter_review.json` in `required_artifacts` is sufficient.
+- Make reviewer-requested REWRITE replace the rejected attempt rather than falsely restricting `allowed_scope` to only `chapter_review.json`.
+- Add explicit regression coverage that accepted plan/review/planning/rehearsal artifacts survive verify + backup/restore.
 
-```text
-Foundation accepted
-→ quality-enabled chapter READY
-→ ChatGPT writes chapter_plan
-→ drafts chapter
-→ exact-snapshot chapter_review says revise
-→ Core returns REWRITE without moving Canon
-→ replacement attempt rewrites plan/draft
-→ chapter_review pass
-→ Core ACCEPTED and next chapter READY
-→ enter rolling planning window
-→ arc_rehearsal contains at least two alternatives
-→ selected planning_patch accepted
-→ new ChatGPT session restores current authority from project files only
-→ verify
-→ backup/restore verify
-```
+Evidence: `b1ab1baa057b3a412f99f882b630402b4f20d58f`.
 
-Record project id, protocol, final roots, attempts, result/receipt paths, and failures. Do not record private prose.
+### Remaining development gates
 
-Only after real acceptance passes:
+1. Remove stale user-facing references to the deleted `provider-free-novel-core` branch.
+2. Encode `go test ./...`, `go vet ./...`, provider-free dependency validation, diff hygiene, race-sensitive Core tests, build/smoke, and container checks in GitHub CI.
+3. Open a pull request from `chapter-quality-artifacts` to `main`.
+4. Review the complete PR diff; resolve every blocking implementation/spec/test/documentation finding in GitHub.
+5. Require all GitHub CI jobs for the exact PR head SHA to pass.
+6. Re-read branch and PR head after CI. If unchanged and all gates are green, record:
+   `SPEC_COMPLETE → PLAN_COMPLETE → IMPLEMENTATION_COMPLETE → TEST/REVIEW/CI_PASS → RELEASE_READY @ exact SHA`.
 
-- update the existing release checklist;
-- commit `docs: record chapter quality product acceptance`;
-- push.
+## Post-release operations — outside this development plan
+
+After `RELEASE_READY`, deployment to a real machine, starting/restarting services, reboot testing, deployed health/smoke checks, and ordinary ChatGPT App + Google Drive product acceptance are separate operational work.
+
+Those operations may discover a new defect, but they do not complete or patch source code. Any source change returns to a new GitHub development task with review and exact-SHA CI.
 
 ## Review gates
 
