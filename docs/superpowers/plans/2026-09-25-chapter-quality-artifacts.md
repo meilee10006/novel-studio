@@ -152,14 +152,19 @@ git diff --check
 
 Evidence: `b1ab1baa057b3a412f99f882b630402b4f20d58f`.
 
-### Remaining development gates
+### Completed development convergence
 
-1. Remove stale user-facing references to the deleted `provider-free-novel-core` branch.
-2. Encode `go test ./...`, `go vet ./...`, provider-free dependency validation, diff hygiene, race-sensitive Core tests, build/smoke, and container checks in GitHub CI.
-3. Open a pull request from `chapter-quality-artifacts` to `main`.
-4. Review the complete PR diff; resolve every blocking implementation/spec/test/documentation finding in GitHub.
-5. Require all GitHub CI jobs for the exact PR head SHA to pass.
-6. Re-read branch and PR head after CI. If unchanged and all gates are green, record:
+- Removed stale user-facing references to the deleted `provider-free-novel-core` branch.
+- Encoded `go test ./...`, `go vet ./...`, provider-free dependency validation, diff hygiene, race-sensitive Core tests, build/smoke, and container checks in GitHub CI.
+- Opened the development pull request against `main`.
+
+Evidence: `c66ae0aee7ee4d151d6555971cc1cb0e061431ea`.
+
+### Remaining release gates
+
+1. Review the complete PR diff; resolve every blocking implementation/spec/test/documentation finding in GitHub.
+2. Require all GitHub CI jobs for the exact PR head SHA to pass.
+3. Re-read branch and PR head after CI. If unchanged and all gates are green, record:
    `SPEC_COMPLETE → PLAN_COMPLETE → IMPLEMENTATION_COMPLETE → TEST/REVIEW/CI_PASS → RELEASE_READY @ exact SHA`.
 
 ## Post-release operations — outside this development plan
