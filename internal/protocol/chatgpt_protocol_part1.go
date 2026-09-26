@@ -151,9 +151,49 @@ world.json 可选 travel_constraints，用 Foundation local_ref 连接地点，m
 
 ## Chapter / Revision 任务
 
-必须提交 chapter.md、chapter_contract.json、events.json、state_delta.json、self_review.json；若 task.json.required_artifacts 还列出 planning_patch.json，也必须提交它。
+task.json.required_artifacts 是当前 attempt 的唯一文件合同；不要根据旧聊天、旧协议示例或固定“五文件”假设增删 artifact。旧 active attempt 可能仍只有 chapter.md、chapter_contract.json、events.json、state_delta.json、self_review.json；新质量链 attempt 会明确把 chapter_plan.json 与 chapter_review.json 列入 required_artifacts。若 required_artifacts 还列出 planning_patch.json 或 arc_rehearsal.json，也必须提交。manifest.json.files 必须与当前 attempt 的 required_artifacts 加上协议允许的可选 planning artifact 精确匹配。
 
 写之前读取 context.json.foundation_reference。这里包含 Core 已规范化的 foundation、characters、world、style_profile、platform_profile；角色/地点等引用使用其中的 canon_id。例如 declared_pov 应使用 characters 中真实存在的 canonical character ID。
+
+质量链的操作顺序是：先写 chapter_plan.json，再写 chapter.md，然后生成 events.json / state_delta.json / self_review.json，最后针对这个不可变 attempt snapshot 写 chapter_review.json。Core 不检查私有思考过程，只检查提交中确实存在计划产物、正文产物和精确绑定的审稿产物。
+
+chapter_plan.json 最小形状：
+
+~~~json
+{
+  "chapter": 1,
+  "base_canon_root": "从当前 READY.base_canon_root 复制",
+  "objective": "本章主要故事推进",
+  "reader_payoff": "本章明确给读者的结果/信息/满足",
+  "beats": [
+    {"id":"beat-1","intent":"建立压力"},
+    {"id":"beat-2","intent":"行动并形成结果"}
+  ],
+  "ending_hook_intent": "推出下一章问题"
+}
+~~~
+
+chapter_review.json 必须绑定同一 snapshot 内的 chapter.md；质量链还必须 plan_ref=chapter_plan.json。固定检查维度为 story_progress、reader_payoff、pacing、character_consistency、world_consistency、continuity、ending_hook，每项都提供 status=pass/revise 与非空 note：
+
+~~~json
+{
+  "subject_ref": "chapter.md",
+  "plan_ref": "chapter_plan.json",
+  "verdict": "pass",
+  "dimensions": {
+    "story_progress": {"status":"pass","note":"主线有推进"},
+    "reader_payoff": {"status":"pass","note":"读者获得明确结果"},
+    "pacing": {"status":"pass","note":"推进没有明显停滞"},
+    "character_consistency": {"status":"pass","note":"人物行为与前态一致"},
+    "world_consistency": {"status":"pass","note":"没有突破既有规则"},
+    "continuity": {"status":"pass","note":"与前态和 Arc 连续"},
+    "ending_hook": {"status":"pass","note":"章末形成下一章驱动力"}
+  },
+  "issues": []
+}
+~~~
+
+如果 reviewer 明确给出 verdict=revise，Core 会使用现有 REWRITE 语义保留同一 task、创建新 attempt、保持 Canon 不动。review-driven REWRITE 会替换整个被拒 attempt；按 result.rewrite_feedback.allowed_scope 和新 task.json.required_artifacts 重写 replacement plan/draft/派生产物，并重新生成 chapter_review.json。不要用旧 attempt 的 review 或 manifest 修补新 attempt。blocking issue 的 evidence_anchor 必须逐字出现在当前 chapter.md 中。文学判断仍由 ChatGPT/作者完成，Core 只验证 review 的结构、精确 snapshot 引用和 verdict 自洽性。
 
 历史最小 1.0 chapter_contract 仍可读取，例如 {"chapter":1,"declared_pov":"character-000001"}；为获得完整的确定性保护，新提交应使用完整 chapter_contract。新增字段采用“出现则严格机械验证”，Core 不判断文学质量。
 
@@ -179,5 +219,7 @@ chapter_contract.json 推荐完整形状：
 ~~~
 
 start_state.canon_root 一旦出现必须等于当前 attempt 的 base_canon_root。purpose、main_conflict、reader_question、ending_hook 一旦出现必须是非空字符串。obligation_refs、immutable_refs、planning_obligations 一旦出现必须是唯一非空字符串数组并引用 Core 当前可机械证明的对象或任务约束。foreshadow_operations 每项必须包含已存在的 foreshadow_id 和唯一非空 allowed_states；本次对应伏笔状态变化不得超出 allowed_states。expected_changes 只能使用 Core 支持的 state change kind，并且每个声明类别都必须实际出现在本次 state_delta.json.changes 中。target_length.min_chars/max_chars 必须是非负整数且 min_chars <= max_chars，Core 按 chapter.md 的 Unicode rune 数检查。planning_obligations 只能填写当前 constraints.json.control_constraints 已经下发的滚动规划 kind，不能从正文自行推断。
+
+质量链 attempt 如果提交 planning_patch.json，还必须同时提交 arc_rehearsal.json；反过来 rehearsal 也不能脱离 patch 单独提交。rehearsal 至少两个候选 scenario，每个都有唯一 id、结构合法的 next_arc、非空 opportunity 与 risk，并通过 selected_scenario_id 选择一个；selection_reason 必须非空。selected scenario 的 next_arc 必须与 planning_patch.json.next_arc 结构相同。只有 planning_patch.json 改变权威 planning，arc_rehearsal.json 只是记录候选与选择证据，不建立第二套 planning 状态。
 
 `

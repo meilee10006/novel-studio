@@ -1,8 +1,8 @@
 #!/bin/sh
 # provider-free Novel Core 一键安装脚本
 #
-#   curl -fsSL https://raw.githubusercontent.com/meilee10006/novel-studio/provider-free-novel-core/scripts/install.sh | sh
-#   curl -fsSL https://raw.githubusercontent.com/meilee10006/novel-studio/provider-free-novel-core/scripts/install.sh | sh -s -- v1.2.3
+#   curl -fsSL https://raw.githubusercontent.com/meilee10006/novel-studio/main/scripts/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/meilee10006/novel-studio/main/scripts/install.sh | sh -s -- v1.2.3
 #
 # 自定义安装目录： curl -fsSL ... | NOVEL_CORE_INSTALL_DIR="$HOME/.local/bin" sh
 # 指定版本：NOVEL_CORE_VERSION=v1.2.3 curl -fsSL ... | sh
@@ -100,7 +100,7 @@ if [ -w "$DEST" ]; then
 	mv "$TMP/$BIN" "$DEST/$BIN"
 else
 	echo "安装目录不可写：$DEST" >&2
-	echo "请改用用户目录：curl -fsSL https://raw.githubusercontent.com/$REPO/provider-free-novel-core/scripts/install.sh | NOVEL_CORE_INSTALL_DIR=\"$HOME/.local/bin\" sh" >&2
+	echo "请改用用户目录：curl -fsSL https://raw.githubusercontent.com/$REPO/main/scripts/install.sh | NOVEL_CORE_INSTALL_DIR=\"$HOME/.local/bin\" sh" >&2
 	exit 1
 fi
 chmod +x "$DEST/$BIN"

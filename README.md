@@ -36,14 +36,14 @@ Transport 实现示例：macOS/Windows 可继续使用 Google Drive Desktop；Li
 ```bash
 git clone https://github.com/meilee10006/novel-studio.git
 cd novel-studio
-git switch provider-free-novel-core
+git switch main
 ./scripts/run-local.sh --help
 ```
 
 Release 安装：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/meilee10006/novel-studio/provider-free-novel-core/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/meilee10006/novel-studio/main/scripts/install.sh | sh
 novel-core --version
 ```
 
@@ -123,6 +123,20 @@ exchange/inbox/<task-id>/<attempt-id>/
 - `BLOCKED`：等待作者通过 control channel 裁决。
 
 文学质量、情绪强度、节奏、文风，以及 story/review 中的主观判断由作者与 ChatGPT 负责；Core 只验证内容寻址、引用、结构、证据绑定与事务条件，不声称能够机械判断“故事好不好”。
+
+### 章节质量链
+
+每个 attempt 都以 `outbox/.../task.json.required_artifacts` 为唯一文件合同；不要从旧聊天或固定文件清单猜当前要交什么。新创建的 Chapter/Revision attempt 使用显式 **plan → draft → review** 链：
+
+1. `chapter_plan.json`：先明确本章 objective、reader payoff、至少两个 beats 和 ending hook intent；
+2. `chapter.md`：按计划写正文，并继续提交既有 `chapter_contract.json`、`events.json`、`state_delta.json`、`self_review.json`；
+3. `chapter_review.json`：精确绑定同一 immutable attempt snapshot 中的 `chapter.md` 与 `chapter_plan.json`，逐项检查 story progress、reader payoff、pacing、character/world consistency、continuity、ending hook。
+
+如果 reviewer 明确给出 `verdict=revise`，Core 不替它做文学判断，而是机械执行现有 `REWRITE`：Canon 不动、task 不变、新建 attempt，下一次必须重新提交 replacement plan/draft/review。
+
+质量链 attempt 提交 `planning_patch.json` 时还必须带 `arc_rehearsal.json`：至少推演两个下一 Arc 候选并明确选择其中一个；只有被选中的 `planning_patch.json` 会改变权威 rolling planning，rehearsal 只是不可变选择证据。旧 active attempt 仍严格按它自己的 `required_artifacts` 完成，不会被升级时追加强制文件。
+
+现有项目的 `CHATGPT_PROTOCOL.md` 是 Core-owned 派生投影；Core Reconcile 会在内容过期时安全刷新它，但不会因此改变 Canon、task、attempt 或 task digest。
 
 Design Store 的本地权威位于 `meta/core/design/`。Google Drive 的 `exchange/design/**` 只是交换层；Drive 文件不会自动成为 Design authority，只有经 Core 导入、内容寻址和 promote 后才进入正式 Design 历史。
 

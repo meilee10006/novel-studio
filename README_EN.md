@@ -18,7 +18,7 @@ Requirements: Go or a `novel-core` release binary, real Google Drive + a conform
 ```bash
 git clone https://github.com/meilee10006/novel-studio.git
 cd novel-studio
-git switch provider-free-novel-core
+git switch main
 ./scripts/run-local.sh --help
 ```
 

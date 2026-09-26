@@ -228,3 +228,30 @@ func TestChatGPTProtocolDescribesCompleteBackwardCompatibleChapterContract(t *te
 		}
 	}
 }
+
+func TestChatGPTProtocolDescribesChapterQualityArtifactChain(t *testing.T) {
+	text := RenderChatGPTProtocol("book-1")
+	for _, want := range []string{
+		"task.json.required_artifacts 是当前 attempt 的唯一文件合同",
+		"chapter_plan.json",
+		"先写 chapter_plan.json，再写 chapter.md",
+		"chapter_review.json",
+		"subject_ref",
+		"plan_ref",
+		"story_progress",
+		"reader_payoff",
+		"character_consistency",
+		"world_consistency",
+		"verdict=revise",
+		"review-driven REWRITE 会替换整个被拒 attempt",
+		"result.rewrite_feedback.allowed_scope",
+		"arc_rehearsal.json",
+		"至少两个候选",
+		"selected_scenario_id",
+		"只有 planning_patch.json 改变权威 planning",
+	} {
+		if !strings.Contains(text, want) {
+			t.Errorf("generated ChatGPT protocol missing chapter-quality guidance %q", want)
+		}
+	}
+}

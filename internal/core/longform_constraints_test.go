@@ -560,15 +560,45 @@ func longformChapterArtifacts(chapter int, changes []map[string]any) map[string]
 		"local_id": "e1", "kind": "onscreen", "evidence_anchor": "主角看见门口的灯", "observers": []string{"character-000001"},
 	}}})
 	delta, _ := json.Marshal(map[string]any{"changes": changes})
+	plan, _ := json.Marshal(map[string]any{
+		"chapter": chapter, "base_canon_root": "__READY_BASE_CANON_ROOT__",
+		"objective": "推进本章主线", "reader_payoff": "给读者明确推进结果",
+		"beats":              []map[string]any{{"id": "beat-1", "intent": "建立压力"}, {"id": "beat-2", "intent": "行动并形成结果"}},
+		"ending_hook_intent": "推出下一章问题",
+	})
+	review := validChapterReviewMap("pass")
+	review["plan_ref"] = "chapter_plan.json"
+	reviewRaw, _ := json.Marshal(review)
 	return map[string][]byte{
 		"chapter.md": []byte(body), "chapter_contract.json": contract,
+		"chapter_plan.json": plan, "chapter_review.json": reviewRaw,
 		"events.json": events, "self_review.json": []byte(`{"ok":true}`), "state_delta.json": delta,
 	}
 }
 
 func submitAndSettleChapter(t *testing.T, project *Project, workspace string, ready readyView, artifacts map[string][]byte) ChapterSettlement {
 	t.Helper()
-	writeSubmission(t, workspace, ready, artifacts, false)
+	state, err := project.store.LoadCoreProductionState()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state == nil || state.ActiveAttempt == nil {
+		t.Fatal("active attempt missing")
+	}
+	required := map[string]bool{}
+	for _, name := range state.ActiveAttempt.RequiredArtifacts {
+		required[name] = true
+	}
+	filtered := make(map[string][]byte, len(artifacts))
+	for name, data := range artifacts {
+		if required[name] || name == "planning_patch.json" || name == "arc_rehearsal.json" {
+			if name == "chapter_plan.json" {
+				data = []byte(strings.ReplaceAll(string(data), "__READY_BASE_CANON_ROOT__", ready.BaseCanonRoot))
+			}
+			filtered[name] = data
+		}
+	}
+	writeSubmission(t, workspace, ready, filtered, false)
 	project.submissionQuietPeriod = 0
 	_, _ = project.ScanActiveSubmission()
 	_, _ = project.ScanActiveSubmission()

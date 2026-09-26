@@ -186,6 +186,9 @@ func validateSubmissionIdentity(project *domain.CoreProjectState, task *domain.C
 	}
 	if task.Kind == "chapter" || task.Kind == "revision" {
 		allowed["planning_patch.json"] = true
+		if isQualityChapterAttempt(attempt) {
+			allowed["arc_rehearsal.json"] = true
+		}
 	}
 	seen := make(map[string]bool, len(manifest.Files))
 	for _, name := range manifest.Files {

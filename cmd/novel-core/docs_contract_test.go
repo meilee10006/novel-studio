@@ -46,7 +46,7 @@ func TestForkReleaseCoordinates(t *testing.T) {
 	root := filepath.Clean(filepath.Join("..", ".."))
 	checks := map[string][]string{
 		".goreleaser.yml":               {"owner: meilee10006", "main: ./cmd/novel-core"},
-		"scripts/install.sh":            {"REPO=\"meilee10006/novel-studio\"", "BIN=\"novel-core\"", "raw.githubusercontent.com/meilee10006/novel-studio/provider-free-novel-core/scripts/install.sh"},
+		"scripts/install.sh":            {"REPO=\"meilee10006/novel-studio\"", "BIN=\"novel-core\"", "raw.githubusercontent.com/meilee10006/novel-studio/main/scripts/install.sh"},
 		"docker-compose.yml":            {"ghcr.io/meilee10006/novel-studio:latest"},
 		".github/workflows/release.yml": {"ghcr.io/meilee10006/novel-studio:"},
 	}
@@ -60,6 +60,16 @@ func TestForkReleaseCoordinates(t *testing.T) {
 			if !strings.Contains(text, want) {
 				t.Errorf("%s missing fork release coordinate %q", rel, want)
 			}
+		}
+	}
+
+	for _, rel := range []string{"README.md", "README_EN.md", "scripts/install.sh"} {
+		raw, err := os.ReadFile(filepath.Join(root, rel))
+		if err != nil {
+			t.Fatalf("read %s: %v", rel, err)
+		}
+		if strings.Contains(string(raw), "provider-free-novel-core") {
+			t.Errorf("%s still points users at deleted provider-free-novel-core branch", rel)
 		}
 	}
 }
@@ -213,5 +223,73 @@ func TestReleaseChecklistMarksProtocolOneZeroAcceptanceHistorical(t *testing.T) 
 		if !strings.Contains(text, want) {
 			t.Errorf("release checklist missing semantic-design acceptance marker %q", want)
 		}
+	}
+}
+
+func TestChapterQualityDocumentationSeparatesAutomatedAndProductAcceptance(t *testing.T) {
+	root := filepath.Clean(filepath.Join("..", ".."))
+
+	readmeRaw, err := os.ReadFile(filepath.Join(root, "README.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	readme := string(readmeRaw)
+	for _, want := range []string{
+		"chapter_plan.json",
+		"chapter_review.json",
+		"arc_rehearsal.json",
+		"required_artifacts",
+		"plan → draft → review",
+	} {
+		if !strings.Contains(readme, want) {
+			t.Errorf("README.md missing chapter-quality guidance %q", want)
+		}
+	}
+
+	checklistRaw, err := os.ReadFile(filepath.Join(root, "docs", "provider-free-release-checklist.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	checklist := string(checklistRaw)
+	for _, want := range []string{
+		"## Protocol 1.1 chapter-quality artifact acceptance",
+		"| Exact-SHA chapter-quality development CI | See current GitHub pull-request checks |",
+		"| Real ChatGPT App + Google Drive chapter-quality product chain | NOT RUN |",
+		"| New-session recovery for chapter-quality project files | NOT RUN |",
+		"| chapter-quality verify + backup/restore product acceptance | NOT RUN |",
+		"post-release product validation",
+		"development `RELEASE_READY`",
+	} {
+		if !strings.Contains(checklist, want) {
+			t.Errorf("release checklist missing chapter-quality acceptance marker %q", want)
+		}
+	}
+	if strings.Contains(checklist, "| Fresh chapter-quality automated E2E | PASS |") {
+		t.Error("chapter-quality checklist must not carry a stale automated PASS across release SHAs")
+	}
+
+	specRaw, err := os.ReadFile(filepath.Join(root, "docs", "superpowers", "specs", "2026-09-25-chapter-quality-artifacts.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	spec := string(specRaw)
+	for _, want := range []string{"Development release boundary", "post-release operational validation", "exact Git SHA"} {
+		if !strings.Contains(spec, want) {
+			t.Errorf("chapter-quality spec missing development boundary %q", want)
+		}
+	}
+
+	planRaw, err := os.ReadFile(filepath.Join(root, "docs", "superpowers", "plans", "2026-09-25-chapter-quality-artifacts.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan := string(planRaw)
+	for _, want := range []string{"Development convergence and release gates", "Post-release operations", "GitHub pull-request CI", "RELEASE_READY @ exact SHA"} {
+		if !strings.Contains(plan, want) {
+			t.Errorf("chapter-quality plan missing development release gate %q", want)
+		}
+	}
+	if strings.Contains(plan, "## Task 5 — Real ChatGPT App + Google Drive product acceptance") {
+		t.Error("real-machine product acceptance must not remain a development task")
 	}
 }
